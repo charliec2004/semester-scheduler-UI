@@ -344,7 +344,7 @@ export function ResultsTab() {
             </li>
             <li className="flex items-start gap-2">
               <span className="text-accent-400">•</span>
-              Ensure target hours don't exceed max hours for any employee or department
+              Ensure target hours don&apos;t exceed max hours for any employee or department
             </li>
             <li className="flex items-start gap-2">
               <span className="text-accent-400">•</span>

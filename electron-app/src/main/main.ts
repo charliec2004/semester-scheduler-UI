@@ -135,12 +135,12 @@ async function checkPythonAvailability(): Promise<{ available: boolean; error?: 
       env: { ...process.env },
     });
     
-    let versionOutput = '';
+    let _versionOutput = '';
     checkProcess.stdout?.on('data', (data: Buffer) => {
-      versionOutput += data.toString();
+      _versionOutput += data.toString();
     });
     checkProcess.stderr?.on('data', (data: Buffer) => {
-      versionOutput += data.toString();
+      _versionOutput += data.toString();
     });
     
     checkProcess.on('error', (err: NodeJS.ErrnoException) => {
@@ -175,9 +175,9 @@ async function checkPythonAvailability(): Promise<{ available: boolean; error?: 
           env: { ...process.env },
         });
         
-        let packageError = '';
+        let _packageError = '';
         checkPackages.stderr?.on('data', (data: Buffer) => {
-          packageError += data.toString();
+          _packageError += data.toString();
         });
         
         checkPackages.on('close', (pkgCode: number | null) => {

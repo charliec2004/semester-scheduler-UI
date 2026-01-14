@@ -73,8 +73,8 @@ export function FlagsTab() {
     presets, savePreset, applyPreset, deletePreset,
   } = useFlagsStore();
   
-  const { staff, staffPath, saveStaff, dirty: staffDirty } = useStaffStore();
-  const { departments, deptPath, saveDepartments, dirty: deptDirty } = useDepartmentStore();
+  const { staff, saveStaff, dirty: staffDirty } = useStaffStore();
+  const { departments, saveDepartments, dirty: deptDirty } = useDepartmentStore();
   const { running, setRunning } = useSolverStore();
   const { settings } = useSettingsStore();
   const { showToast, setActiveTab } = useUIStore();
@@ -408,7 +408,8 @@ export function FlagsTab() {
                     if (e.target.checked) {
                       setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: 1.0 });
                     } else {
-                      const { [dept]: _, ...rest } = favoredFrontDeskDepts;
+                      const { [dept]: _removed, ...rest } = favoredFrontDeskDepts;
+                      void _removed;
                       setFavoredFrontDeskDepts(rest);
                     }
                   }}
@@ -443,7 +444,8 @@ export function FlagsTab() {
                     if (e.target.checked) {
                       setFavoredDepartments({ ...favoredDepartments, [dept]: 1.0 });
                     } else {
-                      const { [dept]: _, ...rest } = favoredDepartments;
+                      const { [dept]: _removed, ...rest } = favoredDepartments;
+                      void _removed;
                       setFavoredDepartments(rest);
                     }
                   }}

@@ -30,7 +30,7 @@ const COMMON_ROLES = ['front_desk', 'career_education', 'marketing', 'employer_e
 export function StaffEditorTab() {
   const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty, saveStaff } = useStaffStore();
   const { departments } = useDepartmentStore();
-  const { showToast, setActiveTab } = useUIStore();
+  const { showToast } = useUIStore();
   
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
@@ -168,7 +168,7 @@ export function StaffEditorTab() {
             />
           </div>
           <div className="max-h-[500px] overflow-y-auto">
-            {filteredStaff.map((employee, index) => {
+            {filteredStaff.map((employee, _index) => {
               const actualIndex = staff.indexOf(employee);
               return (
                 <button
