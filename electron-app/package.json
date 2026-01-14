@@ -2,6 +2,10 @@
   "name": "semester-scheduler",
   "version": "1.0.0",
   "description": "Desktop scheduler for student employees - optimized weekly scheduling",
+  "author": {
+    "name": "Charlie Chen",
+    "email": "charlieconner04@gmail.com"
+  },
   "repository": {
     "type": "git",
     "url": "https://github.com/charliec2004/semester-scheduler-UI.git"
