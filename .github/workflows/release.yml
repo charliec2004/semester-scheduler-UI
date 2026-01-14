@@ -92,21 +92,21 @@ jobs:
       - name: Build Electron app (macOS)
         if: matrix.platform == 'mac'
         working-directory: electron-app
-        run: npm run package -- --mac
+        run: npm run package -- --mac --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Electron app (Windows)
         if: matrix.platform == 'win'
         working-directory: electron-app
-        run: npm run package -- --win
+        run: npm run package -- --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Build Electron app (Linux)
         if: matrix.platform == 'linux'
         working-directory: electron-app
-        run: npm run package -- --linux
+        run: npm run package -- --linux --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
