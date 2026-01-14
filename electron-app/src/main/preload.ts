@@ -11,6 +11,10 @@ import type {
   SolverRunConfig,
   SolverProgress,
   SolverResult,
+  HistoryEntry,
+  ConfigSnapshot,
+  StaffMember,
+  Department,
 } from './ipc-types';
 
 // Type-safe API exposed to renderer
@@ -22,8 +26,8 @@ const electronAPI = {
     openCsv: (kind: 'staff' | 'dept') => 
       ipcRenderer.invoke('files:openCsv', kind) as Promise<{ path?: string; content?: string; canceled: boolean }>,
     
-    saveCsv: (opts: { kind: string; path?: string; content: string }) =>
-      ipcRenderer.invoke('files:saveCsv', opts) as Promise<{ path?: string; canceled: boolean }>,
+    saveCsvToTemp: (opts: { content: string; filename: string }) =>
+      ipcRenderer.invoke('files:saveCsvToTemp', opts) as Promise<{ path: string }>,
     
     downloadSample: (kind: 'staff' | 'dept') =>
       ipcRenderer.invoke('files:downloadSample', kind) as Promise<{ path?: string; canceled: boolean }>,
@@ -31,8 +35,8 @@ const electronAPI = {
     readFile: (path: string) =>
       ipcRenderer.invoke('files:readFile', path) as Promise<{ content: string | null; error: string | null }>,
     
-    saveOutput: (opts: { defaultName: string; content: string; format: string }) =>
-      ipcRenderer.invoke('files:saveOutput', opts) as Promise<{ path?: string; canceled: boolean }>,
+    saveOutputAs: (opts: { sourcePath: string; defaultName: string }) =>
+      ipcRenderer.invoke('files:saveOutputAs', opts) as Promise<{ path?: string; canceled: boolean }>,
     
     openInExplorer: (path: string) =>
       ipcRenderer.invoke('files:openInExplorer', path) as Promise<void>,
@@ -48,6 +52,16 @@ const electronAPI = {
   },
 
   // ---------------------------------------------------------------------------
+  // Persistent Data (Staff & Departments)
+  // ---------------------------------------------------------------------------
+  data: {
+    loadStaff: () => ipcRenderer.invoke('data:loadStaff') as Promise<StaffMember[]>,
+    saveStaff: (staff: StaffMember[]) => ipcRenderer.invoke('data:saveStaff', staff) as Promise<{ success: boolean }>,
+    loadDepartments: () => ipcRenderer.invoke('data:loadDepartments') as Promise<Department[]>,
+    saveDepartments: (departments: Department[]) => ipcRenderer.invoke('data:saveDepartments', departments) as Promise<{ success: boolean }>,
+  },
+
+  // ---------------------------------------------------------------------------
   // Presets
   // ---------------------------------------------------------------------------
   presets: {
@@ -57,11 +71,24 @@ const electronAPI = {
   },
 
   // ---------------------------------------------------------------------------
+  // History
+  // ---------------------------------------------------------------------------
+  history: {
+    list: () => ipcRenderer.invoke('history:list') as Promise<HistoryEntry[]>,
+    getConfig: (historyId: string) => 
+      ipcRenderer.invoke('history:getConfig', historyId) as Promise<{ config: ConfigSnapshot | null; error: string | null }>,
+    delete: (historyId: string) => 
+      ipcRenderer.invoke('history:delete', historyId) as Promise<{ success: boolean }>,
+    getOutputPath: (opts: { historyId: string; type: 'xlsx' | 'xlsxFormatted' }) =>
+      ipcRenderer.invoke('history:getOutputPath', opts) as Promise<{ path: string | null; exists: boolean }>,
+  },
+
+  // ---------------------------------------------------------------------------
   // Solver
   // ---------------------------------------------------------------------------
   solver: {
-    run: (config: SolverRunConfig) =>
-      ipcRenderer.invoke('solver:run', config) as Promise<{ runId: string | null; error: string | null }>,
+    run: (opts: { config: SolverRunConfig; snapshot: ConfigSnapshot }) =>
+      ipcRenderer.invoke('solver:run', opts) as Promise<{ runId: string | null; error: string | null }>,
     
     cancel: () =>
       ipcRenderer.invoke('solver:cancel') as Promise<{ canceled: boolean; runId: string | null }>,
@@ -100,7 +127,7 @@ const electronAPI = {
   // ---------------------------------------------------------------------------
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
-    getPaths: () => ipcRenderer.invoke('app:getPaths') as Promise<{ userData: string; temp: string; logs: string }>,
+    getPaths: () => ipcRenderer.invoke('app:getPaths') as Promise<{ userData: string; temp: string; logs: string; history: string }>,
   },
 };
 

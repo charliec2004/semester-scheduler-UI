@@ -11,19 +11,26 @@ import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
 import { v4 as uuidv4 } from 'uuid';
 import type {
-  IpcChannels,
   SolverRunConfig,
   SolverProgress,
-  ValidationResult,
   AppSettings,
   FlagPreset,
+  HistoryEntry,
+  ConfigSnapshot,
+  StaffMember,
+  Department,
 } from './ipc-types';
+
+const MAX_HISTORY_ENTRIES = 5;
 
 // Initialize persistent settings store
 const store = new Store<{
   settings: AppSettings;
   presets: FlagPreset[];
   recentFiles: { staff?: string; dept?: string };
+  history: HistoryEntry[];
+  savedStaff: StaffMember[];
+  savedDepartments: Department[];
 }>({
   defaults: {
     settings: {
@@ -35,6 +42,7 @@ const store = new Store<{
       targetAdherenceWeight: 100,
       collaborativeHoursWeight: 200,
       shiftLengthWeight: 20,
+      favoredEmployeeDeptWeight: 50,
       departmentHourThreshold: 4,
       targetHardDeltaHours: 5,
       highContrast: false,
@@ -42,12 +50,17 @@ const store = new Store<{
     },
     presets: [],
     recentFiles: {},
+    history: [],
+    savedStaff: [],
+    savedDepartments: [],
   },
 });
 
 let mainWindow: BrowserWindow | null = null;
 let activeSolverProcess: ChildProcess | null = null;
 let currentRunId: string | null = null;
+let solverStartTime: number = 0;
+let solverMaxTime: number = 180;
 
 // Get the project root (parent of electron-app)
 function getProjectRoot(): string {
@@ -56,6 +69,15 @@ function getProjectRoot(): string {
   }
   // In dev: __dirname is dist/main/main, so go up 4 levels to project root
   return path.join(__dirname, '..', '..', '..', '..');
+}
+
+// Get the history storage directory
+function getHistoryDir(): string {
+  const dir = path.join(app.getPath('userData'), 'history');
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+  }
+  return dir;
 }
 
 // Resolve paths for development vs production
@@ -68,14 +90,12 @@ function getResourcePath(relativePath: string): string {
 
 function getPythonPath(): string {
   if (app.isPackaged) {
-    // In production, use bundled Python
     const platform = process.platform;
     if (platform === 'win32') {
       return path.join(process.resourcesPath, 'python', 'python.exe');
     }
     return path.join(process.resourcesPath, 'python', 'bin', 'python3');
   }
-  // In development, use system Python or venv
   const projectRoot = getProjectRoot();
   const venvPython = path.join(projectRoot, 'venv', 'bin', 'python3');
   if (fs.existsSync(venvPython)) {
@@ -85,7 +105,11 @@ function getPythonPath(): string {
 }
 
 function createWindow(): void {
-  mainWindow = new BrowserWindow({
+  const isMac = process.platform === 'darwin';
+  const isWin = process.platform === 'win32';
+  const isLinux = process.platform === 'linux';
+  
+  const windowOptions: Electron.BrowserWindowConstructorOptions = {
     width: 1400,
     height: 900,
     minWidth: 1000,
@@ -98,12 +122,31 @@ function createWindow(): void {
       nodeIntegration: false,
       sandbox: true,
     },
-  });
+  };
+
+  // macOS: hidden title bar with traffic lights
+  if (isMac) {
+    windowOptions.titleBarStyle = 'hiddenInset';
+    windowOptions.trafficLightPosition = { x: 16, y: 18 };
+  }
+  
+  // Windows/Linux: use titleBarOverlay for native window controls
+  if (isWin || isLinux) {
+    windowOptions.titleBarStyle = 'hidden';
+    windowOptions.titleBarOverlay = {
+      color: '#0f172a',
+      symbolColor: '#94a3b8',
+      height: 48,
+    };
+  }
+
+  mainWindow = new BrowserWindow(windowOptions);
 
   // Load the renderer
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
     mainWindow.loadURL('http://localhost:3000');
-    mainWindow.webContents.openDevTools();
+    // DevTools can be opened manually with Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux)
+    // mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
   }
@@ -120,6 +163,7 @@ function createWindow(): void {
 app.whenReady().then(() => {
   createWindow();
   registerIpcHandlers();
+  cleanupOldHistory();
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -133,6 +177,55 @@ app.on('window-all-closed', () => {
     app.quit();
   }
 });
+
+// Clean up old history entries beyond MAX_HISTORY_ENTRIES
+function cleanupOldHistory(): void {
+  const history = store.get('history');
+  if (history.length > MAX_HISTORY_ENTRIES) {
+    const toRemove = history.slice(MAX_HISTORY_ENTRIES);
+    for (const entry of toRemove) {
+      deleteHistoryFiles(entry.id);
+    }
+    store.set('history', history.slice(0, MAX_HISTORY_ENTRIES));
+  }
+}
+
+// Delete files associated with a history entry
+function deleteHistoryFiles(historyId: string): void {
+  const historyDir = getHistoryDir();
+  const entryDir = path.join(historyDir, historyId);
+  if (fs.existsSync(entryDir)) {
+    fs.rmSync(entryDir, { recursive: true, force: true });
+  }
+}
+
+// Save a new history entry
+function saveHistoryEntry(entry: HistoryEntry, config: ConfigSnapshot): void {
+  const historyDir = getHistoryDir();
+  const entryDir = path.join(historyDir, entry.id);
+  fs.mkdirSync(entryDir, { recursive: true });
+  
+  // Save config snapshot
+  fs.writeFileSync(
+    path.join(entryDir, 'config.json'),
+    JSON.stringify(config, null, 2)
+  );
+  
+  // Add to history
+  const history = store.get('history');
+  history.unshift(entry);
+  
+  // Keep only last MAX_HISTORY_ENTRIES
+  if (history.length > MAX_HISTORY_ENTRIES) {
+    const toRemove = history.slice(MAX_HISTORY_ENTRIES);
+    for (const old of toRemove) {
+      deleteHistoryFiles(old.id);
+    }
+    store.set('history', history.slice(0, MAX_HISTORY_ENTRIES));
+  } else {
+    store.set('history', history);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // IPC Handlers
@@ -157,22 +250,12 @@ function registerIpcHandlers(): void {
     return { path: filePath, content, canceled: false };
   });
 
-  ipcMain.handle('files:saveCsv', async (_event, { kind, path: filePath, content }: { kind: string; path?: string; content: string }) => {
-    let savePath = filePath;
-    if (!savePath) {
-      const result = await dialog.showSaveDialog(mainWindow!, {
-        title: `Save ${kind === 'staff' ? 'Staff' : 'Department'} CSV`,
-        defaultPath: kind === 'staff' ? 'employees.csv' : 'departments.csv',
-        filters: [{ name: 'CSV Files', extensions: ['csv'] }],
-      });
-      if (result.canceled || !result.filePath) {
-        return { canceled: true };
-      }
-      savePath = result.filePath;
-    }
-    fs.writeFileSync(savePath, content, 'utf-8');
-    store.set(`recentFiles.${kind}`, savePath);
-    return { path: savePath, canceled: false };
+  ipcMain.handle('files:saveCsvToTemp', async (_event, { content, filename }: { content: string; filename: string }) => {
+    const tempDir = path.join(app.getPath('temp'), 'scheduler-temp');
+    fs.mkdirSync(tempDir, { recursive: true });
+    const filePath = path.join(tempDir, filename);
+    fs.writeFileSync(filePath, content, 'utf-8');
+    return { path: filePath };
   });
 
   ipcMain.handle('files:downloadSample', async (_event, kind: 'staff' | 'dept') => {
@@ -202,18 +285,19 @@ function registerIpcHandlers(): void {
     }
   });
 
-  ipcMain.handle('files:saveOutput', async (_event, { defaultName, content, format }: { defaultName: string; content: string; format: string }) => {
+  // Save output file with user-chosen location
+  ipcMain.handle('files:saveOutputAs', async (_event, { sourcePath, defaultName }: { sourcePath: string; defaultName: string }) => {
     const result = await dialog.showSaveDialog(mainWindow!, {
-      title: 'Save Output',
+      title: 'Save Schedule',
       defaultPath: defaultName,
-      filters: [{ name: format.toUpperCase(), extensions: [format] }],
+      filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }],
     });
 
     if (result.canceled || !result.filePath) {
       return { canceled: true };
     }
 
-    fs.writeFileSync(result.filePath, content);
+    fs.copyFileSync(sourcePath, result.filePath);
     return { path: result.filePath, canceled: false };
   });
 
@@ -234,6 +318,25 @@ function registerIpcHandlers(): void {
   ipcMain.handle('settings:reset', () => {
     store.reset('settings');
     return store.get('settings');
+  });
+
+  // Staff & Department Data Persistence
+  ipcMain.handle('data:loadStaff', () => {
+    return store.get('savedStaff');
+  });
+
+  ipcMain.handle('data:saveStaff', (_event, staff: StaffMember[]) => {
+    store.set('savedStaff', staff);
+    return { success: true };
+  });
+
+  ipcMain.handle('data:loadDepartments', () => {
+    return store.get('savedDepartments');
+  });
+
+  ipcMain.handle('data:saveDepartments', (_event, departments: Department[]) => {
+    store.set('savedDepartments', departments);
+    return { success: true };
   });
 
   // Presets
@@ -259,26 +362,66 @@ function registerIpcHandlers(): void {
     return { success: true };
   });
 
+  // History
+  ipcMain.handle('history:list', () => {
+    return store.get('history');
+  });
+
+  ipcMain.handle('history:getConfig', async (_event, historyId: string) => {
+    const historyDir = getHistoryDir();
+    const configPath = path.join(historyDir, historyId, 'config.json');
+    
+    if (!fs.existsSync(configPath)) {
+      return { config: null, error: 'Config not found' };
+    }
+    
+    const content = fs.readFileSync(configPath, 'utf-8');
+    return { config: JSON.parse(content) as ConfigSnapshot, error: null };
+  });
+
+  ipcMain.handle('history:delete', async (_event, historyId: string) => {
+    deleteHistoryFiles(historyId);
+    const history = store.get('history').filter((h: HistoryEntry) => h.id !== historyId);
+    store.set('history', history);
+    return { success: true };
+  });
+
+  ipcMain.handle('history:getOutputPath', async (_event, { historyId, type }: { historyId: string; type: 'xlsx' | 'xlsxFormatted' }) => {
+    const historyDir = getHistoryDir();
+    const filename = type === 'xlsxFormatted' ? 'schedule-formatted.xlsx' : 'schedule.xlsx';
+    const filePath = path.join(historyDir, historyId, filename);
+    
+    if (!fs.existsSync(filePath)) {
+      return { path: null, exists: false };
+    }
+    
+    return { path: filePath, exists: true };
+  });
+
   // Solver
-  ipcMain.handle('solver:run', async (_event, config: SolverRunConfig) => {
+  ipcMain.handle('solver:run', async (_event, { config, snapshot }: { config: SolverRunConfig; snapshot: ConfigSnapshot }) => {
     if (activeSolverProcess) {
       return { error: 'A solver is already running', runId: null };
     }
 
     const runId = uuidv4();
     currentRunId = runId;
+    solverStartTime = Date.now();
+    solverMaxTime = config.maxSolveSeconds || 180;
 
     // Build command-line arguments
     const args = buildSolverArgs(config);
     const pythonPath = getPythonPath();
     const mainScript = getResourcePath('main.py');
 
-    // Create temp directory for outputs
-    const tempDir = path.join(app.getPath('temp'), 'scheduler', runId);
-    fs.mkdirSync(tempDir, { recursive: true });
+    // Create history directory for outputs
+    const historyDir = getHistoryDir();
+    const outputDir = path.join(historyDir, runId);
+    fs.mkdirSync(outputDir, { recursive: true });
 
-    const outputPath = path.join(tempDir, 'schedule.xlsx');
+    const outputPath = path.join(outputDir, 'schedule.xlsx');
     args.push('--output', outputPath);
+    args.push('--progress');
 
     console.log('Running solver:', pythonPath, [mainScript, ...args].join(' '));
 
@@ -287,24 +430,25 @@ function registerIpcHandlers(): void {
       env: { ...process.env, PYTHONUNBUFFERED: '1' },
     });
 
-    const startTime = Date.now();
+    // Send periodic progress updates based on elapsed time
+    const progressInterval = setInterval(() => {
+      if (!activeSolverProcess) {
+        clearInterval(progressInterval);
+        return;
+      }
+      const elapsed = (Date.now() - solverStartTime) / 1000;
+      const estimatedPercent = Math.min(95, (elapsed / solverMaxTime) * 100);
+      mainWindow?.webContents.send('solver:progress', {
+        runId,
+        percent: estimatedPercent,
+        elapsed,
+        maxTime: solverMaxTime,
+      } as SolverProgress);
+    }, 500);
 
     activeSolverProcess.stdout?.on('data', (data: Buffer) => {
       const text = data.toString();
       mainWindow?.webContents.send('solver:log', { runId, text, type: 'stdout' });
-      
-      // Parse progress if available
-      const progressMatch = text.match(/Progress:\s*(\d+)%/i);
-      if (progressMatch) {
-        const percent = parseInt(progressMatch[1], 10);
-        const elapsed = (Date.now() - startTime) / 1000;
-        mainWindow?.webContents.send('solver:progress', {
-          runId,
-          percent,
-          elapsed,
-          message: text.trim(),
-        } as SolverProgress);
-      }
     });
 
     activeSolverProcess.stderr?.on('data', (data: Buffer) => {
@@ -313,11 +457,12 @@ function registerIpcHandlers(): void {
     });
 
     activeSolverProcess.on('close', (code: number | null) => {
-      const elapsed = (Date.now() - startTime) / 1000;
+      clearInterval(progressInterval);
+      const elapsed = (Date.now() - solverStartTime) / 1000;
       
       if (code === 0) {
         // Success - check for output files
-        const outputs: Record<string, string> = {};
+        const outputs: { xlsx?: string; xlsxFormatted?: string } = {};
         if (fs.existsSync(outputPath)) {
           outputs.xlsx = outputPath;
         }
@@ -326,6 +471,18 @@ function registerIpcHandlers(): void {
           outputs.xlsxFormatted = formattedPath;
         }
 
+        // Save history entry
+        const historyEntry: HistoryEntry = {
+          id: runId,
+          timestamp: new Date().toISOString(),
+          employeeCount: snapshot.staff.length,
+          departmentCount: snapshot.departments.length,
+          hasXlsx: !!outputs.xlsx,
+          hasFormattedXlsx: !!outputs.xlsxFormatted,
+          elapsed,
+        };
+        saveHistoryEntry(historyEntry, snapshot);
+
         mainWindow?.webContents.send('solver:done', {
           runId,
           success: true,
@@ -333,6 +490,9 @@ function registerIpcHandlers(): void {
           elapsed,
         });
       } else {
+        // Clean up failed run directory
+        deleteHistoryFiles(runId);
+        
         mainWindow?.webContents.send('solver:done', {
           runId,
           success: false,
@@ -346,6 +506,9 @@ function registerIpcHandlers(): void {
     });
 
     activeSolverProcess.on('error', (err: Error) => {
+      clearInterval(progressInterval);
+      deleteHistoryFiles(runId);
+      
       mainWindow?.webContents.send('solver:error', {
         runId,
         error: err.message,
@@ -362,6 +525,9 @@ function registerIpcHandlers(): void {
       activeSolverProcess.kill('SIGTERM');
       activeSolverProcess = null;
       const runId = currentRunId;
+      if (runId) {
+        deleteHistoryFiles(runId);
+      }
       currentRunId = null;
       return { canceled: true, runId };
     }
@@ -382,6 +548,7 @@ function registerIpcHandlers(): void {
       userData: app.getPath('userData'),
       temp: app.getPath('temp'),
       logs: app.getPath('logs'),
+      history: getHistoryDir(),
     };
   });
 }
@@ -391,10 +558,6 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
 
   if (config.maxSolveSeconds) {
     args.push('--max-solve-seconds', config.maxSolveSeconds.toString());
-  }
-
-  if (config.showProgress) {
-    args.push('--progress');
   }
 
   for (const emp of config.favoredEmployees || []) {
@@ -411,6 +574,10 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
 
   for (const [dept, mult] of Object.entries(config.favoredFrontDeskDepts || {})) {
     args.push('--favor-frontdesk-dept', mult !== 1.0 ? `${dept}:${mult}` : dept);
+  }
+
+  for (const fed of config.favoredEmployeeDepts || []) {
+    args.push('--favor-employee-dept', `${fed.employee},${fed.department}`);
   }
 
   for (const ts of config.timesets || []) {

@@ -1,20 +1,26 @@
 /**
  * Import Tab Component
- * CSV file import with drag/drop, validation, and sample downloads
+ * CSV file import with drag/drop, validation, sample downloads, and config history
  */
 
-import { useState } from 'react';
-import { useStaffStore, useDepartmentStore, useUIStore } from '../../store';
+import { useState, useEffect } from 'react';
+import { useStaffStore, useDepartmentStore, useUIStore, useHistoryStore } from '../../store';
 import { DropZone } from '../ui/DropZone';
 import { validateStaffCsv, validateDepartmentCsv, parseStaffCsv, parseDepartmentCsv } from '../../utils/csvValidators';
+import type { HistoryEntry } from '../../../main/ipc-types';
 
 export function ImportTab() {
-  const { setStaff, setErrors: setStaffErrors, staff, staffPath, errors: staffValidationErrors } = useStaffStore();
-  const { setDepartments, setErrors: setDeptErrors, departments, deptPath, errors: deptValidationErrors } = useDepartmentStore();
+  const { setStaff, setErrors: setStaffErrors, staff, errors: staffValidationErrors } = useStaffStore();
+  const { setDepartments, setErrors: setDeptErrors, departments, errors: deptValidationErrors } = useDepartmentStore();
+  const { history, loadHistory, restoreConfig, deleteEntry } = useHistoryStore();
   const { showToast, setActiveTab } = useUIStore();
   
   const [staffImporting, setStaffImporting] = useState(false);
   const [deptImporting, setDeptImporting] = useState(false);
+
+  useEffect(() => {
+    loadHistory();
+  }, [loadHistory]);
 
   const handleStaffDrop = async (content: string, filename: string) => {
     setStaffImporting(true);
@@ -80,6 +86,32 @@ export function ImportTab() {
     }
   };
 
+  const handleRestoreConfig = async (entry: HistoryEntry) => {
+    const success = await restoreConfig(entry.id);
+    if (success) {
+      showToast(`Restored configuration from ${formatDate(entry.timestamp)}`, 'success');
+    } else {
+      showToast('Failed to restore configuration', 'error');
+    }
+  };
+
+  const handleDeleteConfig = async (entry: HistoryEntry) => {
+    if (window.confirm(`Delete this configuration and its output files?`)) {
+      await deleteEntry(entry.id);
+      showToast('Configuration deleted', 'info');
+    }
+  };
+
+  const formatDate = (timestamp: string) => {
+    const date = new Date(timestamp);
+    return date.toLocaleString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+  };
+
   return (
     <div className="space-y-8 animate-fade-in">
       {/* Header */}
@@ -88,9 +120,56 @@ export function ImportTab() {
           Import Data
         </h2>
         <p className="text-surface-400">
-          Import your staff and department CSV files to get started. You can also download sample templates.
+          Import your staff and department CSV files to get started, or restore a previous configuration.
         </p>
       </div>
+
+      {/* Config History */}
+      {history.length > 0 && (
+        <div className="card">
+          <h3 className="font-semibold text-surface-200 mb-4">Previous Configurations</h3>
+          <div className="space-y-2">
+            {history.map((entry, index) => (
+              <div
+                key={entry.id}
+                className="flex items-center justify-between p-3 bg-surface-800 rounded-lg hover:bg-surface-700 transition-colors"
+              >
+                <div className="flex items-center gap-4">
+                  <div className="w-8 h-8 bg-accent-600/20 rounded-full flex items-center justify-center text-accent-400 font-semibold text-sm">
+                    {index + 1}
+                  </div>
+                  <div>
+                    <div className="text-sm font-medium text-surface-200">
+                      {formatDate(entry.timestamp)}
+                    </div>
+                    <div className="text-xs text-surface-400">
+                      {entry.employeeCount} employees, {entry.departmentCount} departments
+                    </div>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => handleRestoreConfig(entry)}
+                    className="btn-secondary text-sm py-1.5"
+                  >
+                    Restore
+                  </button>
+                  <button
+                    onClick={() => handleDeleteConfig(entry)}
+                    className="btn-ghost text-danger-400 hover:text-danger-300 p-1.5"
+                    aria-label="Delete configuration"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* Import Cards */}
       <div className="grid md:grid-cols-2 gap-6">
@@ -275,7 +354,7 @@ export function ImportTab() {
             </div>
             <h4 className="font-medium text-surface-200">Generate Schedule</h4>
             <p className="text-surface-400">
-              Run the optimizer and export your completed schedule as Excel or CSV.
+              Run the optimizer and export your completed schedule as Excel.
             </p>
           </div>
         </div>

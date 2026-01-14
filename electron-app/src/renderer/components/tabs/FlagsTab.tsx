@@ -10,9 +10,10 @@ import {
   useDepartmentStore, 
   useSolverStore, 
   useSettingsStore,
-  useUIStore 
+  useUIStore,
+  createConfigSnapshot,
 } from '../../store';
-import type { TrainingPair, TimesetRequest, FlagPreset } from '../../../main/ipc-types';
+import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, StaffMember } from '../../../main/ipc-types';
 import { staffToCsv, departmentsToCsv } from '../../utils/csvValidators';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -22,19 +23,49 @@ const TIME_OPTIONS = [
   '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
 ];
 
+// Tooltip component with ? icon
+function Tooltip({ text }: { text: string }) {
+  const [show, setShow] = useState(false);
+  
+  return (
+    <span className="relative inline-flex items-center ml-1.5">
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        className="w-4 h-4 rounded-full bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-300 flex items-center justify-center text-xs font-medium transition-colors"
+        aria-label="More information"
+      >
+        ?
+      </button>
+      {show && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left">
+          {text}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
+            <div className="border-4 border-transparent border-t-surface-800" />
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 export function FlagsTab() {
   const {
     favoredEmployees, addFavoredEmployee, removeFavoredEmployee,
     trainingPairs, addTrainingPair, removeTrainingPair,
     favoredDepartments, setFavoredDepartments,
     favoredFrontDeskDepts, setFavoredFrontDeskDepts,
+    favoredEmployeeDepts, addFavoredEmployeeDept, removeFavoredEmployeeDept,
     timesets, addTimeset, removeTimeset,
     maxSolveSeconds, setMaxSolveSeconds,
     presets, savePreset, applyPreset, deletePreset,
   } = useFlagsStore();
   
-  const { staff, staffPath } = useStaffStore();
-  const { departments, deptPath } = useDepartmentStore();
+  const { staff, staffPath, saveStaff, dirty: staffDirty } = useStaffStore();
+  const { departments, deptPath, saveDepartments, dirty: deptDirty } = useDepartmentStore();
   const { running, setRunning } = useSolverStore();
   const { settings } = useSettingsStore();
   const { showToast, setActiveTab } = useUIStore();
@@ -65,6 +96,7 @@ export function FlagsTab() {
       trainingPairs,
       favoredDepartments,
       favoredFrontDeskDepts,
+      favoredEmployeeDepts,
       timesets,
       maxSolveSeconds,
     };
@@ -79,31 +111,45 @@ export function FlagsTab() {
     if (!canRun) return;
     
     try {
-      // Save CSVs to temp files and get paths
+      // Auto-save any unsaved changes before running
+      if (staffDirty) {
+        await saveStaff();
+      }
+      if (deptDirty) {
+        await saveDepartments();
+      }
+      
+      // Save CSVs to temp files
       const staffCsv = staffToCsv(staff);
       const deptCsv = departmentsToCsv(departments);
       
-      // Save to temp locations via IPC
-      const staffResult = await window.electronAPI.files.saveCsv({ kind: 'staff', content: staffCsv });
-      const deptResult = await window.electronAPI.files.saveCsv({ kind: 'dept', content: deptCsv });
-      
-      if (staffResult.canceled || deptResult.canceled || !staffResult.path || !deptResult.path) {
-        showToast('Please save CSV files before running', 'error');
-        return;
-      }
+      const staffResult = await window.electronAPI.files.saveCsvToTemp({ 
+        content: staffCsv, 
+        filename: 'staff.csv' 
+      });
+      const deptResult = await window.electronAPI.files.saveCsvToTemp({ 
+        content: deptCsv, 
+        filename: 'departments.csv' 
+      });
+
+      // Create config snapshot for history
+      const snapshot = createConfigSnapshot();
 
       setRunning(true);
       
       const result = await window.electronAPI.solver.run({
-        staffPath: staffResult.path,
-        deptPath: deptResult.path,
-        maxSolveSeconds: maxSolveSeconds || settings?.solverMaxTime || 180,
-        showProgress: true,
-        favoredEmployees,
-        trainingPairs,
-        favoredDepartments,
-        favoredFrontDeskDepts,
-        timesets,
+        config: {
+          staffPath: staffResult.path,
+          deptPath: deptResult.path,
+          maxSolveSeconds: maxSolveSeconds || settings?.solverMaxTime || 180,
+          favoredEmployees,
+          trainingPairs,
+          favoredDepartments,
+          favoredFrontDeskDepts,
+          favoredEmployeeDepts,
+          timesets,
+        },
+        snapshot,
       });
 
       if (result.error) {
@@ -214,7 +260,10 @@ export function FlagsTab() {
       <div className="grid lg:grid-cols-2 gap-6">
         {/* Favored Employees */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2">Favored Employees</h3>
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Favored Employees
+            <Tooltip text="Favored employees get higher priority to reach their target hours. The solver will try harder to schedule them close to their goals and allow more flexible shift lengths." />
+          </h3>
           <p className="text-sm text-surface-400 mb-4">
             Prioritize specific employees to hit their target hours
           </p>
@@ -262,7 +311,10 @@ export function FlagsTab() {
 
         {/* Solver Time */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2">Solver Time Limit</h3>
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Solver Time Limit
+            <Tooltip text="The maximum time the optimizer will spend searching for the best schedule. Longer times may find better solutions but take longer. 2-3 minutes is usually sufficient for most schedules." />
+          </h3>
           <p className="text-sm text-surface-400 mb-4">
             Maximum time the optimizer will search for solutions
           </p>
@@ -287,7 +339,10 @@ export function FlagsTab() {
 
         {/* Training Pairs */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2">Training Pairs</h3>
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Training Pairs
+            <Tooltip text="Pairs two employees to work in the same department at overlapping times. Useful for training new employees by scheduling them alongside experienced staff." />
+          </h3>
           <p className="text-sm text-surface-400 mb-4">
             Schedule employees to work together for training
           </p>
@@ -320,18 +375,20 @@ export function FlagsTab() {
 
         {/* Favor Department for Front Desk */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2">Favor Departments for Front Desk</h3>
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Favor Departments for Front Desk
+            <Tooltip text="When filling front desk shifts, prioritize employees from these departments. Useful when you want specific teams to handle front desk coverage. Department members must be qualified for front_desk." />
+          </h3>
           <p className="text-sm text-surface-400 mb-4">
             Prioritize members of these departments to cover front desk shifts.
             At least one member must have front_desk qualification.
           </p>
           
-          <div className="space-y-3">
+          <div className="space-y-2">
             {departmentNames.map(dept => (
-              <div key={dept} className="flex items-center gap-3">
+              <label key={dept} className="flex items-center gap-3 cursor-pointer hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
                 <input
                   type="checkbox"
-                  id={`favor-fd-${dept}`}
                   checked={dept in favoredFrontDeskDepts}
                   onChange={(e) => {
                     if (e.target.checked) {
@@ -343,22 +400,8 @@ export function FlagsTab() {
                   }}
                   className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-accent-500 focus:ring-accent-500"
                 />
-                <label htmlFor={`favor-fd-${dept}`} className="flex-1 text-sm text-surface-200">
-                  {dept}
-                </label>
-                {dept in favoredFrontDeskDepts && (
-                  <input
-                    type="number"
-                    min="0.5"
-                    max="3"
-                    step="0.1"
-                    value={favoredFrontDeskDepts[dept]}
-                    onChange={(e) => setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: parseFloat(e.target.value) })}
-                    className="input w-20 py-1 text-sm"
-                    aria-label={`Front desk priority multiplier for ${dept}`}
-                  />
-                )}
-              </div>
+                <span className="text-sm text-surface-200">{dept}</span>
+              </label>
             ))}
             {departmentNames.length === 0 && (
               <span className="text-sm text-surface-500">No departments loaded</span>
@@ -368,17 +411,19 @@ export function FlagsTab() {
 
         {/* Department Hour Priority */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2">Department Hour Priority</h3>
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Department Hour Priority
+            <Tooltip text="Increases the priority for these departments to meet their target hours. Selected departments will get bonus points for focused work time and penalty reduction when near target." />
+          </h3>
           <p className="text-sm text-surface-400 mb-4">
             Boost focused hours and target adherence for specific departments
           </p>
           
-          <div className="space-y-3">
+          <div className="space-y-2">
             {departmentNames.map(dept => (
-              <div key={dept} className="flex items-center gap-3">
+              <label key={dept} className="flex items-center gap-3 cursor-pointer hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
                 <input
                   type="checkbox"
-                  id={`favor-${dept}`}
                   checked={dept in favoredDepartments}
                   onChange={(e) => {
                     if (e.target.checked) {
@@ -390,22 +435,8 @@ export function FlagsTab() {
                   }}
                   className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-accent-500 focus:ring-accent-500"
                 />
-                <label htmlFor={`favor-${dept}`} className="flex-1 text-sm text-surface-200">
-                  {dept}
-                </label>
-                {dept in favoredDepartments && (
-                  <input
-                    type="number"
-                    min="0.5"
-                    max="3"
-                    step="0.1"
-                    value={favoredDepartments[dept]}
-                    onChange={(e) => setFavoredDepartments({ ...favoredDepartments, [dept]: parseFloat(e.target.value) })}
-                    className="input w-20 py-1 text-sm"
-                    aria-label={`Hour priority multiplier for ${dept}`}
-                  />
-                )}
-              </div>
+                <span className="text-sm text-surface-200">{dept}</span>
+              </label>
             ))}
             {departmentNames.length === 0 && (
               <span className="text-sm text-surface-500">No departments loaded</span>
@@ -413,9 +444,55 @@ export function FlagsTab() {
           </div>
         </div>
 
+        {/* Favor Employee for Department */}
+        <div className="card lg:col-span-2">
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Favor Employee for Department
+            <Tooltip text="Adds a soft preference for an employee to work in a specific department or front desk. This is a suggestion, not a requirement. The employee must be qualified for the role. Adjust the weight in Settings." />
+          </h3>
+          <p className="text-sm text-surface-400 mb-4">
+            Softly prefer assigning specific employees to specific departments or front desk.
+            The employee must be qualified for the role.
+          </p>
+          
+          <FavoredEmployeeDeptForm
+            employees={employeeNames}
+            departments={departmentNames}
+            staff={staff}
+            onAdd={addFavoredEmployeeDept}
+          />
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
+            {favoredEmployeeDepts.map((fed, i) => (
+              <div key={i} className="flex items-center justify-between bg-surface-800 rounded-lg px-3 py-2">
+                <span className="text-sm">
+                  <span className="font-medium text-surface-200">{fed.employee}</span>
+                  <span className="text-surface-400"> → </span>
+                  <span className="text-accent-400">{fed.department}</span>
+                </span>
+                <button 
+                  onClick={() => removeFavoredEmployeeDept(i)}
+                  className="text-surface-400 hover:text-danger-400 ml-2"
+                  aria-label={`Remove ${fed.employee} → ${fed.department}`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {favoredEmployeeDepts.length === 0 && (
+              <span className="text-sm text-surface-500">No employee-department preferences set</span>
+            )}
+          </div>
+        </div>
+
         {/* Timesets - Force Employee to Role */}
         <div className="card lg:col-span-2">
-          <h3 className="font-semibold text-surface-200 mb-2">Assign Employee to Role/Time</h3>
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Assign Employee to Role/Time
+            <Tooltip text="Creates a hard requirement for an employee to work in a specific department at specific times. Unlike soft preferences, this will be enforced if possible. Use sparingly as too many constraints may make scheduling impossible." />
+          </h3>
           <p className="text-sm text-surface-400 mb-4">
             Force a specific employee to work a role at specific times. 
             Use this to favor someone for a particular role (they must be qualified).
@@ -505,25 +582,25 @@ function TrainingPairForm({
   };
 
   return (
-    <div className="grid grid-cols-4 gap-2">
-      <select value={dept} onChange={(e) => setDept(e.target.value)} className="input">
+    <div className="flex gap-2">
+      <select value={dept} onChange={(e) => setDept(e.target.value)} className="input flex-1 min-w-0">
         <option value="">Department</option>
         {departments.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
-      <select value={trainee1} onChange={(e) => setTrainee1(e.target.value)} className="input">
+      <select value={trainee1} onChange={(e) => setTrainee1(e.target.value)} className="input flex-1 min-w-0">
         <option value="">Trainee 1</option>
         {employees.map(e => <option key={e} value={e}>{e}</option>)}
       </select>
-      <select value={trainee2} onChange={(e) => setTrainee2(e.target.value)} className="input">
+      <select value={trainee2} onChange={(e) => setTrainee2(e.target.value)} className="input flex-1 min-w-0">
         <option value="">Trainee 2</option>
         {employees.filter(e => e !== trainee1).map(e => <option key={e} value={e}>{e}</option>)}
       </select>
       <button 
         onClick={handleAdd} 
         disabled={!dept || !trainee1 || !trainee2}
-        className="btn-secondary"
+        className="btn-secondary flex-shrink-0 px-3"
       >
-        Add
+        +
       </button>
     </div>
   );
@@ -582,6 +659,86 @@ function TimesetForm({
         onClick={handleAdd}
         disabled={!employee || !day || !department || !startTime || !endTime}
         className="btn-secondary"
+      >
+        Add
+      </button>
+    </div>
+  );
+}
+
+// Favored Employee-Department Form Component
+function FavoredEmployeeDeptForm({
+  employees,
+  departments,
+  staff,
+  onAdd,
+}: {
+  employees: string[];
+  departments: string[];
+  staff: StaffMember[];
+  onAdd: (fed: FavoredEmployeeDept) => void;
+}) {
+  const [employee, setEmployee] = useState('');
+  const [department, setDepartment] = useState('');
+
+  // Get departments + front_desk the selected employee is qualified for
+  const qualifiedRoles = useMemo(() => {
+    if (!employee) return [];
+    const staffMember = staff.find(s => s.name === employee);
+    if (!staffMember) return [];
+    
+    const roles: string[] = [];
+    
+    // Check if qualified for front_desk
+    if (staffMember.roles.some(role => 
+      role.toLowerCase().replace(/\s+/g, '_') === 'front_desk'
+    )) {
+      roles.push('front_desk');
+    }
+    
+    // Add departments the employee is qualified for
+    departments.forEach(dept => {
+      if (staffMember.roles.some(role => 
+        role.toLowerCase().replace(/\s+/g, '_') === dept.toLowerCase().replace(/\s+/g, '_')
+      )) {
+        roles.push(dept);
+      }
+    });
+    
+    return roles;
+  }, [employee, staff, departments]);
+
+  const handleAdd = () => {
+    if (employee && department) {
+      onAdd({ employee, department });
+      setEmployee('');
+      setDepartment('');
+    }
+  };
+
+  return (
+    <div className="flex gap-2">
+      <select value={employee} onChange={(e) => { setEmployee(e.target.value); setDepartment(''); }} className="input flex-1">
+        <option value="">Select employee...</option>
+        {employees.map(e => <option key={e} value={e}>{e}</option>)}
+      </select>
+      <select 
+        value={department} 
+        onChange={(e) => setDepartment(e.target.value)} 
+        className="input flex-1"
+        disabled={!employee}
+      >
+        <option value="">{employee ? 'Select role...' : 'Select employee first'}</option>
+        {qualifiedRoles.map(d => (
+          <option key={d} value={d}>
+            {d === 'front_desk' ? '🖥️ Front Desk' : d}
+          </option>
+        ))}
+      </select>
+      <button 
+        onClick={handleAdd}
+        disabled={!employee || !department}
+        className="btn-secondary flex-shrink-0"
       >
         Add
       </button>

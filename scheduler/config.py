@@ -77,6 +77,7 @@ FAVOR_DEPARTMENT_TARGET_MULTIPLIER = 1.5  # Boost favored departments' target ad
 FAVORED_DEPARTMENT_FOCUSED_BONUS = 30  # Bonus per 30-min focused slot for favored departments
 FAVORED_DEPARTMENT_DUAL_PENALTY = 20  # Penalty per 30-min dual-counted slot for favored departments
 FAVORED_FRONT_DESK_DEPT_BONUS = 40  # Bonus per 30-min front desk slot filled by favored department members
+FAVORED_EMPLOYEE_DEPT_BONUS = 50  # Bonus per 30-min slot when a favored employee works their preferred department
 TARGET_HARD_DELTA_HOURS = 5  # Hard bound: keep each employee within +/- this many hours of target (when feasible)
 
 # ---------------------------------------------------------------------------

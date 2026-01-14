@@ -19,6 +19,7 @@ from scheduler.config import (
     FAVORED_MIN_SLOTS,
     FAVORED_MAX_SLOTS,
     FAVORED_HOURS_BONUS_WEIGHT,
+    FAVORED_EMPLOYEE_DEPT_BONUS,
     FAVOR_TARGET_MULTIPLIER,
     FRONT_DESK_COVERAGE_WEIGHT,
     FRONT_DESK_ROLE,
@@ -47,6 +48,7 @@ from scheduler.data_access.department_loader import load_department_requirements
 from scheduler.data_access.staff_loader import load_staff_data
 from scheduler.domain.models import (
     FavoredDepartment,
+    FavoredEmployeeDepartment,
     FavoredFrontDeskDepartment,
     TimesetRequest,
     TrainingRequest,
@@ -65,6 +67,7 @@ def solve_schedule(
     favored_departments: dict[str, float] | None = None,
     favored_frontdesk_departments: dict[str, float] | None = None,
     timeset_requests: List[TimesetRequest] | None = None,
+    favored_employee_depts: List[FavoredEmployeeDepartment] | None = None,
     show_progress: bool = False,
 ):
     """Main function to build and solve the scheduling model"""
@@ -210,6 +213,34 @@ def solve_schedule(
         role_name = role_lookup_lower[dept_key]
         multiplier = mult if mult is not None else 1.0
         favored_fd_departments_normalized[role_name] = FavoredFrontDeskDepartment(name=role_name, multiplier=multiplier)
+
+    # Validate and normalize --favor-employee-dept requests
+    favored_employee_depts = favored_employee_depts or []
+    validated_favored_emp_depts: List[FavoredEmployeeDepartment] = []
+    for fed in favored_employee_depts:
+        emp_key = fed.employee.strip().lower()
+        if emp_key not in employees_lower:
+            raise ValueError(f"--favor-employee-dept employee '{fed.employee}' not found in staff data.")
+        employee = employees_lower[emp_key]
+        
+        dept_key = fed.department.strip().lower().replace(" ", "_")
+        
+        # Special case: front_desk is a role, not a department
+        if dept_key == FRONT_DESK_ROLE:
+            role_name = FRONT_DESK_ROLE
+        elif dept_key not in role_lookup_lower:
+            raise ValueError(f"--favor-employee-dept role '{fed.department}' not found among roles.")
+        else:
+            role_name = role_lookup_lower[dept_key]
+        
+        # Verify employee is qualified for this role
+        if role_name not in qual[employee]:
+            raise ValueError(
+                f"--favor-employee-dept: '{employee}' is not qualified for '{role_name}'. "
+                f"Their qualifications are: {', '.join(qual[employee]) or 'none'}"
+            )
+        
+        validated_favored_emp_depts.append(FavoredEmployeeDepartment(employee=employee, department=role_name))
 
     validated_training: List[dict] = []
     for request in training_requests:
@@ -740,6 +771,21 @@ def solve_schedule(
             # Bonus for each front desk slot filled by members of this department
             fd_slots = sum(assign.get((e, d, t, FRONT_DESK_ROLE), 0) for e in employees if role in qual[e] for d in days for t in T)
             favored_fd_bonus += mult * FAVORED_FRONT_DESK_DEPT_BONUS * fd_slots
+    
+    # Bonus for favored employee-department assignments
+    favored_emp_dept_bonus = 0
+    for fed in validated_favored_emp_depts:
+        emp = fed.employee
+        dept = fed.department
+        # Bonus for each slot this employee works in their preferred department
+        slots_in_dept = sum(
+            assign.get((emp, d, t, dept), 0) 
+            for d in days 
+            for t in T 
+            if (emp, d, t, dept) in assign
+        )
+        favored_emp_dept_bonus += FAVORED_EMPLOYEE_DEPT_BONUS * slots_in_dept
+    
     total_department_units = sum(department_effective_units.values())
     department_max_units = {
         role: int(round(department_max_hours[role] * 4))
@@ -1141,6 +1187,7 @@ def solve_schedule(
         timeset_bonus +
         favored_department_bonus +
         favored_fd_bonus +
+        favored_emp_dept_bonus +
         training_overlap_bonus
     )
     

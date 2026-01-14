@@ -4,7 +4,7 @@
  */
 
 import { useEffect } from 'react';
-import { useSettingsStore, useUIStore, useFlagsStore, useSolverStore } from './store';
+import { useSettingsStore, useUIStore, useFlagsStore, useSolverStore, useHistoryStore, useStaffStore, useDepartmentStore } from './store';
 import { TabNavigation } from './components/layout/TabNavigation';
 import { Toast } from './components/ui/Toast';
 import { SettingsPanel } from './components/settings/SettingsPanel';
@@ -20,13 +20,19 @@ function App() {
   const { settings, loadSettings } = useSettingsStore();
   const { activeTab, showSettings, toast } = useUIStore();
   const { loadPresets } = useFlagsStore();
-  const { setProgress, addLog, setResult, setRunning } = useSolverStore();
+  const { setProgress, addLog, setResult } = useSolverStore();
+  const { loadHistory } = useHistoryStore();
+  const { loadSavedStaff } = useStaffStore();
+  const { loadSavedDepartments } = useDepartmentStore();
 
-  // Load settings and presets on mount
+  // Load settings, presets, history, and saved data on mount
   useEffect(() => {
     loadSettings();
     loadPresets();
-  }, [loadSettings, loadPresets]);
+    loadHistory();
+    loadSavedStaff();
+    loadSavedDepartments();
+  }, [loadSettings, loadPresets, loadHistory, loadSavedStaff, loadSavedDepartments]);
 
   // Global keyboard shortcuts
   useKeyboardShortcuts();
@@ -75,17 +81,21 @@ function App() {
 
   const contrastClass = settings?.highContrast ? 'high-contrast' : '';
 
+  // Detect platform for title bar styling
+  const isMac = navigator.platform.toLowerCase().includes('mac');
+
   return (
-    <div className={`min-h-screen flex flex-col ${fontSizeClass} ${contrastClass}`}>
+    <div className={`min-h-screen flex flex-col bg-surface-950 ${fontSizeClass} ${contrastClass}`}>
       {/* Skip link for keyboard navigation */}
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
 
-      {/* Header */}
-      <header className="bg-surface-900 border-b border-surface-700 px-6 py-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-4">
+      {/* Header with draggable title bar region */}
+      <header className="bg-surface-900 border-b border-surface-700 titlebar-drag">
+        {/* macOS traffic light spacing - pl-24 = 96px to clear the ~70px wide traffic lights */}
+        <div className={`flex items-center justify-between ${isMac ? 'pl-24' : 'pl-6'} pr-6 py-3 ${isMac ? 'pt-3' : ''}`}>
+          <div className="flex items-center gap-4 no-drag">
             <div className="w-10 h-10 bg-accent-600 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
@@ -102,7 +112,7 @@ function App() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 no-drag">
             <KeyboardShortcutsHelp />
             <button
               onClick={() => useUIStore.getState().setShowSettings(true)}

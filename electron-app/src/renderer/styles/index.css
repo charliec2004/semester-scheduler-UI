@@ -13,8 +13,30 @@
   }
 
   body {
-    @apply font-sans;
+    @apply font-sans bg-surface-950;
     font-feature-settings: 'liga' 1, 'calt' 1;
+  }
+
+  /* Custom title bar drag region */
+  .titlebar-drag {
+    -webkit-app-region: drag;
+    app-region: drag;
+  }
+
+  .no-drag,
+  .titlebar-drag button,
+  .titlebar-drag a,
+  .titlebar-drag input,
+  .titlebar-drag select {
+    -webkit-app-region: no-drag;
+    app-region: no-drag;
+  }
+
+  /* Windows title bar overlay spacing */
+  @supports (padding-top: env(titlebar-area-height, 0px)) {
+    .titlebar-overlay-padding {
+      padding-right: env(titlebar-area-width, 0px);
+    }
   }
 
   /* High contrast mode */

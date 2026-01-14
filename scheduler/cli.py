@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 from scheduler.config import DAY_NAMES, DEFAULT_SOLVER_MAX_TIME, TIME_SLOT_STARTS
-from scheduler.domain.models import TimesetRequest, TrainingRequest
+from scheduler.domain.models import FavoredEmployeeDepartment, TimesetRequest, TrainingRequest
 from scheduler.engine.solver import solve_schedule
 
 
@@ -94,6 +94,16 @@ def build_parser() -> argparse.ArgumentParser:
             "in 30-minute increments. Repeatable."
         ),
     )
+    parser.add_argument(
+        "--favor-employee-dept",
+        action="append",
+        default=[],
+        metavar="EMPLOYEE,DEPT",
+        help=(
+            "Softly favor assigning EMPLOYEE to work in DEPT. "
+            "Employee must be qualified for the department. Repeatable."
+        ),
+    )
     return parser
 
 
@@ -162,6 +172,27 @@ def _parse_favored_fd_departments(raw: list[str]) -> dict[str, float]:
     return favored
 
 
+def _parse_favored_employee_depts(raw: list[str]) -> list[FavoredEmployeeDepartment]:
+    """Parse --favor-employee-dept arguments into structured requests."""
+    result: list[FavoredEmployeeDepartment] = []
+    for entry in raw:
+        value = entry.strip()
+        if not value:
+            continue
+        parts = [p.strip() for p in value.split(",")]
+        if len(parts) != 2:
+            raise ValueError(
+                f"Invalid --favor-employee-dept value '{entry}'. Expected format: EMPLOYEE,DEPT"
+            )
+        employee, dept = parts
+        if not employee or not dept:
+            raise ValueError(
+                f"Invalid --favor-employee-dept value '{entry}'. Both employee and department are required."
+            )
+        result.append(FavoredEmployeeDepartment(employee=employee, department=dept))
+    return result
+
+
 def _parse_timesets(raw_timesets: list[list[str]]) -> list[TimesetRequest]:
     """Parse --timeset entries into structured requests."""
     time_to_slot = {t: idx for idx, t in enumerate(TIME_SLOT_STARTS)}
@@ -226,6 +257,7 @@ def main(argv: list[str] | None = None) -> None:
         favored_departments = _parse_favored_departments(args.favor_dept)
         favored_frontdesk_departments = _parse_favored_fd_departments(args.favor_frontdesk_dept)
         timeset_requests = _parse_timesets(args.timeset)
+        favored_employee_depts = _parse_favored_employee_depts(args.favor_employee_dept)
         output_path = args.output
         if not str(output_path).lower().endswith(".xlsx"):
             output_path = output_path.with_name(output_path.name + ".xlsx")
@@ -239,6 +271,7 @@ def main(argv: list[str] | None = None) -> None:
             favored_departments=favored_departments,
             favored_frontdesk_departments=favored_frontdesk_departments,
             timeset_requests=timeset_requests,
+            favored_employee_depts=favored_employee_depts,
             show_progress=args.progress,
         )
     except Exception as exc:

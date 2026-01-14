@@ -19,6 +19,7 @@ export interface AppSettings {
   targetAdherenceWeight: number;
   collaborativeHoursWeight: number;
   shiftLengthWeight: number;
+  favoredEmployeeDeptWeight: number;
   
   // Thresholds
   departmentHourThreshold: number;
@@ -38,6 +39,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   targetAdherenceWeight: 100,
   collaborativeHoursWeight: 200,
   shiftLengthWeight: 20,
+  favoredEmployeeDeptWeight: 50,
   departmentHourThreshold: 4,
   targetHardDeltaHours: 5,
   highContrast: false,
@@ -81,6 +83,11 @@ export interface TimesetRequest {
   endTime: string;
 }
 
+export interface FavoredEmployeeDept {
+  employee: string;
+  department: string;
+}
+
 export interface SolverRunConfig {
   staffPath: string;
   deptPath: string;
@@ -91,12 +98,14 @@ export interface SolverRunConfig {
   favoredDepartments?: Record<string, number>;
   favoredFrontDeskDepts?: Record<string, number>;
   timesets?: TimesetRequest[];
+  favoredEmployeeDepts?: FavoredEmployeeDept[];
 }
 
 export interface SolverProgress {
   runId: string;
   percent: number;
   elapsed: number;
+  maxTime: number;
   message?: string;
 }
 
@@ -106,10 +115,35 @@ export interface SolverResult {
   outputs?: {
     xlsx?: string;
     xlsxFormatted?: string;
-    json?: string;
   };
   error?: string;
   elapsed: number;
+}
+
+// ---------------------------------------------------------------------------
+// History & Config Snapshots
+// ---------------------------------------------------------------------------
+
+export interface HistoryEntry {
+  id: string;
+  timestamp: string;
+  employeeCount: number;
+  departmentCount: number;
+  hasXlsx: boolean;
+  hasFormattedXlsx: boolean;
+  elapsed: number;
+}
+
+export interface ConfigSnapshot {
+  staff: StaffMember[];
+  departments: Department[];
+  favoredEmployees: string[];
+  trainingPairs: TrainingPair[];
+  favoredDepartments: Record<string, number>;
+  favoredFrontDeskDepts: Record<string, number>;
+  timesets: TimesetRequest[];
+  favoredEmployeeDepts: FavoredEmployeeDept[];
+  maxSolveSeconds: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -143,6 +177,7 @@ export interface FlagPreset {
   favoredDepartments: Record<string, number>;
   favoredFrontDeskDepts: Record<string, number>;
   timesets: TimesetRequest[];
+  favoredEmployeeDepts: FavoredEmployeeDept[];
   maxSolveSeconds?: number;
 }
 
@@ -153,10 +188,10 @@ export interface FlagPreset {
 export interface IpcChannels {
   // Files
   'files:openCsv': (kind: 'staff' | 'dept') => Promise<{ path?: string; content?: string; canceled: boolean }>;
-  'files:saveCsv': (opts: { kind: string; path?: string; content: string }) => Promise<{ path?: string; canceled: boolean }>;
+  'files:saveCsvToTemp': (opts: { content: string; filename: string }) => Promise<{ path: string }>;
   'files:downloadSample': (kind: 'staff' | 'dept') => Promise<{ path?: string; canceled: boolean }>;
   'files:readFile': (path: string) => Promise<{ content: string | null; error: string | null }>;
-  'files:saveOutput': (opts: { defaultName: string; content: string; format: string }) => Promise<{ path?: string; canceled: boolean }>;
+  'files:saveOutputAs': (opts: { sourcePath: string; defaultName: string }) => Promise<{ path?: string; canceled: boolean }>;
   'files:openInExplorer': (path: string) => Promise<void>;
   
   // Settings
@@ -169,14 +204,20 @@ export interface IpcChannels {
   'presets:save': (preset: FlagPreset) => Promise<{ success: boolean }>;
   'presets:delete': (presetId: string) => Promise<{ success: boolean }>;
   
+  // History
+  'history:list': () => Promise<HistoryEntry[]>;
+  'history:getConfig': (historyId: string) => Promise<{ config: ConfigSnapshot | null; error: string | null }>;
+  'history:delete': (historyId: string) => Promise<{ success: boolean }>;
+  'history:getOutputPath': (opts: { historyId: string; type: 'xlsx' | 'xlsxFormatted' }) => Promise<{ path: string | null; exists: boolean }>;
+  
   // Solver
-  'solver:run': (config: SolverRunConfig) => Promise<{ runId: string | null; error: string | null }>;
+  'solver:run': (opts: { config: SolverRunConfig; snapshot: ConfigSnapshot }) => Promise<{ runId: string | null; error: string | null }>;
   'solver:cancel': () => Promise<{ canceled: boolean; runId: string | null }>;
   'solver:isRunning': () => Promise<{ running: boolean; runId: string | null }>;
   
   // App
   'app:getVersion': () => Promise<string>;
-  'app:getPaths': () => Promise<{ userData: string; temp: string; logs: string }>;
+  'app:getPaths': () => Promise<{ userData: string; temp: string; logs: string; history: string }>;
 }
 
 // Event channels (main -> renderer)

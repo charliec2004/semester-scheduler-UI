@@ -37,16 +37,18 @@ export function KeyboardShortcutsHelp() {
       </button>
 
       {isOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-4"
+          onClick={() => setIsOpen(false)}
+        >
+          {/* Dark overlay without blur to avoid vibrancy conflicts */}
+          <div className="absolute inset-0 bg-black/60" />
           <div 
-            className="absolute inset-0 bg-surface-950/80 backdrop-blur-sm"
-            onClick={() => setIsOpen(false)}
-          />
-          <div 
-            className="relative bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md"
+            className="relative bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
             role="dialog"
             aria-modal="true"
             aria-labelledby="shortcuts-title"
+            onClick={(e) => e.stopPropagation()}
           >
             <div className="flex items-center justify-between mb-6">
               <h2 id="shortcuts-title" className="text-lg font-semibold text-surface-100">

@@ -11,8 +11,11 @@ import type {
   FlagPreset,
   TrainingPair,
   TimesetRequest,
+  FavoredEmployeeDept,
   SolverProgress,
   ValidationError,
+  HistoryEntry,
+  ConfigSnapshot,
 } from '../../main/ipc-types';
 
 // ---------------------------------------------------------------------------
@@ -27,7 +30,7 @@ interface SettingsState {
   resetSettings: () => Promise<void>;
 }
 
-export const useSettingsStore = create<SettingsState>((set, get) => ({
+export const useSettingsStore = create<SettingsState>((set) => ({
   settings: null,
   loading: true,
 
@@ -65,6 +68,8 @@ interface StaffState {
   setErrors: (errors: ValidationError[], warnings: ValidationError[]) => void;
   setDirty: (dirty: boolean) => void;
   clearStaff: () => void;
+  saveStaff: () => Promise<void>;
+  loadSavedStaff: () => Promise<void>;
 }
 
 export const useStaffStore = create<StaffState>((set, get) => ({
@@ -94,6 +99,18 @@ export const useStaffStore = create<StaffState>((set, get) => ({
   setErrors: (errors, warnings) => set({ errors, warnings }),
   setDirty: (dirty) => set({ dirty }),
   clearStaff: () => set({ staff: [], staffPath: null, errors: [], warnings: [], dirty: false }),
+  
+  saveStaff: async () => {
+    await window.electronAPI.data.saveStaff(get().staff);
+    set({ dirty: false });
+  },
+  
+  loadSavedStaff: async () => {
+    const staff = await window.electronAPI.data.loadStaff();
+    if (staff && staff.length > 0) {
+      set({ staff, dirty: false });
+    }
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -113,6 +130,8 @@ interface DepartmentState {
   setErrors: (errors: ValidationError[], warnings: ValidationError[]) => void;
   setDirty: (dirty: boolean) => void;
   clearDepartments: () => void;
+  saveDepartments: () => Promise<void>;
+  loadSavedDepartments: () => Promise<void>;
 }
 
 export const useDepartmentStore = create<DepartmentState>((set, get) => ({
@@ -142,6 +161,18 @@ export const useDepartmentStore = create<DepartmentState>((set, get) => ({
   setErrors: (errors, warnings) => set({ errors, warnings }),
   setDirty: (dirty) => set({ dirty }),
   clearDepartments: () => set({ departments: [], deptPath: null, errors: [], warnings: [], dirty: false }),
+  
+  saveDepartments: async () => {
+    await window.electronAPI.data.saveDepartments(get().departments);
+    set({ dirty: false });
+  },
+  
+  loadSavedDepartments: async () => {
+    const departments = await window.electronAPI.data.loadDepartments();
+    if (departments && departments.length > 0) {
+      set({ departments, dirty: false });
+    }
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -153,6 +184,7 @@ interface FlagsState {
   trainingPairs: TrainingPair[];
   favoredDepartments: Record<string, number>;
   favoredFrontDeskDepts: Record<string, number>;
+  favoredEmployeeDepts: FavoredEmployeeDept[];
   timesets: TimesetRequest[];
   maxSolveSeconds: number;
   presets: FlagPreset[];
@@ -167,6 +199,10 @@ interface FlagsState {
   
   setFavoredDepartments: (depts: Record<string, number>) => void;
   setFavoredFrontDeskDepts: (depts: Record<string, number>) => void;
+  
+  setFavoredEmployeeDepts: (depts: FavoredEmployeeDept[]) => void;
+  addFavoredEmployeeDept: (dept: FavoredEmployeeDept) => void;
+  removeFavoredEmployeeDept: (index: number) => void;
   
   setTimesets: (timesets: TimesetRequest[]) => void;
   addTimeset: (timeset: TimesetRequest) => void;
@@ -187,6 +223,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
   trainingPairs: [],
   favoredDepartments: {},
   favoredFrontDeskDepts: {},
+  favoredEmployeeDepts: [],
   timesets: [],
   maxSolveSeconds: 180,
   presets: [],
@@ -209,6 +246,20 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
 
   setFavoredDepartments: (depts) => set({ favoredDepartments: depts }),
   setFavoredFrontDeskDepts: (depts) => set({ favoredFrontDeskDepts: depts }),
+
+  setFavoredEmployeeDepts: (depts) => set({ favoredEmployeeDepts: depts }),
+  addFavoredEmployeeDept: (dept) => {
+    // Prevent duplicates
+    const exists = get().favoredEmployeeDepts.some(
+      d => d.employee === dept.employee && d.department === dept.department
+    );
+    if (!exists) {
+      set({ favoredEmployeeDepts: [...get().favoredEmployeeDepts, dept] });
+    }
+  },
+  removeFavoredEmployeeDept: (index) => {
+    set({ favoredEmployeeDepts: get().favoredEmployeeDepts.filter((_, i) => i !== index) });
+  },
 
   setTimesets: (timesets) => set({ timesets }),
   addTimeset: (timeset) => set({ timesets: [...get().timesets, timeset] }),
@@ -239,6 +290,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       trainingPairs: preset.trainingPairs,
       favoredDepartments: preset.favoredDepartments,
       favoredFrontDeskDepts: preset.favoredFrontDeskDepts,
+      favoredEmployeeDepts: preset.favoredEmployeeDepts || [],
       timesets: preset.timesets,
       maxSolveSeconds: preset.maxSolveSeconds ?? get().maxSolveSeconds,
     });
@@ -249,9 +301,57 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
     trainingPairs: [],
     favoredDepartments: {},
     favoredFrontDeskDepts: {},
+    favoredEmployeeDepts: [],
     timesets: [],
     maxSolveSeconds: 180,
   }),
+}));
+
+// ---------------------------------------------------------------------------
+// History Store
+// ---------------------------------------------------------------------------
+
+interface HistoryState {
+  history: HistoryEntry[];
+  loading: boolean;
+  loadHistory: () => Promise<void>;
+  deleteEntry: (historyId: string) => Promise<void>;
+  restoreConfig: (historyId: string) => Promise<boolean>;
+}
+
+export const useHistoryStore = create<HistoryState>((set, get) => ({
+  history: [],
+  loading: false,
+
+  loadHistory: async () => {
+    set({ loading: true });
+    const history = await window.electronAPI.history.list();
+    set({ history, loading: false });
+  },
+
+  deleteEntry: async (historyId) => {
+    await window.electronAPI.history.delete(historyId);
+    set({ history: get().history.filter(h => h.id !== historyId) });
+  },
+
+  restoreConfig: async (historyId) => {
+    const result = await window.electronAPI.history.getConfig(historyId);
+    if (result.config) {
+      const config = result.config;
+      // Restore all stores
+      useStaffStore.getState().setStaff(config.staff);
+      useDepartmentStore.getState().setDepartments(config.departments);
+      useFlagsStore.getState().setFavoredEmployees(config.favoredEmployees);
+      useFlagsStore.getState().setTrainingPairs(config.trainingPairs);
+      useFlagsStore.getState().setFavoredDepartments(config.favoredDepartments);
+      useFlagsStore.getState().setFavoredFrontDeskDepts(config.favoredFrontDeskDepts);
+      useFlagsStore.getState().setFavoredEmployeeDepts(config.favoredEmployeeDepts || []);
+      useFlagsStore.getState().setTimesets(config.timesets);
+      useFlagsStore.getState().setMaxSolveSeconds(config.maxSolveSeconds);
+      return true;
+    }
+    return false;
+  },
 }));
 
 // ---------------------------------------------------------------------------
@@ -323,3 +423,25 @@ export const useUIStore = create<UIState>((set) => ({
   },
   hideToast: () => set({ toast: null }),
 }));
+
+// ---------------------------------------------------------------------------
+// Helper: Create Config Snapshot
+// ---------------------------------------------------------------------------
+
+export function createConfigSnapshot(): ConfigSnapshot {
+  const staff = useStaffStore.getState().staff;
+  const departments = useDepartmentStore.getState().departments;
+  const flags = useFlagsStore.getState();
+  
+  return {
+    staff,
+    departments,
+    favoredEmployees: flags.favoredEmployees,
+    trainingPairs: flags.trainingPairs,
+    favoredDepartments: flags.favoredDepartments,
+    favoredFrontDeskDepts: flags.favoredFrontDeskDepts,
+    favoredEmployeeDepts: flags.favoredEmployeeDepts,
+    timesets: flags.timesets,
+    maxSolveSeconds: flags.maxSolveSeconds,
+  };
+}

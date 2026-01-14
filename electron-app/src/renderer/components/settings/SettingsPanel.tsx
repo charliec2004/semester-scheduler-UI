@@ -233,6 +233,25 @@ export function SettingsPanel() {
                   className="input"
                 />
               </div>
+
+              <div>
+                <label className="label" htmlFor="favoredEmployeeDeptWeight">
+                  Favor Employee for Department
+                </label>
+                <input
+                  id="favoredEmployeeDeptWeight"
+                  type="number"
+                  min="0"
+                  max="200"
+                  step="10"
+                  value={localSettings.favoredEmployeeDeptWeight}
+                  onChange={(e) => updateSetting('favoredEmployeeDeptWeight', parseInt(e.target.value) || 50)}
+                  className="input"
+                />
+                <p className="text-xs text-surface-500 mt-1">
+                  Bonus per 30-min slot when favored employee works preferred dept
+                </p>
+              </div>
             </div>
           </section>
 

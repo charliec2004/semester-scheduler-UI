@@ -10,7 +10,7 @@ import { departmentsToCsv } from '../../utils/csvValidators';
 import type { Department } from '../../../main/ipc-types';
 
 export function DepartmentsTab() {
-  const { departments, updateDepartment, addDepartment, removeDepartment, dirty, setDirty } = useDepartmentStore();
+  const { departments, updateDepartment, addDepartment, removeDepartment, dirty, setDirty, saveDepartments } = useDepartmentStore();
   const { showToast } = useUIStore();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
 
@@ -84,7 +84,20 @@ export function DepartmentsTab() {
             </svg>
             Add Department
           </button>
-          <button onClick={handleExport} className="btn-primary" disabled={departments.length === 0}>
+          <button 
+            onClick={async () => {
+              await saveDepartments();
+              showToast('Department data saved', 'success');
+            }} 
+            className="btn-primary"
+            disabled={!dirty || departments.length === 0}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Save
+          </button>
+          <button onClick={handleExport} className="btn-secondary" disabled={departments.length === 0}>
             Export CSV
           </button>
         </div>

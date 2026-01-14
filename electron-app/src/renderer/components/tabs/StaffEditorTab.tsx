@@ -16,10 +16,19 @@ const TIME_SLOTS = [
   '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
 ];
 
+// Convert 24h time to 12h format for display
+function formatTime12h(time24: string): string {
+  const [hourStr, min] = time24.split(':');
+  const hour = parseInt(hourStr, 10);
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${hour12}:${min} ${ampm}`;
+}
+
 const COMMON_ROLES = ['front_desk', 'career_education', 'marketing', 'employer_engagement', 'events', 'data_systems'];
 
 export function StaffEditorTab() {
-  const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty } = useStaffStore();
+  const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty, saveStaff } = useStaffStore();
   const { departments } = useDepartmentStore();
   const { showToast, setActiveTab } = useUIStore();
   
@@ -116,7 +125,20 @@ export function StaffEditorTab() {
             </svg>
             Add Employee
           </button>
-          <button onClick={handleExport} className="btn-primary" disabled={staff.length === 0}>
+          <button 
+            onClick={async () => {
+              await saveStaff();
+              showToast('Staff data saved', 'success');
+            }} 
+            className="btn-primary"
+            disabled={!dirty || staff.length === 0}
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+            </svg>
+            Save
+          </button>
+          <button onClick={handleExport} className="btn-secondary" disabled={staff.length === 0}>
             Export CSV
           </button>
         </div>
@@ -295,7 +317,7 @@ export function StaffEditorTab() {
                     <tbody>
                       {TIME_SLOTS.map(time => (
                         <tr key={time} className="border-t border-surface-800">
-                          <td className="py-1 px-1 text-surface-400">{time}</td>
+                          <td className="py-1 px-1 text-surface-400 whitespace-nowrap">{formatTime12h(time)}</td>
                           {DAY_NAMES.map(day => {
                             const col = `${day}_${time}`;
                             const isAvailable = selectedEmployee.availability[col];

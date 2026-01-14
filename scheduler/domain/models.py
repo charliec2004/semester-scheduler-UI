@@ -57,3 +57,10 @@ class FavoredDepartment:
 class FavoredFrontDeskDepartment:
     name: str
     multiplier: float
+
+
+@dataclass(frozen=True)
+class FavoredEmployeeDepartment:
+    """Soft preference for assigning an employee to a specific department."""
+    employee: str
+    department: str
