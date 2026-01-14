@@ -93,8 +93,8 @@ function App() {
 
       {/* Header with draggable title bar region - fixed at top */}
       <header className="flex-shrink-0 bg-surface-900 border-b border-surface-700 titlebar-drag">
-        {/* macOS traffic light spacing - pl-24 = 96px to clear the ~70px wide traffic lights */}
-        <div className={`flex items-center justify-between ${isMac ? 'pl-24' : 'pl-6'} pr-6 py-3 ${isMac ? 'pt-3' : ''}`}>
+        {/* macOS: pl-24 to clear traffic lights on left. Windows/Linux: pr-36 to clear window controls on right */}
+        <div className={`flex items-center justify-between ${isMac ? 'pl-24 pr-6' : 'pl-6 pr-36'} py-3 ${isMac ? 'pt-3' : ''}`}>
           <div className="flex items-center gap-4 no-drag">
             <div className="w-10 h-10 bg-accent-600 rounded-lg flex items-center justify-center">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
