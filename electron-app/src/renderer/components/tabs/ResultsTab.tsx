@@ -53,7 +53,8 @@ export function ResultsTab() {
       });
 
       if (!saveResult.canceled && saveResult.path) {
-        showToast(`Saved to ${saveResult.path.split('/').pop()}`, 'success');
+        const filename = saveResult.path.split('/').pop() || saveResult.path.split('\\').pop();
+        showToast(`Saved as ${filename}`, 'success');
       }
     } catch (err) {
       console.error('Failed to download file:', err);

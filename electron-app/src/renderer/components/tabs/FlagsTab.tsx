@@ -75,7 +75,7 @@ export function FlagsTab() {
   
   const { staff, saveStaff, dirty: staffDirty } = useStaffStore();
   const { departments, saveDepartments, dirty: deptDirty } = useDepartmentStore();
-  const { running, setRunning } = useSolverStore();
+  const { running, setRunning, reset } = useSolverStore();
   const { settings } = useSettingsStore();
   const { showToast, setActiveTab } = useUIStore();
 
@@ -149,6 +149,8 @@ export function FlagsTab() {
       // Create config snapshot for history
       const snapshot = createConfigSnapshot();
 
+      // Clear previous result/error before starting
+      reset();
       setRunning(true);
       
       const result = await window.electronAPI.solver.run({

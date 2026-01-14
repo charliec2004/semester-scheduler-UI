@@ -71,8 +71,8 @@ def load_department_requirements(path: Path) -> DepartmentRequirements:
 
     # Iterate through each row in the CSV
     for _, row in df.iterrows():
-        # Extract and clean the department name
-        department = str(row[dept_col]).strip()
+        # Extract and clean the department name (lowercase for case-insensitive matching)
+        department = str(row[dept_col]).strip().lower()
         
         # Validate: department name cannot be empty
         if not department:
