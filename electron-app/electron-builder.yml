@@ -1,5 +1,9 @@
 # Electron Builder Configuration
 # For building distributable packages
+# 
+# IMPORTANT: Run the appropriate bundle-python script before packaging:
+#   macOS/Linux: ./scripts/bundle-python.sh
+#   Windows:     .\scripts\bundle-python.ps1
 
 appId: com.scheduler.semester
 productName: Scheduler
@@ -14,21 +18,14 @@ files:
   - samples/**/*
 
 extraResources:
-  # Python scheduler module
-  - from: ../scheduler
-    to: python/scheduler
+  # Bundled standalone Python with all dependencies
+  # This is created by running bundle-python.sh or bundle-python.ps1
+  - from: python-bundle/python
+    to: python
     filter:
       - "**/*"
-      - "!__pycache__/**"
-      - "!*.pyc"
-  
-  # Main Python script
-  - from: ../main.py
-    to: python/main.py
-  
-  # Requirements for reference
-  - from: ../requirements.txt
-    to: python/requirements.txt
+      - "!**/__pycache__/**"
+      - "!**/*.pyc"
   
   # Sample CSV files
   - from: samples
@@ -95,10 +92,8 @@ linux:
         - x64
 
 deb:
-  depends:
-    - python3
-    - python3-pip
-    - python3-venv
+  # No Python dependencies needed - we bundle Python
+  depends: []
 
 appImage:
   license: ../LICENSE

@@ -3,7 +3,7 @@
  * Configure solver flags and run the optimization
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { 
   useFlagsStore, 
   useStaffStore, 

@@ -86,6 +86,14 @@ function getHistoryDir(): string {
 // Resolve paths for development vs production
 function getResourcePath(relativePath: string): string {
   if (app.isPackaged) {
+    // In packaged mode, Python files are in the 'python' subdirectory
+    if (relativePath === 'main.py' || relativePath.startsWith('scheduler')) {
+      return path.join(process.resourcesPath, 'python', relativePath);
+    }
+    // Sample files are in the 'samples' subdirectory
+    if (relativePath.endsWith('.example')) {
+      return path.join(process.resourcesPath, 'samples', relativePath);
+    }
     return path.join(process.resourcesPath, relativePath);
   }
   return path.join(getProjectRoot(), relativePath);
@@ -94,10 +102,20 @@ function getResourcePath(relativePath: string): string {
 function getPythonPath(): string {
   if (app.isPackaged) {
     const platform = process.platform;
+    // Check for bundled Python first
+    let bundledPython: string;
     if (platform === 'win32') {
-      return path.join(process.resourcesPath, 'python', 'python.exe');
+      bundledPython = path.join(process.resourcesPath, 'python', 'python.exe');
+    } else {
+      bundledPython = path.join(process.resourcesPath, 'python', 'bin', 'python3');
     }
-    return path.join(process.resourcesPath, 'python', 'bin', 'python3');
+    // If bundled Python exists, use it; otherwise fall back to system Python
+    if (fs.existsSync(bundledPython)) {
+      return bundledPython;
+    }
+    // Fall back to system Python
+    console.log('Bundled Python not found, using system Python');
+    return platform === 'win32' ? 'python' : 'python3';
   }
   const projectRoot = getProjectRoot();
   const venvPython = path.join(projectRoot, 'venv', 'bin', 'python3');
@@ -105,6 +123,85 @@ function getPythonPath(): string {
     return venvPython;
   }
   return 'python3';
+}
+
+// Check if Python is available and has required packages
+async function checkPythonAvailability(): Promise<{ available: boolean; error?: string }> {
+  const pythonPath = getPythonPath();
+  
+  return new Promise((resolve) => {
+    // First check if Python exists
+    const checkProcess = spawn(pythonPath, ['--version'], {
+      env: { ...process.env },
+    });
+    
+    let versionOutput = '';
+    checkProcess.stdout?.on('data', (data: Buffer) => {
+      versionOutput += data.toString();
+    });
+    checkProcess.stderr?.on('data', (data: Buffer) => {
+      versionOutput += data.toString();
+    });
+    
+    checkProcess.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'ENOENT') {
+        const platform = process.platform;
+        let installInstructions: string;
+        
+        if (platform === 'win32') {
+          installInstructions = 'Please install Python 3.12+ from https://python.org and ensure it is added to your PATH during installation.';
+        } else if (platform === 'darwin') {
+          installInstructions = 'Please install Python 3.12+ using: brew install python3\nOr download from https://python.org';
+        } else {
+          installInstructions = 'Please install Python 3.12+ using your package manager (e.g., apt install python3) or from https://python.org';
+        }
+        
+        resolve({
+          available: false,
+          error: `Python is not installed or not found in PATH.\n\n${installInstructions}`,
+        });
+      } else {
+        resolve({
+          available: false,
+          error: `Failed to start Python: ${err.message}`,
+        });
+      }
+    });
+    
+    checkProcess.on('close', (code: number | null) => {
+      if (code === 0) {
+        // Python exists, now check for required packages
+        const checkPackages = spawn(pythonPath, ['-c', 'import ortools; import pandas; import openpyxl; import xlsxwriter'], {
+          env: { ...process.env },
+        });
+        
+        let packageError = '';
+        checkPackages.stderr?.on('data', (data: Buffer) => {
+          packageError += data.toString();
+        });
+        
+        checkPackages.on('close', (pkgCode: number | null) => {
+          if (pkgCode === 0) {
+            resolve({ available: true });
+          } else {
+            resolve({
+              available: false,
+              error: `Python is installed but missing required packages.\n\nPlease run:\n${pythonPath === 'python' || pythonPath === 'python3' ? 'pip' : pythonPath.replace('python', 'pip')} install ortools pandas openpyxl xlsxwriter\n\nOr: pip install -r requirements.txt`,
+            });
+          }
+        });
+        
+        checkPackages.on('error', () => {
+          resolve({ available: true }); // Assume OK if we can't check
+        });
+      } else {
+        resolve({
+          available: false,
+          error: `Python check failed with exit code ${code}`,
+        });
+      }
+    });
+  });
 }
 
 function createWindow(): void {
@@ -415,6 +512,12 @@ function registerIpcHandlers(): void {
       return { error: 'A solver is already running', runId: null };
     }
 
+    // Check Python availability before attempting to run
+    const pythonCheck = await checkPythonAvailability();
+    if (!pythonCheck.available) {
+      return { error: pythonCheck.error || 'Python is not available', runId: null };
+    }
+
     const runId = uuidv4();
     currentRunId = runId;
     solverStartTime = Date.now();
@@ -547,6 +650,10 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('solver:isRunning', () => {
     return { running: activeSolverProcess !== null, runId: currentRunId };
+  });
+
+  ipcMain.handle('solver:checkPython', async () => {
+    return checkPythonAvailability();
   });
 
   // App info

@@ -97,6 +97,9 @@ const electronAPI = {
     isRunning: () =>
       ipcRenderer.invoke('solver:isRunning') as Promise<{ running: boolean; runId: string | null }>,
     
+    checkPython: () =>
+      ipcRenderer.invoke('solver:checkPython') as Promise<{ available: boolean; error?: string }>,
+    
     // Event listeners
     onProgress: (callback: (progress: SolverProgress) => void) => {
       const handler = (_event: IpcRendererEvent, progress: SolverProgress) => callback(progress);

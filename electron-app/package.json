@@ -15,10 +15,16 @@
     "test:watch": "vitest",
     "test:e2e": "playwright test",
     "lint": "eslint src --ext .ts,.tsx",
-    "package": "electron-builder",
-    "package:mac": "electron-builder --mac",
-    "package:win": "electron-builder --win",
-    "package:linux": "electron-builder --linux"
+    "bundle-python": "bash scripts/bundle-python.sh",
+    "bundle-python:win": "powershell -ExecutionPolicy Bypass -File scripts/bundle-python.ps1",
+    "package": "npm run build && electron-builder",
+    "package:mac": "npm run build && electron-builder --mac",
+    "package:win": "npm run build && electron-builder --win",
+    "package:linux": "npm run build && electron-builder --linux",
+    "dist": "npm run bundle-python && npm run package",
+    "dist:mac": "npm run bundle-python && npm run package:mac",
+    "dist:win": "npm run bundle-python:win && npm run package:win",
+    "dist:linux": "npm run bundle-python && npm run package:linux"
   },
   "build": {
     "appId": "com.scheduler.semester",
@@ -28,25 +34,17 @@
     },
     "files": [
       "dist/**/*",
-      "python/**/*",
       "samples/**/*"
     ],
     "extraResources": [
       {
-        "from": "../scheduler",
-        "to": "python/scheduler",
+        "from": "python-bundle/python",
+        "to": "python",
         "filter": [
           "**/*",
-          "!__pycache__/**"
+          "!**/__pycache__/**",
+          "!**/*.pyc"
         ]
-      },
-      {
-        "from": "../main.py",
-        "to": "python/main.py"
-      },
-      {
-        "from": "../requirements.txt",
-        "to": "python/requirements.txt"
       },
       {
         "from": "samples",

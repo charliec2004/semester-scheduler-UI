@@ -1,6 +1,7 @@
 #!/bin/bash
-# Bundle Python environment for packaging
-# Creates a standalone Python environment with all dependencies
+# Bundle standalone Python environment for packaging
+# Downloads a portable Python build and installs dependencies
+# Works on macOS and Linux without requiring Python on the target system
 
 set -e
 
@@ -9,54 +10,92 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 PYTHON_DIR="$PROJECT_ROOT/python-bundle"
 REQUIREMENTS="$PROJECT_ROOT/../requirements.txt"
 
-echo "=== Bundling Python environment ==="
+# Python version to bundle
+PYTHON_VERSION="3.12.3"
+STANDALONE_VERSION="20240415"
+
+echo "=== Bundling Standalone Python $PYTHON_VERSION ==="
 
 # Clean existing bundle
 rm -rf "$PYTHON_DIR"
 mkdir -p "$PYTHON_DIR"
 
-# Detect platform
+# Detect platform and architecture
 PLATFORM=$(uname -s)
 ARCH=$(uname -m)
 
 echo "Platform: $PLATFORM ($ARCH)"
 
+# Determine download URL for python-build-standalone
+# https://github.com/indygreg/python-build-standalone/releases
 if [ "$PLATFORM" = "Darwin" ]; then
-    # macOS - use python3 from system or homebrew
-    PYTHON_BIN=$(which python3)
-    
-    echo "Creating virtual environment..."
-    python3 -m venv "$PYTHON_DIR/venv"
-    
-    echo "Installing dependencies..."
-    "$PYTHON_DIR/venv/bin/pip" install --upgrade pip
-    "$PYTHON_DIR/venv/bin/pip" install -r "$REQUIREMENTS"
-    
-    # Create launcher script
-    cat > "$PYTHON_DIR/run-solver.sh" << 'EOF'
-#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$SCRIPT_DIR/venv/bin/python" "$@"
-EOF
-    chmod +x "$PYTHON_DIR/run-solver.sh"
-    
+    if [ "$ARCH" = "arm64" ]; then
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${STANDALONE_VERSION}/cpython-${PYTHON_VERSION}+${STANDALONE_VERSION}-aarch64-apple-darwin-install_only.tar.gz"
+    else
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${STANDALONE_VERSION}/cpython-${PYTHON_VERSION}+${STANDALONE_VERSION}-x86_64-apple-darwin-install_only.tar.gz"
+    fi
 elif [ "$PLATFORM" = "Linux" ]; then
-    # Linux - similar to macOS
-    python3 -m venv "$PYTHON_DIR/venv"
-    "$PYTHON_DIR/venv/bin/pip" install --upgrade pip
-    "$PYTHON_DIR/venv/bin/pip" install -r "$REQUIREMENTS"
-    
-    cat > "$PYTHON_DIR/run-solver.sh" << 'EOF'
-#!/bin/bash
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-"$SCRIPT_DIR/venv/bin/python" "$@"
-EOF
-    chmod +x "$PYTHON_DIR/run-solver.sh"
-    
+    if [ "$ARCH" = "aarch64" ] || [ "$ARCH" = "arm64" ]; then
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${STANDALONE_VERSION}/cpython-${PYTHON_VERSION}+${STANDALONE_VERSION}-aarch64-unknown-linux-gnu-install_only.tar.gz"
+    else
+        PYTHON_URL="https://github.com/indygreg/python-build-standalone/releases/download/${STANDALONE_VERSION}/cpython-${PYTHON_VERSION}+${STANDALONE_VERSION}-x86_64-unknown-linux-gnu-install_only.tar.gz"
+    fi
 else
-    echo "Windows detected - use bundle-python.ps1 instead"
+    echo "Unsupported platform: $PLATFORM"
+    echo "For Windows, use bundle-python.ps1"
     exit 1
 fi
 
-echo "=== Python bundle created at $PYTHON_DIR ==="
-echo "Test with: $PYTHON_DIR/run-solver.sh --version"
+echo "Downloading standalone Python from:"
+echo "$PYTHON_URL"
+
+# Download and extract
+TEMP_ARCHIVE="$PYTHON_DIR/python.tar.gz"
+curl -L -o "$TEMP_ARCHIVE" "$PYTHON_URL"
+
+echo "Extracting Python..."
+tar -xzf "$TEMP_ARCHIVE" -C "$PYTHON_DIR"
+rm "$TEMP_ARCHIVE"
+
+# The archive extracts to a 'python' directory
+PYTHON_BIN="$PYTHON_DIR/python/bin/python3"
+
+if [ ! -f "$PYTHON_BIN" ]; then
+    echo "Error: Python binary not found at $PYTHON_BIN"
+    exit 1
+fi
+
+echo "Python extracted successfully"
+"$PYTHON_BIN" --version
+
+# Upgrade pip and install dependencies
+echo "Installing dependencies..."
+"$PYTHON_BIN" -m pip install --upgrade pip
+"$PYTHON_BIN" -m pip install -r "$REQUIREMENTS"
+
+# Verify installation
+echo "Verifying installation..."
+"$PYTHON_BIN" -c "import ortools; import pandas; import openpyxl; import xlsxwriter; print('All packages installed successfully')"
+
+# Copy the scheduler module and main.py
+echo "Copying scheduler module..."
+cp -r "$PROJECT_ROOT/../scheduler" "$PYTHON_DIR/python/"
+cp "$PROJECT_ROOT/../main.py" "$PYTHON_DIR/python/"
+
+# Create a simple test script
+cat > "$PYTHON_DIR/test-bundle.sh" << 'EOF'
+#!/bin/bash
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+"$SCRIPT_DIR/python/bin/python3" -c "import ortools; import pandas; print('Bundle is working!')"
+EOF
+chmod +x "$PYTHON_DIR/test-bundle.sh"
+
+echo ""
+echo "=== Python bundle created successfully ==="
+echo "Location: $PYTHON_DIR"
+echo "Python:   $PYTHON_BIN"
+echo ""
+echo "Test with: $PYTHON_DIR/test-bundle.sh"
+echo ""
+echo "Bundle size:"
+du -sh "$PYTHON_DIR"

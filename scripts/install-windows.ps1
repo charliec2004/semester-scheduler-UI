@@ -14,8 +14,17 @@ Set-Location $ElectronApp
 
 # Install dependencies if needed
 if (-not (Test-Path "node_modules")) {
-    Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
+    Write-Host "📦 Installing Node.js dependencies..." -ForegroundColor Yellow
     npm install
+}
+
+# Bundle standalone Python with all dependencies
+Write-Host "🐍 Bundling Python environment..." -ForegroundColor Yellow
+$PythonBundle = Join-Path $ElectronApp "python-bundle\python"
+if (-not (Test-Path $PythonBundle)) {
+    npm run bundle-python:win
+} else {
+    Write-Host "   Python bundle already exists, skipping..." -ForegroundColor Gray
 }
 
 # Build the app
@@ -24,10 +33,11 @@ npm run build
 
 # Package for Windows
 Write-Host "📦 Packaging for Windows..." -ForegroundColor Yellow
-npm run package
+npm run package:win
 
 # Find the installer
 $Installer = Get-ChildItem -Path "release" -Filter "Scheduler Setup*.exe" | Select-Object -First 1
+$Portable = Get-ChildItem -Path "release" -Filter "Scheduler*.exe" | Where-Object { $_.Name -notlike "*Setup*" } | Select-Object -First 1
 
 if ($null -eq $Installer) {
     Write-Host "❌ Build failed: Installer not found in release/" -ForegroundColor Red
@@ -42,6 +52,11 @@ Write-Host ""
 Write-Host "📂 Output files:" -ForegroundColor Cyan
 Write-Host "   Installer: $InstallerPath"
 Write-Host "   Portable:  $ElectronApp\release\win-unpacked\"
+if ($null -ne $Portable) {
+    Write-Host "   Portable EXE: $($Portable.FullName)"
+}
+Write-Host ""
+Write-Host "📦 This is a self-contained app - no Python installation required!" -ForegroundColor Green
 Write-Host ""
 
 # Ask to run installer

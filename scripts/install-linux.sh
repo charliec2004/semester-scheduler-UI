@@ -15,8 +15,17 @@ cd "$ELECTRON_APP"
 
 # Install dependencies if needed
 if [ ! -d "node_modules" ]; then
-    echo "📦 Installing dependencies..."
+    echo "📦 Installing Node.js dependencies..."
     npm install
+fi
+
+# Bundle standalone Python with all dependencies
+echo "🐍 Bundling Python environment..."
+if [ ! -d "python-bundle/python" ]; then
+    chmod +x scripts/bundle-python.sh
+    npm run bundle-python
+else
+    echo "   Python bundle already exists, skipping..."
 fi
 
 # Build the app
@@ -25,7 +34,7 @@ npm run build
 
 # Package for Linux
 echo "📦 Packaging for Linux..."
-npm run package
+npm run package:linux
 
 # Find the AppImage
 APPIMAGE=$(find release -maxdepth 1 -name "Scheduler-*.AppImage" -type f | head -1)
@@ -46,6 +55,8 @@ if [ -n "$DEB" ]; then
 fi
 
 echo "   Portable: $ELECTRON_APP/release/linux-unpacked/"
+echo ""
+echo "📦 This is a self-contained app - no Python installation required!"
 echo ""
 
 # Installation options
