@@ -120,6 +120,5 @@
     "vitest": "^1.0.4",
     "zustand": "^4.4.7"
   },
-  "author": "",
   "license": "MIT"
 }
