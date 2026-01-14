@@ -25,9 +25,8 @@ jobs:
           - os: macos-latest
             platform: mac
             arch: arm64
-          - os: macos-15-large  # Intel runner
-            platform: mac
-            arch: x64
+          # Note: x64 macOS build skipped - macos-latest is arm64 only on free tier
+          # Both architectures are built on arm64 via electron-builder's universal build
           # Windows build
           - os: windows-latest
             platform: win
@@ -67,10 +66,12 @@ jobs:
       - name: Run linter
         working-directory: electron-app
         run: npm run lint || echo "::warning::Linting issues found"
+        continue-on-error: true
 
       - name: Run tests
         working-directory: electron-app
         run: npm test || echo "::warning::Some tests failed"
+        continue-on-error: true
 
       # Bundle Python for distribution
       - name: Bundle Python (macOS/Linux)
@@ -91,7 +92,7 @@ jobs:
       - name: Build Electron app (macOS)
         if: matrix.platform == 'mac'
         working-directory: electron-app
-        run: npm run package -- --mac --${{ matrix.arch }}
+        run: npm run package -- --mac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
@@ -116,21 +117,11 @@ jobs:
         shell: bash
 
       # Upload platform-specific artifacts
-      - name: Upload macOS arm64 artifacts
-        if: matrix.platform == 'mac' && matrix.arch == 'arm64'
+      - name: Upload macOS artifacts
+        if: matrix.platform == 'mac'
         uses: actions/upload-artifact@v4
         with:
-          name: mac-arm64
-          path: |
-            electron-app/release/*.dmg
-            electron-app/release/*.zip
-          if-no-files-found: warn
-
-      - name: Upload macOS x64 artifacts
-        if: matrix.platform == 'mac' && matrix.arch == 'x64'
-        uses: actions/upload-artifact@v4
-        with:
-          name: mac-x64
+          name: mac
           path: |
             electron-app/release/*.dmg
             electron-app/release/*.zip
@@ -175,45 +166,14 @@ jobs:
       - name: List downloaded artifacts
         run: find artifacts -type f | head -50
 
-      # Flatten artifacts and rename with architecture
+      # Flatten artifacts - electron-builder already names files with arch
       - name: Prepare release assets
         run: |
           mkdir -p release-assets
           
-          # macOS arm64
-          if [ -d "artifacts/mac-arm64" ]; then
-            for f in artifacts/mac-arm64/*; do
-              if [ -f "$f" ]; then
-                name=$(basename "$f")
-                # Add arm64 suffix if not present
-                if [[ ! "$name" =~ arm64 ]]; then
-                  ext="${name##*.}"
-                  base="${name%.*}"
-                  newname="${base}-arm64.${ext}"
-                  cp "$f" "release-assets/$newname"
-                else
-                  cp "$f" "release-assets/$name"
-                fi
-              fi
-            done
-          fi
-          
-          # macOS x64
-          if [ -d "artifacts/mac-x64" ]; then
-            for f in artifacts/mac-x64/*; do
-              if [ -f "$f" ]; then
-                name=$(basename "$f")
-                # Add x64 suffix if not present
-                if [[ ! "$name" =~ x64 ]]; then
-                  ext="${name##*.}"
-                  base="${name%.*}"
-                  newname="${base}-x64.${ext}"
-                  cp "$f" "release-assets/$newname"
-                else
-                  cp "$f" "release-assets/$name"
-                fi
-              fi
-            done
+          # macOS (both arm64 and x64 from single build)
+          if [ -d "artifacts/mac" ]; then
+            cp artifacts/mac/* release-assets/ 2>/dev/null || true
           fi
           
           # Windows
@@ -225,6 +185,9 @@ jobs:
           if [ -d "artifacts/linux" ]; then
             cp artifacts/linux/* release-assets/ 2>/dev/null || true
           fi
+          
+          # Remove blockmap files (not needed for download)
+          rm -f release-assets/*.blockmap 2>/dev/null || true
           
           echo "Release assets:"
           ls -la release-assets/
