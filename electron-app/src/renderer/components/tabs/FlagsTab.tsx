@@ -318,11 +318,59 @@ export function FlagsTab() {
           </div>
         </div>
 
-        {/* Favored Departments */}
+        {/* Favor Department for Front Desk */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2">Favored Departments</h3>
+          <h3 className="font-semibold text-surface-200 mb-2">Favor Departments for Front Desk</h3>
           <p className="text-sm text-surface-400 mb-4">
-            Boost priority for specific departments
+            Prioritize members of these departments to cover front desk shifts.
+            At least one member must have front_desk qualification.
+          </p>
+          
+          <div className="space-y-3">
+            {departmentNames.map(dept => (
+              <div key={dept} className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id={`favor-fd-${dept}`}
+                  checked={dept in favoredFrontDeskDepts}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: 1.0 });
+                    } else {
+                      const { [dept]: _, ...rest } = favoredFrontDeskDepts;
+                      setFavoredFrontDeskDepts(rest);
+                    }
+                  }}
+                  className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-accent-500 focus:ring-accent-500"
+                />
+                <label htmlFor={`favor-fd-${dept}`} className="flex-1 text-sm text-surface-200">
+                  {dept}
+                </label>
+                {dept in favoredFrontDeskDepts && (
+                  <input
+                    type="number"
+                    min="0.5"
+                    max="3"
+                    step="0.1"
+                    value={favoredFrontDeskDepts[dept]}
+                    onChange={(e) => setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: parseFloat(e.target.value) })}
+                    className="input w-20 py-1 text-sm"
+                    aria-label={`Front desk priority multiplier for ${dept}`}
+                  />
+                )}
+              </div>
+            ))}
+            {departmentNames.length === 0 && (
+              <span className="text-sm text-surface-500">No departments loaded</span>
+            )}
+          </div>
+        </div>
+
+        {/* Department Hour Priority */}
+        <div className="card">
+          <h3 className="font-semibold text-surface-200 mb-2">Department Hour Priority</h3>
+          <p className="text-sm text-surface-400 mb-4">
+            Boost focused hours and target adherence for specific departments
           </p>
           
           <div className="space-y-3">
@@ -354,7 +402,7 @@ export function FlagsTab() {
                     value={favoredDepartments[dept]}
                     onChange={(e) => setFavoredDepartments({ ...favoredDepartments, [dept]: parseFloat(e.target.value) })}
                     className="input w-20 py-1 text-sm"
-                    aria-label={`Multiplier for ${dept}`}
+                    aria-label={`Hour priority multiplier for ${dept}`}
                   />
                 )}
               </div>
@@ -365,11 +413,12 @@ export function FlagsTab() {
           </div>
         </div>
 
-        {/* Timesets */}
+        {/* Timesets - Force Employee to Role */}
         <div className="card lg:col-span-2">
-          <h3 className="font-semibold text-surface-200 mb-2">Time Slot Requests</h3>
+          <h3 className="font-semibold text-surface-200 mb-2">Assign Employee to Role/Time</h3>
           <p className="text-sm text-surface-400 mb-4">
-            Force specific employees to work certain slots
+            Force a specific employee to work a role at specific times. 
+            Use this to favor someone for a particular role (they must be qualified).
           </p>
           
           <TimesetForm

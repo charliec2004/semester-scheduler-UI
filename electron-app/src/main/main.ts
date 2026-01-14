@@ -49,12 +49,21 @@ let mainWindow: BrowserWindow | null = null;
 let activeSolverProcess: ChildProcess | null = null;
 let currentRunId: string | null = null;
 
+// Get the project root (parent of electron-app)
+function getProjectRoot(): string {
+  if (app.isPackaged) {
+    return process.resourcesPath;
+  }
+  // In dev: __dirname is dist/main/main, so go up 4 levels to project root
+  return path.join(__dirname, '..', '..', '..', '..');
+}
+
 // Resolve paths for development vs production
 function getResourcePath(relativePath: string): string {
   if (app.isPackaged) {
     return path.join(process.resourcesPath, relativePath);
   }
-  return path.join(__dirname, '..', '..', '..', relativePath);
+  return path.join(getProjectRoot(), relativePath);
 }
 
 function getPythonPath(): string {
@@ -67,7 +76,8 @@ function getPythonPath(): string {
     return path.join(process.resourcesPath, 'python', 'bin', 'python3');
   }
   // In development, use system Python or venv
-  const venvPython = path.join(__dirname, '..', '..', '..', 'venv', 'bin', 'python3');
+  const projectRoot = getProjectRoot();
+  const venvPython = path.join(projectRoot, 'venv', 'bin', 'python3');
   if (fs.existsSync(venvPython)) {
     return venvPython;
   }
@@ -92,7 +102,7 @@ function createWindow(): void {
 
   // Load the renderer
   if (process.env.NODE_ENV === 'development' || !app.isPackaged) {
-    mainWindow.loadURL('http://localhost:3001');
+    mainWindow.loadURL('http://localhost:3000');
     mainWindow.webContents.openDevTools();
   } else {
     mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
