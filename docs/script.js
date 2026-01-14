@@ -11,8 +11,10 @@
   const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 
   // Asset name patterns for each platform
-  // Electron-builder output: Scheduler-{version}-{arch}.{ext}
-  // ZIPs include platform suffix: -mac.zip, -win.zip
+  // Electron-builder output varies by platform:
+  // - macOS: Scheduler-{version}-{arch}.dmg, Scheduler-{version}-{arch}-mac.zip
+  // - Windows: Scheduler.Setup.{version}.exe (NSIS installer), Scheduler.{version}.exe (portable)
+  // - Linux: Scheduler-{version}.AppImage, semester-scheduler_{version}_amd64.deb
   const ASSET_PATTERNS = {
     // macOS
     'mac-arm64-dmg': /Scheduler-.*-arm64\.dmg$/i,
@@ -21,14 +23,15 @@
     'mac-x64-zip': /Scheduler-.*-x64-mac\.zip$/i,
     
     // Windows (x64 only)
-    // NSIS installer: Scheduler-X.X.X-x64.exe
-    // ZIP portable: Scheduler-X.X.X-x64-win.zip
-    'win-installer': /Scheduler-[0-9]+\.[0-9]+\.[0-9]+-x64\.exe$/i,
-    'win-portable': /Scheduler-.*-x64-win\.zip$/i,
+    // NSIS installer: Scheduler.Setup.X.X.X.exe (note: dots, not dashes)
+    // Portable: Scheduler.X.X.X.exe
+    'win-installer': /Scheduler\.Setup\.[0-9]+\.[0-9]+\.[0-9]+\.exe$/i,
+    'win-portable': /Scheduler\.[0-9]+\.[0-9]+\.[0-9]+\.exe$/i,
     
     // Linux
-    'linux-appimage': /Scheduler-.*-x64\.AppImage$/i,
-    'linux-deb': /scheduler.*_amd64\.deb$/i,
+    // AppImage doesn't include architecture in filename
+    'linux-appimage': /Scheduler-.*\.AppImage$/i,
+    'linux-deb': /semester-scheduler_.*_amd64\.deb$/i,
     
     // Checksums
     'checksums': /SHA256SUMS\.txt$/i
