@@ -27,34 +27,49 @@ export function ResultsTab() {
   }, [logs, logsExpanded]);
 
   const handleCancel = async () => {
-    const cancelResult = await window.electronAPI.solver.cancel();
-    if (cancelResult.canceled) {
-      showToast('Solver cancelled', 'info');
+    try {
+      const cancelResult = await window.electronAPI.solver.cancel();
+      if (cancelResult.canceled) {
+        showToast('Solver cancelled', 'info');
+      }
+    } catch (err) {
+      console.error('Failed to cancel solver:', err);
+      showToast('Failed to cancel solver', 'error');
     }
   };
 
   const handleDownload = async (historyId: string, type: 'xlsx' | 'xlsxFormatted') => {
-    const pathResult = await window.electronAPI.history.getOutputPath({ historyId, type });
-    if (!pathResult.exists || !pathResult.path) {
-      showToast('Output file not found', 'error');
-      return;
-    }
+    try {
+      const pathResult = await window.electronAPI.history.getOutputPath({ historyId, type });
+      if (!pathResult.exists || !pathResult.path) {
+        showToast('Output file not found', 'error');
+        return;
+      }
 
-    const defaultName = type === 'xlsxFormatted' ? 'schedule-formatted.xlsx' : 'schedule.xlsx';
-    const saveResult = await window.electronAPI.files.saveOutputAs({
-      sourcePath: pathResult.path,
-      defaultName,
-    });
+      const defaultName = type === 'xlsxFormatted' ? 'schedule-formatted.xlsx' : 'schedule.xlsx';
+      const saveResult = await window.electronAPI.files.saveOutputAs({
+        sourcePath: pathResult.path,
+        defaultName,
+      });
 
-    if (!saveResult.canceled && saveResult.path) {
-      showToast(`Saved to ${saveResult.path.split('/').pop()}`, 'success');
+      if (!saveResult.canceled && saveResult.path) {
+        showToast(`Saved to ${saveResult.path.split('/').pop()}`, 'success');
+      }
+    } catch (err) {
+      console.error('Failed to download file:', err);
+      showToast('Failed to download file', 'error');
     }
   };
 
   const handleDeleteEntry = async (entry: HistoryEntry) => {
     if (window.confirm('Delete this generation and its files?')) {
-      await deleteEntry(entry.id);
-      showToast('Generation deleted', 'info');
+      try {
+        await deleteEntry(entry.id);
+        showToast('Generation deleted', 'info');
+      } catch (err) {
+        console.error('Failed to delete entry:', err);
+        showToast('Failed to delete entry', 'error');
+      }
     }
   };
 

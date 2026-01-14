@@ -87,18 +87,28 @@ export function ImportTab() {
   };
 
   const handleRestoreConfig = async (entry: HistoryEntry) => {
-    const success = await restoreConfig(entry.id);
-    if (success) {
-      showToast(`Restored configuration from ${formatDate(entry.timestamp)}`, 'success');
-    } else {
+    try {
+      const success = await restoreConfig(entry.id);
+      if (success) {
+        showToast(`Restored configuration from ${formatDate(entry.timestamp)}`, 'success');
+      } else {
+        showToast('Failed to restore configuration', 'error');
+      }
+    } catch (err) {
+      console.error('Failed to restore config:', err);
       showToast('Failed to restore configuration', 'error');
     }
   };
 
   const handleDeleteConfig = async (entry: HistoryEntry) => {
     if (window.confirm(`Delete this configuration and its output files?`)) {
-      await deleteEntry(entry.id);
-      showToast('Configuration deleted', 'info');
+      try {
+        await deleteEntry(entry.id);
+        showToast('Configuration deleted', 'info');
+      } catch (err) {
+        console.error('Failed to delete config:', err);
+        showToast('Failed to delete configuration', 'error');
+      }
     }
   };
 

@@ -6,6 +6,9 @@
 
 import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
 import path from 'path';
+
+// Set app name for dock/taskbar (especially needed in dev mode)
+app.setName('Scheduler');
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
@@ -148,7 +151,7 @@ function createWindow(): void {
     // DevTools can be opened manually with Cmd+Option+I (Mac) or Ctrl+Shift+I (Windows/Linux)
     // mainWindow.webContents.openDevTools();
   } else {
-    mainWindow.loadFile(path.join(__dirname, '..', 'renderer', 'index.html'));
+    mainWindow.loadFile(path.join(__dirname, '..', '..', 'renderer', 'index.html'));
   }
 
   mainWindow.on('closed', () => {
@@ -336,6 +339,14 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('data:saveDepartments', (_event, departments: Department[]) => {
     store.set('savedDepartments', departments);
+    return { success: true };
+  });
+
+  ipcMain.handle('data:clearAll', () => {
+    store.set('savedStaff', []);
+    store.set('savedDepartments', []);
+    store.set('presets', []);
+    store.set('recentFiles', {});
     return { success: true };
   });
 

@@ -21,18 +21,24 @@ export function DepartmentsTab() {
       maxHours: 30,
     };
     addDepartment(newDept);
+    // Set editing index to the new department (will be at end of array)
     setEditingIndex(departments.length);
   };
 
   const handleExport = async () => {
-    const csv = departmentsToCsv(departments);
-    const result = await window.electronAPI.files.saveCsv({
-      kind: 'dept',
-      content: csv,
-    });
-    if (!result.canceled) {
-      setDirty(false);
-      showToast('Department CSV exported successfully', 'success');
+    try {
+      const csv = departmentsToCsv(departments);
+      const result = await window.electronAPI.files.saveCsv({
+        kind: 'dept',
+        content: csv,
+      });
+      if (!result.canceled) {
+        setDirty(false);
+        showToast('Department CSV exported successfully', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to export department CSV:', err);
+      showToast('Failed to export department CSV', 'error');
     }
   };
 
@@ -86,8 +92,13 @@ export function DepartmentsTab() {
           </button>
           <button 
             onClick={async () => {
-              await saveDepartments();
-              showToast('Department data saved', 'success');
+              try {
+                await saveDepartments();
+                showToast('Department data saved', 'success');
+              } catch (err) {
+                console.error('Failed to save departments:', err);
+                showToast('Failed to save department data', 'error');
+              }
             }} 
             className="btn-primary"
             disabled={!dirty || departments.length === 0}
@@ -135,13 +146,13 @@ export function DepartmentsTab() {
               <th className="text-left py-3 px-4 text-sm font-medium text-surface-300">
                 Department
               </th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-surface-300">
+              <th className="text-center py-3 px-4 text-sm font-medium text-surface-300">
                 Target Hours
               </th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-surface-300">
+              <th className="text-center py-3 px-4 text-sm font-medium text-surface-300">
                 Max Hours
               </th>
-              <th className="text-right py-3 px-4 text-sm font-medium text-surface-300 w-24">
+              <th className="text-center py-3 px-4 text-sm font-medium text-surface-300 w-24">
                 Actions
               </th>
             </tr>
@@ -153,7 +164,7 @@ export function DepartmentsTab() {
 
               return (
                 <tr 
-                  key={index} 
+                  key={`dept-${index}`} 
                   className={`
                     border-t border-surface-700
                     ${hasError ? 'bg-danger-500/5' : 'hover:bg-surface-800/50'}
@@ -166,6 +177,11 @@ export function DepartmentsTab() {
                         value={dept.name}
                         onChange={(e) => updateDepartment(index, { name: e.target.value })}
                         onBlur={() => setEditingIndex(null)}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setEditingIndex(null);
+                          }
+                        }}
                         className="input py-1"
                         placeholder="Department name"
                         autoFocus
@@ -179,36 +195,54 @@ export function DepartmentsTab() {
                       </button>
                     )}
                   </td>
-                  <td className="py-3 px-4">
+                  <td className="py-3 px-4 text-center">
                     <input
                       type="number"
                       min="0"
                       max="100"
                       step="0.5"
-                      value={dept.targetHours}
+                      value={dept.targetHours || ''}
                       onChange={(e) => updateDepartment(index, { targetHours: parseFloat(e.target.value) || 0 })}
-                      className={`input py-1 text-right w-24 ml-auto ${hasError ? 'input-error' : ''}`}
-                    />
-                  </td>
-                  <td className="py-3 px-4">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step="0.5"
-                      value={dept.maxHours}
-                      onChange={(e) => updateDepartment(index, { maxHours: parseFloat(e.target.value) || 0 })}
-                      className={`input py-1 text-right w-24 ml-auto ${hasError ? 'input-error' : ''}`}
-                    />
-                  </td>
-                  <td className="py-3 px-4 text-right">
-                    <button
-                      onClick={() => {
-                        if (window.confirm(`Delete ${dept.name || 'this department'}?`)) {
-                          removeDepartment(index);
+                      onBlur={(e) => {
+                        if (e.target.value === '') {
+                          updateDepartment(index, { targetHours: 0 });
                         }
                       }}
-                      className="btn-ghost text-danger-400 hover:text-danger-300 p-1"
+                      className={`input py-1 text-center w-24 mx-auto ${hasError ? 'input-error' : ''}`}
+                    />
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <input
+                      type="number"
+                      min="0"
+                      max="100"
+                      step="0.5"
+                      value={dept.maxHours || ''}
+                      onChange={(e) => updateDepartment(index, { maxHours: parseFloat(e.target.value) || 0 })}
+                      onBlur={(e) => {
+                        if (e.target.value === '') {
+                          updateDepartment(index, { maxHours: 0 });
+                        }
+                      }}
+                      className={`input py-1 text-center w-24 mx-auto ${hasError ? 'input-error' : ''}`}
+                    />
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <button
+                      onClick={async () => {
+                        if (window.confirm(`Delete ${dept.name || 'this department'}?`)) {
+                          removeDepartment(index);
+                          // Auto-save after deletion
+                          try {
+                            await saveDepartments();
+                            showToast('Department deleted', 'info');
+                          } catch (err) {
+                            console.error('Failed to save after delete:', err);
+                            showToast('Failed to save changes', 'error');
+                          }
+                        }
+                      }}
+                      className="btn-ghost text-danger-400 hover:text-danger-300 p-1 mx-auto"
                       aria-label={`Delete ${dept.name}`}
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -226,10 +260,10 @@ export function DepartmentsTab() {
               <td className="py-3 px-4 font-medium text-surface-300">
                 Total
               </td>
-              <td className="py-3 px-4 text-right font-medium text-accent-400">
+              <td className="py-3 px-4 text-center font-medium text-accent-400">
                 {totals.target}h
               </td>
-              <td className="py-3 px-4 text-right font-medium text-surface-300">
+              <td className="py-3 px-4 text-center font-medium text-surface-300">
                 {totals.max}h
               </td>
               <td></td>

@@ -22,7 +22,7 @@
   },
   "build": {
     "appId": "com.scheduler.semester",
-    "productName": "Semester Scheduler",
+    "productName": "Scheduler",
     "directories": {
       "output": "release"
     },
@@ -35,7 +35,10 @@
       {
         "from": "../scheduler",
         "to": "python/scheduler",
-        "filter": ["**/*", "!__pycache__/**"]
+        "filter": [
+          "**/*",
+          "!__pycache__/**"
+        ]
       },
       {
         "from": "../main.py",
@@ -53,15 +56,24 @@
     "mac": {
       "category": "public.app-category.productivity",
       "icon": "assets/icon.icns",
-      "target": ["dmg", "zip"]
+      "target": [
+        "dmg",
+        "zip"
+      ]
     },
     "win": {
       "icon": "assets/icon.ico",
-      "target": ["nsis", "portable"]
+      "target": [
+        "nsis",
+        "portable"
+      ]
     },
     "linux": {
       "icon": "assets/icon.png",
-      "target": ["AppImage", "deb"],
+      "target": [
+        "AppImage",
+        "deb"
+      ],
       "category": "Office"
     },
     "nsis": {
@@ -88,9 +100,11 @@
     "concurrently": "^8.2.2",
     "electron": "^28.0.0",
     "electron-builder": "^24.9.1",
+    "electron-icon-builder": "^2.0.1",
     "eslint": "^8.55.0",
     "eslint-plugin-react": "^7.33.2",
     "eslint-plugin-react-hooks": "^4.6.0",
+    "png-to-ico": "^3.0.1",
     "postcss": "^8.4.32",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",

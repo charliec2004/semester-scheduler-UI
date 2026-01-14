@@ -2,7 +2,7 @@
 # For building distributable packages
 
 appId: com.scheduler.semester
-productName: Semester Scheduler
+productName: Scheduler
 copyright: Copyright © 2024
 
 directories:

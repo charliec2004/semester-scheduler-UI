@@ -3,7 +3,7 @@
  * Shows available keyboard shortcuts for accessibility
  */
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const shortcuts = [
   { keys: ['⌘', '1'], description: 'Go to Import tab' },
@@ -21,6 +21,18 @@ const shortcuts = [
 
 export function KeyboardShortcutsHelp() {
   const [isOpen, setIsOpen] = useState(false);
+
+  // Close on Escape key
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen]);
 
   return (
     <>

@@ -16,6 +16,15 @@ import {
 import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, StaffMember } from '../../../main/ipc-types';
 import { staffToCsv, departmentsToCsv } from '../../utils/csvValidators';
 
+// Simple UUID generator for browser compatibility
+function generateId(): string {
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
+
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
 const TIME_OPTIONS = [
   '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
@@ -89,22 +98,27 @@ export function FlagsTab() {
   const handleSavePreset = async () => {
     if (!newPresetName.trim()) return;
     
-    const preset: FlagPreset = {
-      id: crypto.randomUUID(),
-      name: newPresetName.trim(),
-      favoredEmployees,
-      trainingPairs,
-      favoredDepartments,
-      favoredFrontDeskDepts,
-      favoredEmployeeDepts,
-      timesets,
-      maxSolveSeconds,
-    };
-    
-    await savePreset(preset);
-    setNewPresetName('');
-    setShowPresetDialog(false);
-    showToast('Preset saved', 'success');
+    try {
+      const preset: FlagPreset = {
+        id: generateId(),
+        name: newPresetName.trim(),
+        favoredEmployees,
+        trainingPairs,
+        favoredDepartments,
+        favoredFrontDeskDepts,
+        favoredEmployeeDepts,
+        timesets,
+        maxSolveSeconds,
+      };
+      
+      await savePreset(preset);
+      setNewPresetName('');
+      setShowPresetDialog(false);
+      showToast('Preset saved', 'success');
+    } catch (error) {
+      console.error('Failed to save preset:', error);
+      showToast('Failed to save preset', 'error');
+    }
   };
 
   const handleRunSolver = async () => {
@@ -531,29 +545,61 @@ export function FlagsTab() {
 
       {/* Save Preset Dialog */}
       {showPresetDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
-          <div className="absolute inset-0 bg-surface-950/80" onClick={() => setShowPresetDialog(false)} />
-          <div className="relative bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md">
-            <h3 className="text-lg font-semibold text-surface-200 mb-4">Save Preset</h3>
-            <input
-              type="text"
-              value={newPresetName}
-              onChange={(e) => setNewPresetName(e.target.value)}
-              placeholder="Preset name..."
-              className="input mb-4"
-              autoFocus
-            />
-            <div className="flex gap-3 justify-end">
-              <button onClick={() => setShowPresetDialog(false)} className="btn-ghost">
-                Cancel
-              </button>
-              <button onClick={handleSavePreset} className="btn-primary" disabled={!newPresetName.trim()}>
-                Save
-              </button>
-            </div>
-          </div>
-        </div>
+        <PresetDialog
+          value={newPresetName}
+          onChange={setNewPresetName}
+          onSave={handleSavePreset}
+          onClose={() => setShowPresetDialog(false)}
+        />
       )}
+    </div>
+  );
+}
+
+// Preset Dialog Component with Escape key support
+function PresetDialog({
+  value,
+  onChange,
+  onSave,
+  onClose,
+}: {
+  value: string;
+  onChange: (v: string) => void;
+  onSave: () => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center">
+      <div className="absolute inset-0 bg-surface-950/80" onClick={onClose} />
+      <div className="relative bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md">
+        <h3 className="text-lg font-semibold text-surface-200 mb-4">Save Preset</h3>
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          placeholder="Preset name..."
+          className="input mb-4"
+          autoFocus
+        />
+        <div className="flex gap-3 justify-end">
+          <button onClick={onClose} className="btn-ghost">
+            Cancel
+          </button>
+          <button onClick={onSave} className="btn-primary" disabled={!value.trim()}>
+            Save
+          </button>
+        </div>
+      </div>
     </div>
   );
 }

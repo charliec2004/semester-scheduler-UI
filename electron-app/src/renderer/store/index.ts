@@ -27,7 +27,7 @@ interface SettingsState {
   loading: boolean;
   loadSettings: () => Promise<void>;
   saveSettings: (settings: AppSettings) => Promise<void>;
-  resetSettings: () => Promise<void>;
+  resetSettings: () => Promise<AppSettings>;
 }
 
 export const useSettingsStore = create<SettingsState>((set) => ({
@@ -48,6 +48,7 @@ export const useSettingsStore = create<SettingsState>((set) => ({
   resetSettings: async () => {
     const settings = await window.electronAPI.settings.reset();
     set({ settings });
+    return settings;
   },
 }));
 
@@ -214,6 +215,7 @@ interface FlagsState {
   savePreset: (preset: FlagPreset) => Promise<void>;
   deletePreset: (presetId: string) => Promise<void>;
   applyPreset: (preset: FlagPreset) => void;
+  clearPresets: () => void;
   
   reset: () => void;
 }
@@ -295,6 +297,8 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       maxSolveSeconds: preset.maxSolveSeconds ?? get().maxSolveSeconds,
     });
   },
+
+  clearPresets: () => set({ presets: [] }),
 
   reset: () => set({
     favoredEmployees: [],

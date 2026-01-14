@@ -65,14 +65,19 @@ export function StaffEditorTab() {
   };
 
   const handleExport = async () => {
-    const csv = staffToCsv(staff);
-    const result = await window.electronAPI.files.saveCsv({
-      kind: 'staff',
-      content: csv,
-    });
-    if (!result.canceled) {
-      setDirty(false);
-      showToast('Staff CSV exported successfully', 'success');
+    try {
+      const csv = staffToCsv(staff);
+      const result = await window.electronAPI.files.saveCsv({
+        kind: 'staff',
+        content: csv,
+      });
+      if (!result.canceled) {
+        setDirty(false);
+        showToast('Staff CSV exported successfully', 'success');
+      }
+    } catch (err) {
+      console.error('Failed to export staff CSV:', err);
+      showToast('Failed to export staff CSV', 'error');
     }
   };
 
@@ -127,8 +132,13 @@ export function StaffEditorTab() {
           </button>
           <button 
             onClick={async () => {
-              await saveStaff();
-              showToast('Staff data saved', 'success');
+              try {
+                await saveStaff();
+                showToast('Staff data saved', 'success');
+              } catch (err) {
+                console.error('Failed to save staff:', err);
+                showToast('Failed to save staff data', 'error');
+              }
             }} 
             className="btn-primary"
             disabled={!dirty || staff.length === 0}
@@ -226,8 +236,13 @@ export function StaffEditorTab() {
                       min="0"
                       max="40"
                       step="0.5"
-                      value={selectedEmployee.targetHours}
+                      value={selectedEmployee.targetHours || ''}
                       onChange={(e) => updateStaffMember(selectedIndex!, { targetHours: parseFloat(e.target.value) || 0 })}
+                      onBlur={(e) => {
+                        if (e.target.value === '') {
+                          updateStaffMember(selectedIndex!, { targetHours: 0 });
+                        }
+                      }}
                       className="input"
                     />
                   </div>
@@ -239,8 +254,13 @@ export function StaffEditorTab() {
                       min="0"
                       max="40"
                       step="0.5"
-                      value={selectedEmployee.maxHours}
+                      value={selectedEmployee.maxHours || ''}
                       onChange={(e) => updateStaffMember(selectedIndex!, { maxHours: parseFloat(e.target.value) || 0 })}
+                      onBlur={(e) => {
+                        if (e.target.value === '') {
+                          updateStaffMember(selectedIndex!, { maxHours: 0 });
+                        }
+                      }}
                       className="input"
                     />
                   </div>
@@ -350,10 +370,18 @@ export function StaffEditorTab() {
               {/* Actions */}
               <div className="flex justify-end">
                 <button
-                  onClick={() => {
+                  onClick={async () => {
                     if (window.confirm(`Delete ${selectedEmployee.name || 'this employee'}?`)) {
                       removeStaffMember(selectedIndex!);
                       setSelectedIndex(null);
+                      // Auto-save after deletion
+                      try {
+                        await saveStaff();
+                        showToast('Employee deleted', 'info');
+                      } catch (err) {
+                        console.error('Failed to save after delete:', err);
+                        showToast('Failed to save changes', 'error');
+                      }
                     }
                   }}
                   className="btn-danger"

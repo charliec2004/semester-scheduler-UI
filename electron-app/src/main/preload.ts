@@ -59,6 +59,7 @@ const electronAPI = {
     saveStaff: (staff: StaffMember[]) => ipcRenderer.invoke('data:saveStaff', staff) as Promise<{ success: boolean }>,
     loadDepartments: () => ipcRenderer.invoke('data:loadDepartments') as Promise<Department[]>,
     saveDepartments: (departments: Department[]) => ipcRenderer.invoke('data:saveDepartments', departments) as Promise<{ success: boolean }>,
+    clearAll: () => ipcRenderer.invoke('data:clearAll') as Promise<{ success: boolean }>,
   },
 
   // ---------------------------------------------------------------------------
