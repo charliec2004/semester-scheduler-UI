@@ -1,0 +1,113 @@
+# Electron Builder Configuration
+# For building distributable packages
+
+appId: com.scheduler.semester
+productName: Semester Scheduler
+copyright: Copyright © 2024
+
+directories:
+  output: release
+  buildResources: assets
+
+files:
+  - dist/**/*
+  - samples/**/*
+
+extraResources:
+  # Python scheduler module
+  - from: ../scheduler
+    to: python/scheduler
+    filter:
+      - "**/*"
+      - "!__pycache__/**"
+      - "!*.pyc"
+  
+  # Main Python script
+  - from: ../main.py
+    to: python/main.py
+  
+  # Requirements for reference
+  - from: ../requirements.txt
+    to: python/requirements.txt
+  
+  # Sample CSV files
+  - from: samples
+    to: samples
+
+# macOS Configuration
+mac:
+  category: public.app-category.productivity
+  icon: assets/icon.icns
+  darkModeSupport: true
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
+
+dmg:
+  contents:
+    - x: 130
+      y: 220
+    - x: 410
+      y: 220
+      type: link
+      path: /Applications
+  window:
+    width: 540
+    height: 380
+
+# Windows Configuration
+win:
+  icon: assets/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: portable
+      arch:
+        - x64
+
+nsis:
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  installerIcon: assets/icon.ico
+  uninstallerIcon: assets/icon.ico
+  license: ../LICENSE
+  deleteAppDataOnUninstall: true
+
+# Linux Configuration
+linux:
+  icon: assets/icon.png
+  category: Office
+  target:
+    - target: AppImage
+      arch:
+        - x64
+    - target: deb
+      arch:
+        - x64
+
+deb:
+  depends:
+    - python3
+    - python3-pip
+    - python3-venv
+
+appImage:
+  license: ../LICENSE
+
+# Publish configuration (disabled for local builds)
+publish: null
+
+# Compression
+compression: maximum
+
+# After pack hook for bundling Python
+afterPack: ./scripts/after-pack.js

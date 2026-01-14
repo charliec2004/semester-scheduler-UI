@@ -1,0 +1,352 @@
+/**
+ * Staff Editor Tab Component
+ * Grid-based editor for employees with availability matrix
+ */
+
+import { useState, useMemo } from 'react';
+import { useStaffStore, useDepartmentStore, useUIStore } from '../../store';
+import { EmptyState } from '../ui/EmptyState';
+import { staffToCsv, AVAILABILITY_COLUMNS } from '../../utils/csvValidators';
+import type { StaffMember } from '../../../main/ipc-types';
+
+const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
+const TIME_SLOTS = [
+  '08:00', '08:30', '09:00', '09:30', '10:00', '10:30',
+  '11:00', '11:30', '12:00', '12:30', '13:00', '13:30',
+  '14:00', '14:30', '15:00', '15:30', '16:00', '16:30',
+];
+
+const COMMON_ROLES = ['front_desk', 'career_education', 'marketing', 'employer_engagement', 'events', 'data_systems'];
+
+export function StaffEditorTab() {
+  const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty } = useStaffStore();
+  const { departments } = useDepartmentStore();
+  const { showToast, setActiveTab } = useUIStore();
+  
+  const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
+  const [searchTerm, setSearchTerm] = useState('');
+
+  // Available roles from departments + common roles
+  const availableRoles = useMemo(() => {
+    const roles = new Set(COMMON_ROLES);
+    departments.forEach(d => roles.add(d.name.toLowerCase().replace(/\s+/g, '_')));
+    return Array.from(roles).sort();
+  }, [departments]);
+
+  const filteredStaff = useMemo(() => {
+    if (!searchTerm) return staff;
+    const term = searchTerm.toLowerCase();
+    return staff.filter(s => 
+      s.name.toLowerCase().includes(term) ||
+      s.roles.some(r => r.includes(term))
+    );
+  }, [staff, searchTerm]);
+
+  const handleAddEmployee = () => {
+    const newEmployee: StaffMember = {
+      name: '',
+      roles: ['front_desk'],
+      targetHours: 10,
+      maxHours: 15,
+      year: 1,
+      availability: Object.fromEntries(AVAILABILITY_COLUMNS.map(col => [col, true])),
+    };
+    addStaffMember(newEmployee);
+    setSelectedIndex(staff.length);
+  };
+
+  const handleExport = async () => {
+    const csv = staffToCsv(staff);
+    const result = await window.electronAPI.files.saveCsv({
+      kind: 'staff',
+      content: csv,
+    });
+    if (!result.canceled) {
+      setDirty(false);
+      showToast('Staff CSV exported successfully', 'success');
+    }
+  };
+
+  const handleBulkFillAvailability = (fill: boolean) => {
+    if (selectedIndex === null) return;
+    const newAvailability = Object.fromEntries(
+      AVAILABILITY_COLUMNS.map(col => [col, fill])
+    );
+    updateStaffMember(selectedIndex, { availability: newAvailability });
+  };
+
+  const selectedEmployee = selectedIndex !== null ? staff[selectedIndex] : null;
+
+  if (staff.length === 0) {
+    return (
+      <EmptyState
+        icon={
+          <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
+              d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+        }
+        title="No Staff Data"
+        description="Import a staff CSV from the Import tab or create employees manually."
+        action={{
+          label: 'Add First Employee',
+          onClick: handleAddEmployee,
+        }}
+      />
+    );
+  }
+
+  return (
+    <div className="space-y-6 animate-fade-in">
+      {/* Header */}
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-display font-semibold text-surface-100 mb-1">
+            Staff Editor
+          </h2>
+          <p className="text-surface-400">
+            {staff.length} employee{staff.length !== 1 ? 's' : ''} 
+            {dirty && <span className="text-warning-400 ml-2">(unsaved changes)</span>}
+          </p>
+        </div>
+        <div className="flex gap-3">
+          <button onClick={handleAddEmployee} className="btn-secondary">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Add Employee
+          </button>
+          <button onClick={handleExport} className="btn-primary" disabled={staff.length === 0}>
+            Export CSV
+          </button>
+        </div>
+      </div>
+
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Employee List */}
+        <div className="lg:col-span-1 card p-0 overflow-hidden">
+          <div className="p-4 border-b border-surface-700">
+            <input
+              type="text"
+              placeholder="Search employees..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              className="input"
+              aria-label="Search employees"
+            />
+          </div>
+          <div className="max-h-[500px] overflow-y-auto">
+            {filteredStaff.map((employee, index) => {
+              const actualIndex = staff.indexOf(employee);
+              return (
+                <button
+                  key={actualIndex}
+                  onClick={() => setSelectedIndex(actualIndex)}
+                  className={`
+                    w-full px-4 py-3 text-left border-b border-surface-800 last:border-0
+                    hover:bg-surface-800 transition-colors
+                    ${selectedIndex === actualIndex ? 'bg-surface-800 border-l-2 border-l-accent-500' : ''}
+                  `}
+                >
+                  <div className="font-medium text-surface-200">
+                    {employee.name || <span className="text-surface-500 italic">Unnamed</span>}
+                  </div>
+                  <div className="text-sm text-surface-400 mt-0.5">
+                    {employee.roles.slice(0, 2).join(', ')}
+                    {employee.roles.length > 2 && ` +${employee.roles.length - 2}`}
+                  </div>
+                  <div className="text-xs text-surface-500 mt-1">
+                    Year {employee.year} · {employee.targetHours}h target
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Editor Panel */}
+        <div className="lg:col-span-2 space-y-6">
+          {selectedEmployee ? (
+            <>
+              {/* Basic Info */}
+              <div className="card">
+                <h3 className="font-semibold text-surface-200 mb-4">Basic Information</h3>
+                <div className="grid sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="label" htmlFor="emp-name">Name</label>
+                    <input
+                      id="emp-name"
+                      type="text"
+                      value={selectedEmployee.name}
+                      onChange={(e) => updateStaffMember(selectedIndex!, { name: e.target.value })}
+                      className="input"
+                      placeholder="Employee name"
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="emp-year">Academic Year</label>
+                    <select
+                      id="emp-year"
+                      value={selectedEmployee.year}
+                      onChange={(e) => updateStaffMember(selectedIndex!, { year: parseInt(e.target.value) })}
+                      className="input"
+                    >
+                      {[1, 2, 3, 4, 5, 6].map(y => (
+                        <option key={y} value={y}>Year {y}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="emp-target">Target Hours/Week</label>
+                    <input
+                      id="emp-target"
+                      type="number"
+                      min="0"
+                      max="40"
+                      step="0.5"
+                      value={selectedEmployee.targetHours}
+                      onChange={(e) => updateStaffMember(selectedIndex!, { targetHours: parseFloat(e.target.value) || 0 })}
+                      className="input"
+                    />
+                  </div>
+                  <div>
+                    <label className="label" htmlFor="emp-max">Max Hours/Week</label>
+                    <input
+                      id="emp-max"
+                      type="number"
+                      min="0"
+                      max="40"
+                      step="0.5"
+                      value={selectedEmployee.maxHours}
+                      onChange={(e) => updateStaffMember(selectedIndex!, { maxHours: parseFloat(e.target.value) || 0 })}
+                      className="input"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Roles */}
+              <div className="card">
+                <h3 className="font-semibold text-surface-200 mb-4">Roles / Qualifications</h3>
+                <div className="flex flex-wrap gap-2">
+                  {availableRoles.map(role => {
+                    const isSelected = selectedEmployee.roles.includes(role);
+                    return (
+                      <button
+                        key={role}
+                        onClick={() => {
+                          const newRoles = isSelected
+                            ? selectedEmployee.roles.filter(r => r !== role)
+                            : [...selectedEmployee.roles, role];
+                          updateStaffMember(selectedIndex!, { roles: newRoles });
+                        }}
+                        className={`
+                          px-3 py-1.5 rounded-full text-sm font-medium transition-colors
+                          ${isSelected 
+                            ? 'bg-accent-600 text-white' 
+                            : 'bg-surface-700 text-surface-300 hover:bg-surface-600'}
+                        `}
+                        aria-pressed={isSelected}
+                      >
+                        {role.replace(/_/g, ' ')}
+                      </button>
+                    );
+                  })}
+                </div>
+                {selectedEmployee.roles.length === 0 && (
+                  <p className="text-sm text-danger-400 mt-2">
+                    At least one role is required
+                  </p>
+                )}
+              </div>
+
+              {/* Availability Grid */}
+              <div className="card">
+                <div className="flex items-center justify-between mb-4">
+                  <h3 className="font-semibold text-surface-200">Weekly Availability</h3>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => handleBulkFillAvailability(true)}
+                      className="btn-ghost text-xs"
+                    >
+                      Fill All
+                    </button>
+                    <button
+                      onClick={() => handleBulkFillAvailability(false)}
+                      className="btn-ghost text-xs"
+                    >
+                      Clear All
+                    </button>
+                  </div>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full text-xs">
+                    <thead>
+                      <tr>
+                        <th className="text-left py-2 px-1 text-surface-400 font-medium">Time</th>
+                        {DAY_NAMES.map(day => (
+                          <th key={day} className="text-center py-2 px-1 text-surface-400 font-medium w-12">
+                            {day}
+                          </th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {TIME_SLOTS.map(time => (
+                        <tr key={time} className="border-t border-surface-800">
+                          <td className="py-1 px-1 text-surface-400">{time}</td>
+                          {DAY_NAMES.map(day => {
+                            const col = `${day}_${time}`;
+                            const isAvailable = selectedEmployee.availability[col];
+                            return (
+                              <td key={col} className="text-center py-1 px-1">
+                                <button
+                                  onClick={() => {
+                                    const newAvail = { ...selectedEmployee.availability, [col]: !isAvailable };
+                                    updateStaffMember(selectedIndex!, { availability: newAvail });
+                                  }}
+                                  className={`
+                                    w-8 h-6 rounded transition-colors
+                                    ${isAvailable 
+                                      ? 'bg-accent-600 hover:bg-accent-500' 
+                                      : 'bg-surface-700 hover:bg-surface-600'}
+                                  `}
+                                  aria-label={`${day} ${time}: ${isAvailable ? 'available' : 'unavailable'}`}
+                                  aria-pressed={isAvailable}
+                                />
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex justify-end">
+                <button
+                  onClick={() => {
+                    if (window.confirm(`Delete ${selectedEmployee.name || 'this employee'}?`)) {
+                      removeStaffMember(selectedIndex!);
+                      setSelectedIndex(null);
+                    }
+                  }}
+                  className="btn-danger"
+                >
+                  Delete Employee
+                </button>
+              </div>
+            </>
+          ) : (
+            <div className="card flex items-center justify-center h-64 text-surface-400">
+              Select an employee from the list to edit
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Environment
+.env
+.venv/
+venv/
+
+# IDE
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+
+# Generated files
+*.xlsx
+
+# Notes
+questions.md
+notes.md
+
+# Real files
+cpd-requirements.csv
+employees.csv
+cpd-requirements-interterm.csv
+employees-interterm.csv
