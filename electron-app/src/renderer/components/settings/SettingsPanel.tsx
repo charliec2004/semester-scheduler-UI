@@ -41,6 +41,12 @@ export function SettingsPanel() {
   const { setShowSettings, showToast } = useUIStore();
   const [localSettings, setLocalSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>('1.0.2');
+
+  // Fetch app version from Electron
+  useEffect(() => {
+    window.electronAPI.app.getVersion().then(setAppVersion).catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (settings) {
@@ -456,7 +462,7 @@ export function SettingsPanel() {
           {/* Version Info */}
           <div className="pt-4 mt-4 border-t border-surface-800">
             <p className="text-xs text-surface-500 text-center">
-              Semester Scheduler v1.0.0
+              Semester Scheduler v{appVersion}
             </p>
           </div>
         </div>

@@ -48,7 +48,7 @@ const mockElectronAPI = {
     onError: vi.fn().mockReturnValue(() => {}),
   },
   app: {
-    getVersion: vi.fn().mockResolvedValue('1.0.0'),
+    getVersion: vi.fn().mockResolvedValue('1.0.2'),
     getPaths: vi.fn().mockResolvedValue({
       userData: '/tmp/userData',
       temp: '/tmp',
