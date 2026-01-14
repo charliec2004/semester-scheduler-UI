@@ -9,6 +9,9 @@ appId: com.scheduler.semester
 productName: Scheduler
 copyright: Copyright © 2024
 
+# Artifact naming with architecture suffix
+artifactName: "${productName}-${version}-${arch}.${ext}"
+
 directories:
   output: release
   buildResources: assets
@@ -67,7 +70,7 @@ win:
     - target: nsis
       arch:
         - x64
-    - target: portable
+    - target: zip
       arch:
         - x64
 

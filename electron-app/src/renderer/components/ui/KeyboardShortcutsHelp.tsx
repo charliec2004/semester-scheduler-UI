@@ -3,7 +3,7 @@
  * Shows available keyboard shortcuts for accessibility
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, ReactNode } from 'react';
 
 const shortcuts = [
   { keys: ['⌘', '1'], description: 'Go to Import tab' },
@@ -18,6 +18,39 @@ const shortcuts = [
   { keys: ['Space'], description: 'Toggle checkbox / button' },
   { keys: ['←', '→'], description: 'Navigate tabs' },
 ];
+
+// Reusable modal wrapper that locks body scroll
+function ScrollLockModal({ 
+  children, 
+  onClose 
+}: { 
+  children: ReactNode; 
+  onClose: () => void;
+}) {
+  // Lock main content scroll when modal is open
+  useEffect(() => {
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) {
+      mainContent.style.overflow = 'hidden';
+    }
+    return () => {
+      if (mainContent) {
+        mainContent.style.overflow = '';
+      }
+    };
+  }, []);
+
+  return (
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
+      onClick={onClose}
+    >
+      {/* Dark overlay */}
+      <div className="absolute inset-0 bg-black/60" />
+      {children}
+    </div>
+  );
+}
 
 export function KeyboardShortcutsHelp() {
   const [isOpen, setIsOpen] = useState(false);
@@ -49,12 +82,7 @@ export function KeyboardShortcutsHelp() {
       </button>
 
       {isOpen && (
-        <div 
-          className="fixed inset-0 z-50 flex items-center justify-center p-4"
-          onClick={() => setIsOpen(false)}
-        >
-          {/* Dark overlay without blur to avoid vibrancy conflicts */}
-          <div className="absolute inset-0 bg-black/60" />
+        <ScrollLockModal onClose={() => setIsOpen(false)}>
           <div 
             className="relative bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md shadow-2xl"
             role="dialog"
@@ -99,7 +127,7 @@ export function KeyboardShortcutsHelp() {
               On Windows/Linux, use Ctrl instead of ⌘
             </p>
           </div>
-        </div>
+        </ScrollLockModal>
       )}
     </>
   );

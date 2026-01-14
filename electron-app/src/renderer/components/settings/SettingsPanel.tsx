@@ -122,6 +122,19 @@ export function SettingsPanel() {
     }
   };
 
+  // Lock main content scroll when modal is open
+  useEffect(() => {
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) {
+      mainContent.style.overflow = 'hidden';
+    }
+    return () => {
+      if (mainContent) {
+        mainContent.style.overflow = '';
+      }
+    };
+  }, []);
+
   if (!localSettings) return null;
 
   return (
@@ -438,6 +451,13 @@ export function SettingsPanel() {
               </button>
             </div>
           </section>
+
+          {/* Version Info */}
+          <div className="pt-4 mt-4 border-t border-surface-800">
+            <p className="text-xs text-surface-500 text-center">
+              Semester Scheduler v1.0.0
+            </p>
+          </div>
         </div>
 
         {/* Footer */}

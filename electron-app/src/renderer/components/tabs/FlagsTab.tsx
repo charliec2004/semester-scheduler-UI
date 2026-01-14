@@ -568,6 +568,19 @@ function PresetDialog({
   onSave: () => void;
   onClose: () => void;
 }) {
+  // Lock main content scroll when modal is open
+  useEffect(() => {
+    const mainContent = document.getElementById('main-content');
+    if (mainContent) {
+      mainContent.style.overflow = 'hidden';
+    }
+    return () => {
+      if (mainContent) {
+        mainContent.style.overflow = '';
+      }
+    };
+  }, []);
+
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {

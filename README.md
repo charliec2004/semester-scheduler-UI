@@ -3,6 +3,24 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OR-Tools](https://img.shields.io/badge/OR--Tools-9.0+-green.svg)](https://developers.google.com/optimization)
+[![Release](https://img.shields.io/github/v/release/charliec2004/semester-scheduler-UI)](https://github.com/charliec2004/semester-scheduler-UI/releases/latest)
+
+## Downloads
+
+**[📥 Download the latest release](https://charliec2004.github.io/semester-scheduler-UI/)**
+
+Pre-built installers are available for all major platforms:
+
+| Platform | Download | Notes |
+|----------|----------|-------|
+| **macOS** (Apple Silicon) | `.dmg`, `.zip` | For M1/M2/M3 Macs. Right-click → Open to bypass Gatekeeper. |
+| **macOS** (Intel) | `.dmg`, `.zip` | For Intel-based Macs |
+| **Windows** | `.exe` (installer), `.zip` (portable) | Windows 10+ (64-bit). Click "More info" → "Run anyway" if SmartScreen warns. |
+| **Linux** | `.AppImage`, `.deb` | Ubuntu 18.04+, Debian 10+, Fedora. For AppImage: `chmod +x` then run. |
+
+> **Note**: Binaries are not code-signed. See platform-specific notes above for first-run instructions.
+
+SHA256 checksums are provided with each release for verification.
 
 ## Overview
 
@@ -100,4 +118,22 @@ MIT License - see [LICENSE](LICENSE) file.
 - **OR-Tools**: Google's constraint programming solver (CP-SAT)
 - **Python 3.12+**: Core language
 - **Pandas**: Data manipulation and Excel export
-- **Pytest**: Testing framework
+- **Pytest**: Testing framework- **Electron**: Desktop app framework (React + TypeScript)
+
+## Creating a Release
+
+Releases are built automatically via GitHub Actions when you push a version tag:
+
+```bash
+# Tag a new release
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow will:
+1. Build the Electron app for macOS (arm64 + x64), Windows, and Linux
+2. Generate SHA256 checksums for all artifacts
+3. Create a GitHub Release with all installers attached
+4. Deploy the download page to GitHub Pages
+
+Pre-release tags (e.g., `v1.0.0-beta.1`, `v1.0.0-rc.1`) are marked as pre-releases.

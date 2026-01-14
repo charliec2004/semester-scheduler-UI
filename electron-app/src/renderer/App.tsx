@@ -85,14 +85,14 @@ function App() {
   const isMac = navigator.platform.toLowerCase().includes('mac');
 
   return (
-    <div className={`min-h-screen flex flex-col bg-surface-950 ${fontSizeClass} ${contrastClass}`}>
+    <div className={`h-screen flex flex-col bg-surface-950 overflow-hidden ${fontSizeClass} ${contrastClass}`}>
       {/* Skip link for keyboard navigation */}
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
 
-      {/* Header with draggable title bar region */}
-      <header className="bg-surface-900 border-b border-surface-700 titlebar-drag">
+      {/* Header with draggable title bar region - fixed at top */}
+      <header className="flex-shrink-0 bg-surface-900 border-b border-surface-700 titlebar-drag">
         {/* macOS traffic light spacing - pl-24 = 96px to clear the ~70px wide traffic lights */}
         <div className={`flex items-center justify-between ${isMac ? 'pl-24' : 'pl-6'} pr-6 py-3 ${isMac ? 'pt-3' : ''}`}>
           <div className="flex items-center gap-4 no-drag">
@@ -131,11 +131,13 @@ function App() {
         </div>
       </header>
 
-      {/* Tab Navigation */}
-      <TabNavigation />
+      {/* Tab Navigation - fixed below header */}
+      <div className="flex-shrink-0">
+        <TabNavigation />
+      </div>
 
-      {/* Main Content */}
-      <main id="main-content" className="flex-1 overflow-auto" role="main">
+      {/* Main Content - scrollable */}
+      <main id="main-content" className="flex-1 overflow-y-auto" role="main">
         <div className="container mx-auto px-6 py-8 max-w-7xl">
           {activeTab === 'import' && <ImportTab />}
           {activeTab === 'staff' && <StaffEditorTab />}

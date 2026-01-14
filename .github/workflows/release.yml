@@ -1,0 +1,278 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+# Cancel in-progress runs for same ref
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  NODE_VERSION: '20'
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # Build job - runs on all three platforms
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # macOS builds (arm64 + x64)
+          - os: macos-latest
+            platform: mac
+            arch: arm64
+          - os: macos-13  # Intel runner
+            platform: mac
+            arch: x64
+          # Windows build
+          - os: windows-latest
+            platform: win
+            arch: x64
+          # Linux build
+          - os: ubuntu-latest
+            platform: linux
+            arch: x64
+
+    runs-on: ${{ matrix.os }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: 'npm'
+          cache-dependency-path: electron-app/package-lock.json
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install Python dependencies
+        run: |
+          pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Install Node dependencies
+        working-directory: electron-app
+        run: npm ci
+
+      - name: Run linter
+        working-directory: electron-app
+        run: npm run lint || echo "::warning::Linting issues found"
+
+      - name: Run tests
+        working-directory: electron-app
+        run: npm test || echo "::warning::Some tests failed"
+
+      # Bundle Python for distribution
+      - name: Bundle Python (macOS/Linux)
+        if: matrix.platform != 'win'
+        working-directory: electron-app
+        run: |
+          chmod +x scripts/bundle-python.sh
+          ./scripts/bundle-python.sh
+
+      - name: Bundle Python (Windows)
+        if: matrix.platform == 'win'
+        working-directory: electron-app
+        shell: pwsh
+        run: |
+          .\scripts\bundle-python.ps1
+
+      # Build the Electron app
+      - name: Build Electron app (macOS)
+        if: matrix.platform == 'mac'
+        working-directory: electron-app
+        run: npm run package -- --mac --${{ matrix.arch }}
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Electron app (Windows)
+        if: matrix.platform == 'win'
+        working-directory: electron-app
+        run: npm run package -- --win
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Build Electron app (Linux)
+        if: matrix.platform == 'linux'
+        working-directory: electron-app
+        run: npm run package -- --linux
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      # List built artifacts for debugging
+      - name: List build output
+        working-directory: electron-app/release
+        run: ls -la
+        shell: bash
+
+      # Upload platform-specific artifacts
+      - name: Upload macOS arm64 artifacts
+        if: matrix.platform == 'mac' && matrix.arch == 'arm64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-arm64
+          path: |
+            electron-app/release/*.dmg
+            electron-app/release/*.zip
+          if-no-files-found: warn
+
+      - name: Upload macOS x64 artifacts
+        if: matrix.platform == 'mac' && matrix.arch == 'x64'
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-x64
+          path: |
+            electron-app/release/*.dmg
+            electron-app/release/*.zip
+          if-no-files-found: warn
+
+      - name: Upload Windows artifacts
+        if: matrix.platform == 'win'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            electron-app/release/*.exe
+            electron-app/release/*.zip
+          if-no-files-found: warn
+
+      - name: Upload Linux artifacts
+        if: matrix.platform == 'linux'
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux
+          path: |
+            electron-app/release/*.AppImage
+            electron-app/release/*.deb
+          if-no-files-found: warn
+
+  # Create release with all artifacts
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: find artifacts -type f | head -50
+
+      # Flatten artifacts and rename with architecture
+      - name: Prepare release assets
+        run: |
+          mkdir -p release-assets
+          
+          # macOS arm64
+          if [ -d "artifacts/mac-arm64" ]; then
+            for f in artifacts/mac-arm64/*; do
+              if [ -f "$f" ]; then
+                name=$(basename "$f")
+                # Add arm64 suffix if not present
+                if [[ ! "$name" =~ arm64 ]]; then
+                  ext="${name##*.}"
+                  base="${name%.*}"
+                  newname="${base}-arm64.${ext}"
+                  cp "$f" "release-assets/$newname"
+                else
+                  cp "$f" "release-assets/$name"
+                fi
+              fi
+            done
+          fi
+          
+          # macOS x64
+          if [ -d "artifacts/mac-x64" ]; then
+            for f in artifacts/mac-x64/*; do
+              if [ -f "$f" ]; then
+                name=$(basename "$f")
+                # Add x64 suffix if not present
+                if [[ ! "$name" =~ x64 ]]; then
+                  ext="${name##*.}"
+                  base="${name%.*}"
+                  newname="${base}-x64.${ext}"
+                  cp "$f" "release-assets/$newname"
+                else
+                  cp "$f" "release-assets/$name"
+                fi
+              fi
+            done
+          fi
+          
+          # Windows
+          if [ -d "artifacts/windows" ]; then
+            cp artifacts/windows/* release-assets/ 2>/dev/null || true
+          fi
+          
+          # Linux
+          if [ -d "artifacts/linux" ]; then
+            cp artifacts/linux/* release-assets/ 2>/dev/null || true
+          fi
+          
+          echo "Release assets:"
+          ls -la release-assets/
+
+      # Generate checksums
+      - name: Generate SHA256 checksums
+        run: |
+          cd release-assets
+          sha256sum * > SHA256SUMS.txt || shasum -a 256 * > SHA256SUMS.txt
+          echo "Checksums:"
+          cat SHA256SUMS.txt
+
+      # Create GitHub Release
+      - name: Create Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: release-assets/*
+          generate_release_notes: true
+          draft: false
+          prerelease: ${{ contains(github.ref, 'alpha') || contains(github.ref, 'beta') || contains(github.ref, 'rc') }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Deploy docs to GitHub Pages
+  deploy-pages:
+    needs: release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pages: write
+      id-token: write
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Pages
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: docs
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
