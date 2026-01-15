@@ -48,8 +48,8 @@ mac:
   # IMPORTANT: Completely disable code signing for unsigned distribution
   hardenedRuntime: false
   gatekeeperAssess: false
-  # Use "-" to explicitly disable signing (null doesn't work in YAML)
-  identity: "-"
+  # Use ~ for actual YAML null to disable signing
+  identity: ~
   # macOS naming: DMGs are Mac-only, ZIPs get -mac suffix for clarity
   artifactName: "${productName}-${version}-${arch}-mac.${ext}"
   target:
