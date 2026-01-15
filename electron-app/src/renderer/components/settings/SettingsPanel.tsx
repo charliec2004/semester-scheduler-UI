@@ -539,11 +539,18 @@ export function SettingsPanel() {
                     Version {updateStatus.version} available!
                   </p>
                   {isMac ? (
-                    <p className="text-xs text-surface-400 mb-3">
-                      This will download the installer to your Downloads folder and open it. 
-                      You&apos;ll need to drag the app to Applications to replace the old version, 
-                      then run a quick Terminal command to allow it to open (since the app is not code-signed).
-                    </p>
+                    <div className="text-xs mb-3 space-y-2">
+                      <p className="text-surface-400">
+                        This will download the installer to your Downloads folder and open it. 
+                        Drag the app to Applications to replace the old version.
+                      </p>
+                      <p className="text-red-400 font-medium">
+                        ⚠️ Important: After installing, open Terminal and run:
+                      </p>
+                      <code className="block bg-surface-950 text-surface-300 px-2 py-1 rounded text-xs font-mono">
+                        xattr -cr /Applications/Scheduler.app
+                      </code>
+                    </div>
                   ) : (
                     <p className="text-xs text-surface-400 mb-3">
                       The update will download in the background. Once complete, click &quot;Restart and Install&quot; 
