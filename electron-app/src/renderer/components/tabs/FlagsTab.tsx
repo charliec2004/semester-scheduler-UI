@@ -787,14 +787,14 @@ function TrainingPairForm({
 
   return (
     <div className="flex flex-wrap sm:flex-nowrap gap-2">
-      <select value={dept} onChange={(e) => handleDeptChange(e.target.value)} className="input w-full sm:w-40">
+      <select value={dept} onChange={(e) => handleDeptChange(e.target.value)} className="input w-full sm:flex-1">
         <option value="">Department</option>
         {departments.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
       <select 
         value={trainee1} 
         onChange={(e) => setTrainee1(e.target.value)} 
-        className="input w-[calc(50%-0.25rem)] sm:w-36"
+        className="input w-[calc(50%-0.25rem)] sm:flex-1"
         disabled={!dept}
       >
         <option value="">Person 1</option>
@@ -803,7 +803,7 @@ function TrainingPairForm({
       <select 
         value={trainee2} 
         onChange={(e) => setTrainee2(e.target.value)} 
-        className="input w-[calc(50%-0.25rem)] sm:w-36"
+        className="input w-[calc(50%-0.25rem)] sm:flex-1"
         disabled={!dept}
       >
         <option value="">Person 2</option>
@@ -812,7 +812,7 @@ function TrainingPairForm({
       <button 
         onClick={handleAdd} 
         disabled={!dept || !trainee1 || !trainee2}
-        className="btn-secondary flex-shrink-0 px-3 w-full sm:w-auto"
+        className="btn-secondary flex-shrink-0 px-4 w-full sm:w-auto"
       >
         +
       </button>
