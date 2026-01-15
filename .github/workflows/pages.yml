@@ -1,6 +1,7 @@
 name: Deploy Pages
 
 on:
+  # Deploy when docs change on main (for style/content updates between releases)
   push:
     branches:
       - main
