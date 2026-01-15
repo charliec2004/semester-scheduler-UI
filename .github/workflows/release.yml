@@ -95,6 +95,9 @@ jobs:
         run: npm run package -- --mac --arm64 --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Completely disable code signing for unsigned distribution
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+          CSC_LINK: ""
 
       - name: Build Electron app (Windows)
         if: matrix.platform == 'win'

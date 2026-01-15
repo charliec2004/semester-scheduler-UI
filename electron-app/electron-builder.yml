@@ -45,12 +45,15 @@ mac:
   category: public.app-category.productivity
   icon: assets/icon.icns
   darkModeSupport: true
-  # IMPORTANT: Do NOT set hardenedRuntime for unsigned apps!
-  # hardenedRuntime: true causes "corrupted" errors without proper code signing.
+  # IMPORTANT: Completely disable code signing for unsigned distribution
+  # Without these settings, macOS shows "damaged" errors
   hardenedRuntime: false
   gatekeeperAssess: false
-  # Explicitly disable code signing for distribution without a Developer ID
   identity: null
+  entitlements: null
+  entitlementsInherit: null
+  # Use development type to skip distribution signing requirements
+  type: development
   # macOS naming: DMGs are Mac-only, ZIPs get -mac suffix for clarity
   artifactName: "${productName}-${version}-${arch}-mac.${ext}"
   target:
