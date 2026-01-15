@@ -98,6 +98,9 @@ jobs:
           # Completely disable code signing for unsigned distribution
           CSC_IDENTITY_AUTO_DISCOVERY: false
           CSC_LINK: ""
+          CSC_KEY_PASSWORD: ""
+          # Skip notarization
+          NOTARIZE: false
 
       - name: Build Electron app (Windows)
         if: matrix.platform == 'win'

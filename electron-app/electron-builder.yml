@@ -46,14 +46,13 @@ mac:
   icon: assets/icon.icns
   darkModeSupport: true
   # IMPORTANT: Completely disable code signing for unsigned distribution
-  # Without these settings, macOS shows "damaged" errors
   hardenedRuntime: false
   gatekeeperAssess: false
+  # Explicitly disable all signing
   identity: null
-  entitlements: null
-  entitlementsInherit: null
-  # Use development type to skip distribution signing requirements
-  type: development
+  forceCodeSigning: false
+  signIgnore:
+    - ".*"
   # macOS naming: DMGs are Mac-only, ZIPs get -mac suffix for clarity
   artifactName: "${productName}-${version}-${arch}-mac.${ext}"
   target:
