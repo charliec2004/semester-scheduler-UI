@@ -853,8 +853,8 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
     args.push('--max-solve-seconds', config.maxSolveSeconds.toString());
   }
 
-  for (const emp of config.favoredEmployees || []) {
-    args.push('--favor', emp);
+  for (const [emp, mult] of Object.entries(config.favoredEmployees || {})) {
+    args.push('--favor', mult !== 1.0 ? `${emp}:${mult}` : emp);
   }
 
   for (const training of config.trainingPairs || []) {
@@ -870,11 +870,18 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
   }
 
   for (const fed of config.favoredEmployeeDepts || []) {
-    args.push('--favor-employee-dept', `${fed.employee},${fed.department}`);
+    const mult = fed.multiplier ?? 1.0;
+    args.push('--favor-employee-dept', mult !== 1.0 
+      ? `${fed.employee},${fed.department}:${mult}` 
+      : `${fed.employee},${fed.department}`);
   }
 
   for (const ts of config.timesets || []) {
     args.push('--timeset', ts.employee, ts.day, ts.department, ts.startTime, ts.endTime);
+  }
+
+  for (const pref of config.shiftTimePreferences || []) {
+    args.push('--shift-pref', `${pref.employee},${pref.day},${pref.preference}`);
   }
 
   return args;

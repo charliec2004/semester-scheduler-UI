@@ -1,7 +1,7 @@
 /**
  * Scheduler Download Page Script
  * Fetches latest release from GitHub API and populates download links
- * @version 1.0.8
+ * @version 1.1.0
  */
 
 (function() {

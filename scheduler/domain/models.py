@@ -64,3 +64,12 @@ class FavoredEmployeeDepartment:
     """Soft preference for assigning an employee to a specific department."""
     employee: str
     department: str
+    multiplier: float = 1.0  # Strength of preference (0.5 = half, 1.0 = normal, 2.0 = double)
+
+
+@dataclass(frozen=True)
+class ShiftTimePreference:
+    """Soft preference for an employee to work morning or afternoon on a specific day."""
+    employee: str
+    day: str  # Mon, Tue, Wed, Thu, Fri
+    preference: str  # 'morning' (8am-12pm) or 'afternoon' (12pm-5pm)

@@ -327,11 +327,30 @@ export function StaffEditorTab() {
                     <thead>
                       <tr>
                         <th className="text-left py-2 px-1 text-surface-400 font-medium">Time</th>
-                        {DAY_NAMES.map(day => (
-                          <th key={day} className="text-center py-2 px-1 text-surface-400 font-medium w-12">
-                            {day}
-                          </th>
-                        ))}
+                        {DAY_NAMES.map(day => {
+                          // Check if all slots for this day are available
+                          const allAvailable = TIME_SLOTS.every(
+                            time => selectedEmployee.availability[`${day}_${time}`]
+                          );
+                          return (
+                            <th key={day} className="text-center py-2 px-1 w-12">
+                              <button
+                                onClick={() => {
+                                  // Toggle all time slots for this day
+                                  const newAvail = { ...selectedEmployee.availability };
+                                  TIME_SLOTS.forEach(time => {
+                                    newAvail[`${day}_${time}`] = !allAvailable;
+                                  });
+                                  updateStaffMember(selectedIndex!, { availability: newAvail });
+                                }}
+                                className="text-surface-400 font-medium hover:text-accent-400 transition-colors"
+                                title={`Click to ${allAvailable ? 'clear' : 'fill'} all ${day} slots`}
+                              >
+                                {day}
+                              </button>
+                            </th>
+                          );
+                        })}
                       </tr>
                     </thead>
                     <tbody>
@@ -364,6 +383,21 @@ export function StaffEditorTab() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+
+                {/* Legend */}
+                <div className="mt-4 pt-3 border-t border-surface-800 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-surface-400">
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-3 rounded bg-accent-600"></span>
+                    <span>Available</span>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="w-4 h-3 rounded bg-surface-700"></span>
+                    <span>Not Available</span>
+                  </div>
+                  <div className="text-surface-500">
+                    Each block = 30 min · Click a day to toggle entire column
+                  </div>
                 </div>
               </div>
 

@@ -12,6 +12,7 @@ import type {
   TrainingPair,
   TimesetRequest,
   FavoredEmployeeDept,
+  ShiftTimePreference,
   SolverProgress,
   ValidationError,
   HistoryEntry,
@@ -181,17 +182,18 @@ export const useDepartmentStore = create<DepartmentState>((set, get) => ({
 // ---------------------------------------------------------------------------
 
 interface FlagsState {
-  favoredEmployees: string[];
+  favoredEmployees: Record<string, number>; // employee name -> multiplier
   trainingPairs: TrainingPair[];
   favoredDepartments: Record<string, number>;
   favoredFrontDeskDepts: Record<string, number>;
   favoredEmployeeDepts: FavoredEmployeeDept[];
   timesets: TimesetRequest[];
+  shiftTimePreferences: ShiftTimePreference[];
   maxSolveSeconds: number;
   presets: FlagPreset[];
   
-  setFavoredEmployees: (employees: string[]) => void;
-  addFavoredEmployee: (employee: string) => void;
+  setFavoredEmployees: (employees: Record<string, number>) => void;
+  addFavoredEmployee: (employee: string, multiplier: number) => void;
   removeFavoredEmployee: (employee: string) => void;
   
   setTrainingPairs: (pairs: TrainingPair[]) => void;
@@ -209,6 +211,10 @@ interface FlagsState {
   addTimeset: (timeset: TimesetRequest) => void;
   removeTimeset: (index: number) => void;
   
+  setShiftTimePreferences: (prefs: ShiftTimePreference[]) => void;
+  addShiftTimePreference: (pref: ShiftTimePreference) => void;
+  removeShiftTimePreference: (index: number) => void;
+  
   setMaxSolveSeconds: (seconds: number) => void;
   
   loadPresets: () => Promise<void>;
@@ -221,23 +227,26 @@ interface FlagsState {
 }
 
 export const useFlagsStore = create<FlagsState>((set, get) => ({
-  favoredEmployees: [],
+  favoredEmployees: {},
   trainingPairs: [],
   favoredDepartments: {},
   favoredFrontDeskDepts: {},
   favoredEmployeeDepts: [],
   timesets: [],
-  maxSolveSeconds: 180,
+  shiftTimePreferences: [],
+  maxSolveSeconds: 300,
   presets: [],
 
   setFavoredEmployees: (employees) => set({ favoredEmployees: employees }),
-  addFavoredEmployee: (employee) => {
-    if (!get().favoredEmployees.includes(employee)) {
-      set({ favoredEmployees: [...get().favoredEmployees, employee] });
+  addFavoredEmployee: (employee, multiplier) => {
+    if (!(employee in get().favoredEmployees)) {
+      set({ favoredEmployees: { ...get().favoredEmployees, [employee]: multiplier } });
     }
   },
   removeFavoredEmployee: (employee) => {
-    set({ favoredEmployees: get().favoredEmployees.filter(e => e !== employee) });
+    const { [employee]: _removed, ...rest } = get().favoredEmployees;
+    void _removed;
+    set({ favoredEmployees: rest });
   },
 
   setTrainingPairs: (pairs) => set({ trainingPairs: pairs }),
@@ -269,6 +278,20 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
     set({ timesets: get().timesets.filter((_, i) => i !== index) });
   },
 
+  setShiftTimePreferences: (prefs) => set({ shiftTimePreferences: prefs }),
+  addShiftTimePreference: (pref) => {
+    // Prevent duplicates (same employee + day)
+    const exists = get().shiftTimePreferences.some(
+      p => p.employee === pref.employee && p.day === pref.day
+    );
+    if (!exists) {
+      set({ shiftTimePreferences: [...get().shiftTimePreferences, pref] });
+    }
+  },
+  removeShiftTimePreference: (index) => {
+    set({ shiftTimePreferences: get().shiftTimePreferences.filter((_, i) => i !== index) });
+  },
+
   setMaxSolveSeconds: (seconds) => set({ maxSolveSeconds: seconds }),
 
   loadPresets: async () => {
@@ -294,6 +317,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       favoredFrontDeskDepts: preset.favoredFrontDeskDepts,
       favoredEmployeeDepts: preset.favoredEmployeeDepts || [],
       timesets: preset.timesets,
+      shiftTimePreferences: preset.shiftTimePreferences || [],
       maxSolveSeconds: preset.maxSolveSeconds ?? get().maxSolveSeconds,
     });
   },
@@ -301,13 +325,14 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
   clearPresets: () => set({ presets: [] }),
 
   reset: () => set({
-    favoredEmployees: [],
+    favoredEmployees: {},
     trainingPairs: [],
     favoredDepartments: {},
     favoredFrontDeskDepts: {},
     favoredEmployeeDepts: [],
     timesets: [],
-    maxSolveSeconds: 180,
+    shiftTimePreferences: [],
+    maxSolveSeconds: 300,
   }),
 }));
 
@@ -351,6 +376,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       useFlagsStore.getState().setFavoredFrontDeskDepts(config.favoredFrontDeskDepts);
       useFlagsStore.getState().setFavoredEmployeeDepts(config.favoredEmployeeDepts || []);
       useFlagsStore.getState().setTimesets(config.timesets);
+      useFlagsStore.getState().setShiftTimePreferences(config.shiftTimePreferences || []);
       useFlagsStore.getState().setMaxSolveSeconds(config.maxSolveSeconds);
       return true;
     }
@@ -446,6 +472,7 @@ export function createConfigSnapshot(): ConfigSnapshot {
     favoredFrontDeskDepts: flags.favoredFrontDeskDepts,
     favoredEmployeeDepts: flags.favoredEmployeeDepts,
     timesets: flags.timesets,
+    shiftTimePreferences: flags.shiftTimePreferences,
     maxSolveSeconds: flags.maxSolveSeconds,
   };
 }

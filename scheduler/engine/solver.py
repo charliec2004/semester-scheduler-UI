@@ -50,6 +50,7 @@ from scheduler.domain.models import (
     FavoredDepartment,
     FavoredEmployeeDepartment,
     FavoredFrontDeskDepartment,
+    ShiftTimePreference,
     TimesetRequest,
     TrainingRequest,
 )
@@ -62,12 +63,13 @@ def solve_schedule(
     requirements_csv: Path,
     output_path: Path,
     solver_max_time: int = DEFAULT_SOLVER_MAX_TIME,
-    favored_employees: List[str] | None = None,
+    favored_employees: dict[str, float] | None = None,  # employee name -> multiplier
     training_requests: List[TrainingRequest] | None = None,
     favored_departments: dict[str, float] | None = None,
     favored_frontdesk_departments: dict[str, float] | None = None,
     timeset_requests: List[TimesetRequest] | None = None,
     favored_employee_depts: List[FavoredEmployeeDepartment] | None = None,
+    shift_time_preferences: List["ShiftTimePreference"] | None = None,
     show_progress: bool = False,
 ):
     """Main function to build and solve the scheduling model"""
@@ -76,11 +78,17 @@ def solve_schedule(
     department_requirements = load_department_requirements(requirements_csv)
     department_hour_targets_raw = department_requirements.targets
     department_max_hours_raw = department_requirements.max_hours
-    favored_employees_normalized = {emp.strip().lower() for emp in (favored_employees or []) if str(emp).strip()}
+    # Normalize favored employees: lowercase name -> multiplier
+    favored_employees_normalized: dict[str, float] = {
+        emp.strip().lower(): mult 
+        for emp, mult in (favored_employees or {}).items() 
+        if str(emp).strip()
+    }
     training_requests = training_requests or []
     favored_departments = favored_departments or {}
     favored_frontdesk_departments = favored_frontdesk_departments or {}
     timeset_requests = timeset_requests or []
+    shift_time_preferences = shift_time_preferences or []
     
     # ============================================================================
     # STEP 1: INITIALIZE THE CONSTRAINT PROGRAMMING MODEL
@@ -145,7 +153,7 @@ def solve_schedule(
 
     if favored_employees_normalized:
         unknown_favored = [
-            name for name in favored_employees_normalized if name not in {emp.lower() for emp in employees}
+            name for name in favored_employees_normalized.keys() if name not in {emp.lower() for emp in employees}
         ]
         if unknown_favored:
             print(
@@ -240,7 +248,8 @@ def solve_schedule(
                 f"Their qualifications are: {', '.join(qual[employee]) or 'none'}"
             )
         
-        validated_favored_emp_depts.append(FavoredEmployeeDepartment(employee=employee, department=role_name))
+        multiplier = getattr(fed, 'multiplier', 1.0) if hasattr(fed, 'multiplier') else 1.0
+        validated_favored_emp_depts.append(FavoredEmployeeDepartment(employee=employee, department=role_name, multiplier=multiplier))
 
     validated_training: List[dict] = []
     for request in training_requests:
@@ -777,6 +786,7 @@ def solve_schedule(
     for fed in validated_favored_emp_depts:
         emp = fed.employee
         dept = fed.department
+        mult = fed.multiplier if fed.multiplier else 1.0
         # Bonus for each slot this employee works in their preferred department
         slots_in_dept = sum(
             assign.get((emp, d, t, dept), 0) 
@@ -784,7 +794,7 @@ def solve_schedule(
             for t in T 
             if (emp, d, t, dept) in assign
         )
-        favored_emp_dept_bonus += FAVORED_EMPLOYEE_DEPT_BONUS * slots_in_dept
+        favored_emp_dept_bonus += int(mult * FAVORED_EMPLOYEE_DEPT_BONUS) * slots_in_dept
     
     total_department_units = sum(department_effective_units.values())
     department_max_units = {
@@ -891,7 +901,9 @@ def solve_schedule(
         # even if it means putting them at front desk (overriding the underclassmen preference)
         year = employee_year.get(e, 2)
         year_multiplier = YEAR_TARGET_MULTIPLIERS.get(year, 1.0)
-        favored_multiplier = FAVOR_TARGET_MULTIPLIER if e.lower() in favored_employees_normalized else 1.0
+        # Use favored employee multiplier if set, with base FAVOR_TARGET_MULTIPLIER
+        emp_lower = e.lower()
+        favored_multiplier = (FAVOR_TARGET_MULTIPLIER * favored_employees_normalized.get(emp_lower, 0)) if emp_lower in favored_employees_normalized else 1.0
         
         # Penalize deviation with graduated weight
         # Upperclassmen deviations are penalized more heavily
@@ -1138,13 +1150,68 @@ def solve_schedule(
             morning_preference_score += morning_workers
     
     # ============================================================================
+    # SHIFT TIME PREFERENCE - Per-employee, per-day morning/afternoon soft nudge
+    # ============================================================================
+    # Allow users to specify soft preferences for when specific employees should work
+    # Morning = 8am-12pm (slots 0-7), Afternoon = 12pm-5pm (slots 8-17)
+    # This is a gentle nudge - won't override hard constraints or availability
+    
+    SHIFT_PREF_BONUS_WEIGHT = 15  # Moderate weight - noticeable but not overwhelming
+    shift_time_pref_score = 0
+    
+    # Build a lookup for preferences: (employee_lower, day) -> 'morning' or 'afternoon'
+    shift_pref_lookup: Dict[tuple, str] = {}
+    employees_lower_lookup = {e.lower(): e for e in employees}
+    day_lookup_lower = {d.lower(): d for d in days}
+    
+    for pref in shift_time_preferences:
+        emp_key = pref.employee.strip().lower()
+        day_key = pref.day.strip().lower()
+        
+        # Skip if employee not found
+        if emp_key not in employees_lower_lookup:
+            continue
+        
+        # Normalize day name
+        if day_key in day_lookup_lower:
+            normalized_day = day_lookup_lower[day_key]
+        elif day_key[:3] in [d.lower()[:3] for d in days]:
+            # Match by prefix (Mon, Tue, etc.)
+            for d in days:
+                if d.lower().startswith(day_key[:3]):
+                    normalized_day = d
+                    break
+        else:
+            continue
+        
+        employee_name = employees_lower_lookup[emp_key]
+        shift_pref_lookup[(employee_name, normalized_day)] = pref.preference
+    
+    # Now calculate bonus for matching preferences
+    morning_time_slots = [t for t in T if t < 8]   # Slots 0-7 = 8am-12pm
+    afternoon_time_slots = [t for t in T if t >= 8]  # Slots 8-17 = 12pm-5pm
+    
+    for (emp, day), pref_type in shift_pref_lookup.items():
+        if pref_type == 'morning':
+            preferred_slots = morning_time_slots
+        else:  # afternoon
+            preferred_slots = afternoon_time_slots
+        
+        # Add bonus for each slot worked in preferred time range
+        for t in preferred_slots:
+            if (emp, day, t) in work:
+                shift_time_pref_score += SHIFT_PREF_BONUS_WEIGHT * work[emp, day, t]
+    
+    # ============================================================================
     # FAVORED HOURS BONUS - Encourage filling favored employees' available time
     # ============================================================================
     favored_hours_bonus = 0
     if favored_employees_normalized:
         for e in employees:
-            if e.lower() in favored_employees_normalized:
-                favored_hours_bonus += sum(work[e, d, t] for d in days for t in T)
+            emp_lower = e.lower()
+            if emp_lower in favored_employees_normalized:
+                mult = favored_employees_normalized[emp_lower]
+                favored_hours_bonus += int(mult * sum(work[e, d, t] for d in days for t in T))
 
     # Massive bonus for meeting explicit --timeset requests (paired with hard constraints)
     timeset_bonus = sum(TIMESET_BONUS_WEIGHT * assign[(e, d, t, r)] for (e, d, t, r) in forced_assignments)
@@ -1182,6 +1249,7 @@ def solve_schedule(
         OBJECTIVE_WEIGHTS.department_scarcity * department_scarcity_penalty +
         OBJECTIVE_WEIGHTS.underclassmen_front_desk * underclassmen_preference_score +
         OBJECTIVE_WEIGHTS.morning_preference * morning_preference_score +
+        shift_time_pref_score +                 # Per-employee shift time preferences (morning/afternoon)
         FAVORED_HOURS_BONUS_WEIGHT * favored_hours_bonus +
         OBJECTIVE_WEIGHTS.department_total * total_department_units +
         timeset_bonus +

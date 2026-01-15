@@ -86,6 +86,13 @@ export interface TimesetRequest {
 export interface FavoredEmployeeDept {
   employee: string;
   department: string;
+  multiplier: number; // Strength of preference (0.5 = half, 1.0 = normal, 2.0 = double)
+}
+
+export interface ShiftTimePreference {
+  employee: string;
+  day: string; // Mon, Tue, Wed, Thu, Fri
+  preference: 'morning' | 'afternoon'; // morning = 8am-12pm, afternoon = 12pm-5pm
 }
 
 export interface SolverRunConfig {
@@ -93,12 +100,13 @@ export interface SolverRunConfig {
   deptPath: string;
   maxSolveSeconds?: number;
   showProgress?: boolean;
-  favoredEmployees?: string[];
+  favoredEmployees?: Record<string, number>; // employee name -> multiplier
   trainingPairs?: TrainingPair[];
   favoredDepartments?: Record<string, number>;
   favoredFrontDeskDepts?: Record<string, number>;
   timesets?: TimesetRequest[];
   favoredEmployeeDepts?: FavoredEmployeeDept[];
+  shiftTimePreferences?: ShiftTimePreference[];
 }
 
 export interface SolverProgress {
@@ -137,12 +145,13 @@ export interface HistoryEntry {
 export interface ConfigSnapshot {
   staff: StaffMember[];
   departments: Department[];
-  favoredEmployees: string[];
+  favoredEmployees: Record<string, number>; // employee name -> multiplier
   trainingPairs: TrainingPair[];
   favoredDepartments: Record<string, number>;
   favoredFrontDeskDepts: Record<string, number>;
   timesets: TimesetRequest[];
   favoredEmployeeDepts: FavoredEmployeeDept[];
+  shiftTimePreferences: ShiftTimePreference[];
   maxSolveSeconds: number;
 }
 
@@ -172,12 +181,13 @@ export interface FlagPreset {
   id: string;
   name: string;
   description?: string;
-  favoredEmployees: string[];
+  favoredEmployees: Record<string, number>; // employee name -> multiplier
   trainingPairs: TrainingPair[];
   favoredDepartments: Record<string, number>;
   favoredFrontDeskDepts: Record<string, number>;
   timesets: TimesetRequest[];
   favoredEmployeeDepts: FavoredEmployeeDept[];
+  shiftTimePreferences: ShiftTimePreference[];
   maxSolveSeconds?: number;
 }
 

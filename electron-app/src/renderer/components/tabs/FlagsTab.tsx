@@ -13,7 +13,7 @@ import {
   useUIStore,
   createConfigSnapshot,
 } from '../../store';
-import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, StaffMember } from '../../../main/ipc-types';
+import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, ShiftTimePreference, StaffMember } from '../../../main/ipc-types';
 import { staffToCsv, departmentsToCsv } from '../../utils/csvValidators';
 
 // Simple UUID generator for browser compatibility
@@ -33,7 +33,7 @@ const TIME_OPTIONS = [
 ];
 
 // Tooltip component with ? icon
-function Tooltip({ text }: { text: string }) {
+function Tooltip({ text }: { text: React.ReactNode }) {
   const [show, setShow] = useState(false);
   
   return (
@@ -69,6 +69,7 @@ export function FlagsTab() {
     favoredFrontDeskDepts, setFavoredFrontDeskDepts,
     favoredEmployeeDepts, addFavoredEmployeeDept, removeFavoredEmployeeDept,
     timesets, addTimeset, removeTimeset,
+    shiftTimePreferences, addShiftTimePreference, removeShiftTimePreference,
     maxSolveSeconds, setMaxSolveSeconds,
     presets, savePreset, applyPreset, deletePreset,
   } = useFlagsStore();
@@ -80,6 +81,7 @@ export function FlagsTab() {
   const { showToast, setActiveTab } = useUIStore();
 
   const [newFavored, setNewFavored] = useState('');
+  const [newFavoredMultiplier, setNewFavoredMultiplier] = useState(1.0);
   const [newPresetName, setNewPresetName] = useState('');
   const [showPresetDialog, setShowPresetDialog] = useState(false);
 
@@ -89,9 +91,10 @@ export function FlagsTab() {
   const canRun = staff.length > 0 && departments.length > 0;
 
   const handleAddFavored = () => {
-    if (newFavored && !favoredEmployees.includes(newFavored)) {
-      addFavoredEmployee(newFavored);
+    if (newFavored && !(newFavored in favoredEmployees)) {
+      addFavoredEmployee(newFavored, newFavoredMultiplier);
       setNewFavored('');
+      setNewFavoredMultiplier(1.0);
     }
   };
 
@@ -108,6 +111,7 @@ export function FlagsTab() {
         favoredFrontDeskDepts,
         favoredEmployeeDepts,
         timesets,
+        shiftTimePreferences,
         maxSolveSeconds,
       };
       
@@ -157,13 +161,14 @@ export function FlagsTab() {
         config: {
           staffPath: staffResult.path,
           deptPath: deptResult.path,
-          maxSolveSeconds: maxSolveSeconds || settings?.solverMaxTime || 180,
+          maxSolveSeconds: maxSolveSeconds || settings?.solverMaxTime || 300,
           favoredEmployees,
           trainingPairs,
           favoredDepartments,
           favoredFrontDeskDepts,
           favoredEmployeeDepts,
           timesets,
+          shiftTimePreferences,
         },
         snapshot,
       });
@@ -278,36 +283,56 @@ export function FlagsTab() {
         <div className="card">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Favored Employees
-            <Tooltip text="Favored employees get higher priority to reach their target hours. The solver will try harder to schedule them close to their goals and allow more flexible shift lengths." />
+            <Tooltip text="Favored employees get higher priority to reach their target hours. Use the strength multiplier to control how strongly the solver favors them: 0.5x = weak, 1x = normal, 2x = strong, 3x = very strong." />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Prioritize specific employees to hit their target hours
           </p>
           
-          <div className="flex gap-2 mb-4">
-            <select
-              value={newFavored}
-              onChange={(e) => setNewFavored(e.target.value)}
-              className="input flex-1"
-            >
-              <option value="">Select employee...</option>
-              {employeeNames.filter(n => !favoredEmployees.includes(n)).map(name => (
-                <option key={name} value={name}>{name}</option>
-              ))}
-            </select>
+          <div className="flex gap-2 mb-4 items-end">
+            <div className="flex-1">
+              <select
+                value={newFavored}
+                onChange={(e) => setNewFavored(e.target.value)}
+                className="input w-full"
+              >
+                <option value="">Select employee...</option>
+                {employeeNames.filter(n => !(n in favoredEmployees)).map(name => (
+                  <option key={name} value={name}>{name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="w-36 sm:w-40 flex-shrink-0">
+              <div className="flex items-center gap-1 mb-1">
+                <label className="text-xs text-surface-400">Strength</label>
+                <MultiplierTooltip />
+              </div>
+              <select 
+                value={newFavoredMultiplier} 
+                onChange={(e) => setNewFavoredMultiplier(parseFloat(e.target.value))} 
+                className="input w-full"
+              >
+                <option value={0.5}>0.5x Weak</option>
+                <option value={1.0}>1.0x Normal</option>
+                <option value={1.5}>1.5x Medium</option>
+                <option value={2.0}>2.0x Strong</option>
+                <option value={3.0}>3.0x Very Strong</option>
+              </select>
+            </div>
             <button 
               onClick={handleAddFavored}
               disabled={!newFavored}
-              className="btn-secondary"
+              className="btn-secondary flex-shrink-0"
             >
               Add
             </button>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            {favoredEmployees.map(emp => (
+            {Object.entries(favoredEmployees).map(([emp, mult]) => (
               <span key={emp} className="badge-success flex items-center gap-1">
                 {emp}
+                {mult !== 1 && <span className="text-warning-400">({mult}x)</span>}
                 <button 
                   onClick={() => removeFavoredEmployee(emp)}
                   className="hover:text-danger-400"
@@ -319,7 +344,7 @@ export function FlagsTab() {
                 </button>
               </span>
             ))}
-            {favoredEmployees.length === 0 && (
+            {Object.keys(favoredEmployees).length === 0 && (
               <span className="text-sm text-surface-500">No favored employees</span>
             )}
           </div>
@@ -329,7 +354,7 @@ export function FlagsTab() {
         <div className="card">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Solver Time Limit
-            <Tooltip text="The maximum time the optimizer will spend searching for the best schedule. Longer times may find better solutions but take longer. 2-3 minutes is usually sufficient for most schedules." />
+            <Tooltip text={<>The maximum time the optimizer will spend searching for the best schedule. Longer times may find better solutions but take longer. <span className="text-accent-400 font-medium">4-6 minutes</span> is recommended for most schedules.</>} />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Maximum time the optimizer will search for solutions
@@ -354,7 +379,7 @@ export function FlagsTab() {
         </div>
 
         {/* Training Pairs */}
-        <div className="card">
+        <div className="card lg:col-span-2">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Training Pairs
             <Tooltip text="Pairs two employees to work in the same department at overlapping times. Useful for training new employees by scheduling them alongside experienced staff." />
@@ -366,6 +391,7 @@ export function FlagsTab() {
           <TrainingPairForm 
             departments={departmentNames}
             employees={employeeNames}
+            staff={staff}
             onAdd={addTrainingPair}
           />
 
@@ -393,7 +419,7 @@ export function FlagsTab() {
         <div className="card">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Favor Departments for Front Desk
-            <Tooltip text="When filling front desk shifts, prioritize employees from these departments. Useful when you want specific teams to handle front desk coverage. Department members must be qualified for front_desk." />
+            <Tooltip text="When filling front desk shifts, prioritize employees from these departments. Use the strength multiplier to control priority when multiple departments are favored. Department members must be qualified for front_desk." />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Prioritize members of these departments to cover front desk shifts.
@@ -401,25 +427,48 @@ export function FlagsTab() {
           </p>
           
           <div className="space-y-2">
-            {departmentNames.map(dept => (
-              <label key={dept} className="flex items-center gap-3 cursor-pointer hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={dept in favoredFrontDeskDepts}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: 1.0 });
-                    } else {
-                      const { [dept]: _removed, ...rest } = favoredFrontDeskDepts;
-                      void _removed;
-                      setFavoredFrontDeskDepts(rest);
-                    }
-                  }}
-                  className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-accent-500 focus:ring-accent-500"
-                />
-                <span className="text-sm text-surface-200">{dept}</span>
-              </label>
-            ))}
+            {departmentNames.map(dept => {
+              const isChecked = dept in favoredFrontDeskDepts;
+              const mult = favoredFrontDeskDepts[dept] ?? 1.0;
+              return (
+                <div key={dept} className="flex items-center gap-3 hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: 1.0 });
+                      } else {
+                        const { [dept]: _removed, ...rest } = favoredFrontDeskDepts;
+                        void _removed;
+                        setFavoredFrontDeskDepts(rest);
+                      }
+                    }}
+                    className="checkbox-dark"
+                  />
+                  <span className="text-sm text-surface-200 flex-1">{dept}</span>
+                  {isChecked && (
+                    <select
+                      value={mult}
+                      onChange={(e) => {
+                        setFavoredFrontDeskDepts({ 
+                          ...favoredFrontDeskDepts, 
+                          [dept]: parseFloat(e.target.value) 
+                        });
+                      }}
+                      className="input py-1 px-2 text-sm w-32 sm:w-36"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <option value={0.5}>0.5x Weak</option>
+                      <option value={1.0}>1.0x Normal</option>
+                      <option value={1.5}>1.5x Medium</option>
+                      <option value={2.0}>2.0x Strong</option>
+                      <option value={3.0}>3.0x Very Strong</option>
+                    </select>
+                  )}
+                </div>
+              );
+            })}
             {departmentNames.length === 0 && (
               <span className="text-sm text-surface-500">No departments loaded</span>
             )}
@@ -430,32 +479,55 @@ export function FlagsTab() {
         <div className="card">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Department Hour Priority
-            <Tooltip text="Increases the priority for these departments to meet their target hours. Selected departments will get bonus points for focused work time and penalty reduction when near target." />
+            <Tooltip text="Increases the priority for these departments to meet their target hours. Use the strength multiplier to control how aggressively the solver targets these departments. Selected departments will get bonus points for focused work time." />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Boost focused hours and target adherence for specific departments
           </p>
           
           <div className="space-y-2">
-            {departmentNames.map(dept => (
-              <label key={dept} className="flex items-center gap-3 cursor-pointer hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
-                <input
-                  type="checkbox"
-                  checked={dept in favoredDepartments}
-                  onChange={(e) => {
-                    if (e.target.checked) {
-                      setFavoredDepartments({ ...favoredDepartments, [dept]: 1.0 });
-                    } else {
-                      const { [dept]: _removed, ...rest } = favoredDepartments;
-                      void _removed;
-                      setFavoredDepartments(rest);
-                    }
-                  }}
-                  className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-accent-500 focus:ring-accent-500"
-                />
-                <span className="text-sm text-surface-200">{dept}</span>
-              </label>
-            ))}
+            {departmentNames.map(dept => {
+              const isChecked = dept in favoredDepartments;
+              const mult = favoredDepartments[dept] ?? 1.0;
+              return (
+                <div key={dept} className="flex items-center gap-3 hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
+                  <input
+                    type="checkbox"
+                    checked={isChecked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setFavoredDepartments({ ...favoredDepartments, [dept]: 1.0 });
+                      } else {
+                        const { [dept]: _removed, ...rest } = favoredDepartments;
+                        void _removed;
+                        setFavoredDepartments(rest);
+                      }
+                    }}
+                    className="checkbox-dark"
+                  />
+                  <span className="text-sm text-surface-200 flex-1">{dept}</span>
+                  {isChecked && (
+                    <select
+                      value={mult}
+                      onChange={(e) => {
+                        setFavoredDepartments({ 
+                          ...favoredDepartments, 
+                          [dept]: parseFloat(e.target.value) 
+                        });
+                      }}
+                      className="input py-1 px-2 text-sm w-32 sm:w-36"
+                      onClick={(e) => e.stopPropagation()}
+                    >
+                      <option value={0.5}>0.5x Weak</option>
+                      <option value={1.0}>1.0x Normal</option>
+                      <option value={1.5}>1.5x Medium</option>
+                      <option value={2.0}>2.0x Strong</option>
+                      <option value={3.0}>3.0x Very Strong</option>
+                    </select>
+                  )}
+                </div>
+              );
+            })}
             {departmentNames.length === 0 && (
               <span className="text-sm text-surface-500">No departments loaded</span>
             )}
@@ -466,7 +538,7 @@ export function FlagsTab() {
         <div className="card lg:col-span-2">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Favor Employee for Department
-            <Tooltip text="Adds a soft preference for an employee to work in a specific department or front desk. This is a suggestion, not a requirement. The employee must be qualified for the role. Adjust the weight in Settings." />
+            <Tooltip text="Adds a soft preference for an employee to work in a specific department or front desk. Use the multiplier to control strength: 0.5x = weak preference, 1x = normal, 2x = strong, 3x = very strong. The employee must be qualified for the role." />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Softly prefer assigning specific employees to specific departments or front desk.
@@ -487,6 +559,9 @@ export function FlagsTab() {
                   <span className="font-medium text-surface-200">{fed.employee}</span>
                   <span className="text-surface-400"> → </span>
                   <span className="text-accent-400">{fed.department}</span>
+                  {fed.multiplier && fed.multiplier !== 1 && (
+                    <span className="text-warning-400 ml-1">({fed.multiplier}x)</span>
+                  )}
                 </span>
                 <button 
                   onClick={() => removeFavoredEmployeeDept(i)}
@@ -543,6 +618,50 @@ export function FlagsTab() {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Shift Time Preferences */}
+        <div className="card lg:col-span-2">
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Shift Time Preferences
+            <Tooltip text="Softly nudge specific employees toward morning (8am-12pm) or afternoon (12pm-5pm) shifts on certain days. This is a gentle preference that won't override hard constraints or availability." />
+          </h3>
+          <p className="text-sm text-surface-400 mb-4">
+            Set soft preferences for when employees should work on specific days
+          </p>
+          
+          <ShiftTimePreferenceForm
+            employees={employeeNames}
+            onAdd={addShiftTimePreference}
+          />
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
+            {shiftTimePreferences.map((pref, i) => (
+              <div key={i} className="flex items-center justify-between bg-surface-800 rounded-lg px-3 py-2">
+                <span className="text-sm">
+                  <span className="font-medium text-surface-200">{pref.employee}</span>
+                  <span className="text-surface-400"> on </span>
+                  <span className="text-accent-400">{pref.day}</span>
+                  <span className="text-surface-400"> → </span>
+                  <span className={pref.preference === 'morning' ? 'text-warning-400' : 'text-blue-400'}>
+                    {pref.preference === 'morning' ? 'Morning' : 'Afternoon'}
+                  </span>
+                </span>
+                <button 
+                  onClick={() => removeShiftTimePreference(i)}
+                  className="text-surface-400 hover:text-danger-400 ml-2"
+                  aria-label={`Remove ${pref.employee} ${pref.day} preference`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {shiftTimePreferences.length === 0 && (
+              <span className="text-sm text-surface-500">No shift time preferences set</span>
+            )}
           </div>
         </div>
       </div>
@@ -625,15 +744,37 @@ function PresetDialog({
 function TrainingPairForm({ 
   departments, 
   employees, 
+  staff,
   onAdd 
 }: { 
   departments: string[]; 
   employees: string[]; 
+  staff: StaffMember[];
   onAdd: (pair: TrainingPair) => void;
 }) {
   const [dept, setDept] = useState('');
   const [trainee1, setTrainee1] = useState('');
   const [trainee2, setTrainee2] = useState('');
+
+  // Filter employees who are qualified for the selected department
+  const qualifiedEmployees = useMemo(() => {
+    if (!dept) return [];
+    return employees.filter(empName => {
+      const staffMember = staff.find(s => s.name === empName);
+      if (!staffMember) return false;
+      // Check if employee has this department in their roles
+      return staffMember.roles.some(role => 
+        role.toLowerCase().replace(/\s+/g, '_') === dept.toLowerCase().replace(/\s+/g, '_')
+      );
+    });
+  }, [dept, employees, staff]);
+
+  const handleDeptChange = (newDept: string) => {
+    setDept(newDept);
+    // Reset trainees when department changes
+    setTrainee1('');
+    setTrainee2('');
+  };
 
   const handleAdd = () => {
     if (dept && trainee1 && trainee2 && trainee1 !== trainee2) {
@@ -645,23 +786,33 @@ function TrainingPairForm({
   };
 
   return (
-    <div className="flex gap-2">
-      <select value={dept} onChange={(e) => setDept(e.target.value)} className="input flex-1 min-w-0">
+    <div className="flex flex-wrap sm:flex-nowrap gap-2">
+      <select value={dept} onChange={(e) => handleDeptChange(e.target.value)} className="input w-full sm:w-40">
         <option value="">Department</option>
         {departments.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
-      <select value={trainee1} onChange={(e) => setTrainee1(e.target.value)} className="input flex-1 min-w-0">
-        <option value="">Trainee 1</option>
-        {employees.map(e => <option key={e} value={e}>{e}</option>)}
+      <select 
+        value={trainee1} 
+        onChange={(e) => setTrainee1(e.target.value)} 
+        className="input w-[calc(50%-0.25rem)] sm:w-36"
+        disabled={!dept}
+      >
+        <option value="">Person 1</option>
+        {qualifiedEmployees.map(e => <option key={e} value={e}>{e}</option>)}
       </select>
-      <select value={trainee2} onChange={(e) => setTrainee2(e.target.value)} className="input flex-1 min-w-0">
-        <option value="">Trainee 2</option>
-        {employees.filter(e => e !== trainee1).map(e => <option key={e} value={e}>{e}</option>)}
+      <select 
+        value={trainee2} 
+        onChange={(e) => setTrainee2(e.target.value)} 
+        className="input w-[calc(50%-0.25rem)] sm:w-36"
+        disabled={!dept}
+      >
+        <option value="">Person 2</option>
+        {qualifiedEmployees.filter(e => e !== trainee1).map(e => <option key={e} value={e}>{e}</option>)}
       </select>
       <button 
         onClick={handleAdd} 
         disabled={!dept || !trainee1 || !trainee2}
-        className="btn-secondary flex-shrink-0 px-3"
+        className="btn-secondary flex-shrink-0 px-3 w-full sm:w-auto"
       >
         +
       </button>
@@ -729,6 +880,100 @@ function TimesetForm({
   );
 }
 
+// Shift Time Preference Form Component
+function ShiftTimePreferenceForm({
+  employees,
+  onAdd,
+}: {
+  employees: string[];
+  onAdd: (pref: ShiftTimePreference) => void;
+}) {
+  const [employee, setEmployee] = useState('');
+  const [day, setDay] = useState('');
+  const [preference, setPreference] = useState<'morning' | 'afternoon'>('morning');
+
+  const handleAdd = () => {
+    if (employee && day) {
+      onAdd({ employee, day, preference });
+      setEmployee('');
+      setDay('');
+      setPreference('morning');
+    }
+  };
+
+  return (
+    <div className="flex flex-wrap sm:flex-nowrap gap-2">
+      <select 
+        value={employee} 
+        onChange={(e) => setEmployee(e.target.value)} 
+        className="input w-full sm:flex-1"
+      >
+        <option value="">Employee</option>
+        {employees.map(e => <option key={e} value={e}>{e}</option>)}
+      </select>
+      <select 
+        value={day} 
+        onChange={(e) => setDay(e.target.value)} 
+        className="input w-[calc(50%-0.25rem)] sm:w-36"
+      >
+        <option value="">Day</option>
+        {DAY_NAMES.map(d => <option key={d} value={d}>{d}</option>)}
+      </select>
+      <select 
+        value={preference} 
+        onChange={(e) => setPreference(e.target.value as 'morning' | 'afternoon')} 
+        className="input w-[calc(50%-0.25rem)] sm:w-56"
+      >
+        <option value="morning">Morning (8-12)</option>
+        <option value="afternoon">Afternoon (12-5)</option>
+      </select>
+      <button 
+        onClick={handleAdd}
+        disabled={!employee || !day}
+        className="btn-secondary flex-shrink-0 px-4 w-full sm:w-auto"
+      >
+        Add
+      </button>
+    </div>
+  );
+}
+
+// Multiplier tooltip for the form
+function MultiplierTooltip() {
+  const [show, setShow] = useState(false);
+  
+  return (
+    <span className="relative inline-flex items-center">
+      <button
+        type="button"
+        onMouseEnter={() => setShow(true)}
+        onMouseLeave={() => setShow(false)}
+        onFocus={() => setShow(true)}
+        onBlur={() => setShow(false)}
+        className="w-4 h-4 rounded-full bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-300 flex items-center justify-center text-xs font-medium transition-colors"
+        aria-label="Multiplier explanation"
+      >
+        ?
+      </button>
+      {show && (
+        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-56 text-left">
+          <strong className="text-accent-400">Multiplier Strength:</strong>
+          <ul className="mt-1 space-y-0.5">
+            <li><span className="text-surface-400">0.5x</span> - Weak preference</li>
+            <li><span className="text-surface-400">1.0x</span> - Normal (default)</li>
+            <li><span className="text-surface-400">2.0x</span> - Strong preference</li>
+            <li><span className="text-surface-400">3.0x</span> - Very strong</li>
+          </ul>
+          <p className="mt-1.5 text-surface-400">Higher = solver tries harder to assign this employee to this role.</p>
+          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
+            <div className="border-4 border-transparent border-t-surface-800" />
+          </div>
+        </div>
+      )}
+    </span>
+  );
+}
+
 // Favored Employee-Department Form Component
 function FavoredEmployeeDeptForm({
   employees,
@@ -743,6 +988,7 @@ function FavoredEmployeeDeptForm({
 }) {
   const [employee, setEmployee] = useState('');
   const [department, setDepartment] = useState('');
+  const [multiplier, setMultiplier] = useState(1.0);
 
   // Get departments + front_desk the selected employee is qualified for
   const qualifiedRoles = useMemo(() => {
@@ -773,31 +1019,53 @@ function FavoredEmployeeDeptForm({
 
   const handleAdd = () => {
     if (employee && department) {
-      onAdd({ employee, department });
+      onAdd({ employee, department, multiplier });
       setEmployee('');
       setDepartment('');
+      setMultiplier(1.0);
     }
   };
 
   return (
-    <div className="flex gap-2">
-      <select value={employee} onChange={(e) => { setEmployee(e.target.value); setDepartment(''); }} className="input flex-1">
-        <option value="">Select employee...</option>
-        {employees.map(e => <option key={e} value={e}>{e}</option>)}
-      </select>
-      <select 
-        value={department} 
-        onChange={(e) => setDepartment(e.target.value)} 
-        className="input flex-1"
-        disabled={!employee}
-      >
-        <option value="">{employee ? 'Select role...' : 'Select employee first'}</option>
-        {qualifiedRoles.map(d => (
-          <option key={d} value={d}>
-            {d === 'front_desk' ? '🖥️ Front Desk' : d}
-          </option>
-        ))}
-      </select>
+    <div className="flex gap-2 items-end">
+      <div className="flex-1">
+        <select value={employee} onChange={(e) => { setEmployee(e.target.value); setDepartment(''); }} className="input w-full">
+          <option value="">Select employee...</option>
+          {employees.map(e => <option key={e} value={e}>{e}</option>)}
+        </select>
+      </div>
+      <div className="flex-1">
+        <select 
+          value={department} 
+          onChange={(e) => setDepartment(e.target.value)} 
+          className="input w-full"
+          disabled={!employee}
+        >
+          <option value="">{employee ? 'Select role...' : 'Select employee first'}</option>
+          {qualifiedRoles.map(d => (
+            <option key={d} value={d}>
+              {d === 'front_desk' ? '🖥️ Front Desk' : d}
+            </option>
+          ))}
+        </select>
+      </div>
+      <div className="w-36 sm:w-40 flex-shrink-0">
+        <div className="flex items-center gap-1 mb-1">
+          <label className="text-xs text-surface-400">Strength</label>
+          <MultiplierTooltip />
+        </div>
+        <select 
+          value={multiplier} 
+          onChange={(e) => setMultiplier(parseFloat(e.target.value))} 
+          className="input w-full"
+        >
+          <option value={0.5}>0.5x Weak</option>
+          <option value={1.0}>1.0x Normal</option>
+          <option value={1.5}>1.5x Medium</option>
+          <option value={2.0}>2.0x Strong</option>
+          <option value={3.0}>3.0x Very Strong</option>
+        </select>
+      </div>
       <button 
         onClick={handleAdd}
         disabled={!employee || !department}
