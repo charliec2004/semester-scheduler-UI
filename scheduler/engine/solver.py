@@ -1211,7 +1211,10 @@ def solve_schedule(
             emp_lower = e.lower()
             if emp_lower in favored_employees_normalized:
                 mult = favored_employees_normalized[emp_lower]
-                favored_hours_bonus += int(mult * sum(work[e, d, t] for d in days for t in T))
+                # Scale multiplier by 10 to preserve fractional precision (1.5 -> 15)
+                # OR-Tools requires integer coefficients
+                weight = int(mult * 10)
+                favored_hours_bonus += weight * sum(work[e, d, t] for d in days for t in T)
 
     # Massive bonus for meeting explicit --timeset requests (paired with hard constraints)
     timeset_bonus = sum(TIMESET_BONUS_WEIGHT * assign[(e, d, t, r)] for (e, d, t, r) in forced_assignments)
