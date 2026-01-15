@@ -315,6 +315,16 @@ h1 {
   user-select: all;
 }
 
+.platform-note code.terminal-cmd {
+  display: block;
+  background: #1a1a2e;
+  border: 1px solid var(--accent);
+  padding: var(--space-sm);
+  font-size: 0.75rem;
+  margin: var(--space-sm) 0;
+  color: #4ade80;
+}
+
 /* Installation Steps */
 .install-steps {
   list-style: decimal;

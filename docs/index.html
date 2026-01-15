@@ -56,19 +56,10 @@
             </div>
           </details>
           <div class="platform-note">
-            <strong>⚠️ First Launch (Unsigned App):</strong>
-            <ol class="install-steps">
-              <li>Open the DMG and drag <em>Scheduler</em> to Applications</li>
-              <li>Open <strong>Finder → Applications</strong></li>
-              <li><strong>Right-click</strong> (or Control-click) on Scheduler → click <strong>Open</strong></li>
-              <li>In the dialog, click <strong>Open</strong> again</li>
-            </ol>
-            <details class="terminal-fallback">
-              <summary>Still seeing "damaged" or no Open option?</summary>
-              <p>Open Terminal and run:</p>
-              <code>xattr -cr /Applications/Scheduler.app</code>
-              <p>Then open the app normally.</p>
-            </details>
+            <strong>⚠️ Required: Remove Quarantine Flag</strong>
+            <p>macOS blocks unsigned apps downloaded from the internet. After installing, open <strong>Terminal</strong> and run:</p>
+            <code class="terminal-cmd">xattr -cr /Applications/Scheduler.app</code>
+            <p>Then open the app normally from Applications.</p>
           </div>
         </article>
 
