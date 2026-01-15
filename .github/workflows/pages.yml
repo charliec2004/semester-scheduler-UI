@@ -16,7 +16,38 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # Check if ONLY docs changed (skip if other files also changed)
+  check-docs-only:
+    runs-on: ubuntu-latest
+    outputs:
+      docs_only: ${{ steps.filter.outputs.docs_only }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      
+      - name: Check changed files
+        id: filter
+        run: |
+          # Get list of changed files
+          CHANGED_FILES=$(git diff --name-only HEAD~1 HEAD 2>/dev/null || echo "docs/")
+          echo "Changed files: $CHANGED_FILES"
+          
+          # Check if all changed files are in docs/
+          NON_DOCS=$(echo "$CHANGED_FILES" | grep -v "^docs/" || true)
+          
+          if [ -z "$NON_DOCS" ]; then
+            echo "docs_only=true" >> $GITHUB_OUTPUT
+            echo "Only docs changed - will deploy"
+          else
+            echo "docs_only=false" >> $GITHUB_OUTPUT
+            echo "Non-docs files also changed - skipping (release workflow will handle)"
+          fi
+
   deploy:
+    needs: check-docs-only
+    # Only deploy if ONLY docs changed, OR if manually triggered
+    if: needs.check-docs-only.outputs.docs_only == 'true' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     permissions:
       contents: read
