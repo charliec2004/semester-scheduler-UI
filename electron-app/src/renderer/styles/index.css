@@ -296,6 +296,11 @@
   .stagger-5 { animation-delay: 250ms; }
 }
 
+/* Scrollbar gutter - prevents layout shift when scrollbar appears/disappears */
+.scrollbar-gutter-stable {
+  scrollbar-gutter: stable;
+}
+
 /* Font size variants for accessibility */
 .font-size-small {
   font-size: 0.875rem;

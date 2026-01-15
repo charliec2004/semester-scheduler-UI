@@ -256,19 +256,19 @@ export function FlagsTab() {
           <h3 className="font-semibold text-surface-200 mb-4">Saved Presets</h3>
           <div className="flex flex-wrap gap-2">
             {presets.map(preset => (
-              <div key={preset.id} className="flex items-center gap-1 bg-surface-800 rounded-lg">
+              <div key={preset.id} className="flex items-stretch bg-surface-800 rounded-lg">
                 <button
                   onClick={() => applyPreset(preset)}
-                  className="px-3 py-1.5 text-sm hover:bg-surface-700 rounded-l-lg transition-colors"
+                  className="px-3 py-1.5 text-sm hover:bg-surface-700/50 transition-colors rounded-l-lg"
                 >
                   {preset.name}
                 </button>
                 <button
                   onClick={() => deletePreset(preset.id)}
-                  className="p-1.5 text-surface-400 hover:text-danger-400 hover:bg-surface-700 rounded-r-lg transition-colors"
+                  className="px-2 flex items-center text-surface-400 hover:text-danger-400 hover:bg-danger-500/20 transition-colors rounded-r-lg"
                   aria-label={`Delete preset ${preset.name}`}
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
                   </svg>
                 </button>
@@ -714,6 +714,12 @@ function PresetDialog({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [onClose]);
 
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter' && value.trim()) {
+      onSave();
+    }
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center">
       <div className="absolute inset-0 bg-surface-950/80" onClick={onClose} />
@@ -723,6 +729,7 @@ function PresetDialog({
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
+          onKeyDown={handleKeyDown}
           placeholder="Preset name..."
           className="input mb-4"
           autoFocus
