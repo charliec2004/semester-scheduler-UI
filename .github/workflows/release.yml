@@ -217,8 +217,9 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-  # Deploy download page to GitHub Pages (runs in parallel with release)
+  # Deploy download page to GitHub Pages (after release is complete)
   deploy-pages:
+    needs: release
     runs-on: ubuntu-latest
     permissions:
       contents: read
