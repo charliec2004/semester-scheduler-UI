@@ -142,13 +142,9 @@ async function checkPythonAvailability(): Promise<{ available: boolean; error?: 
       env: { ...process.env },
     });
     
-    let _versionOutput = '';
-    checkProcess.stdout?.on('data', (data: Buffer) => {
-      _versionOutput += data.toString();
-    });
-    checkProcess.stderr?.on('data', (data: Buffer) => {
-      _versionOutput += data.toString();
-    });
+    // Consume stdout/stderr to prevent buffer overflow
+    checkProcess.stdout?.on('data', () => {});
+    checkProcess.stderr?.on('data', () => {});
     
     checkProcess.on('error', (err: NodeJS.ErrnoException) => {
       if (err.code === 'ENOENT') {
@@ -182,10 +178,8 @@ async function checkPythonAvailability(): Promise<{ available: boolean; error?: 
           env: { ...process.env },
         });
         
-        let _packageError = '';
-        checkPackages.stderr?.on('data', (data: Buffer) => {
-          _packageError += data.toString();
-        });
+        // Consume stderr to prevent buffer overflow
+        checkPackages.stderr?.on('data', () => {});
         
         checkPackages.on('close', (pkgCode: number | null) => {
           if (pkgCode === 0) {

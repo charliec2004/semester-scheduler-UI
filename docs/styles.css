@@ -290,7 +290,7 @@ h1 {
 
 @media (min-width: 1200px) {
   .platform-desc {
-    font-size: 0.875rem;
+  font-size: 0.875rem;
     margin-bottom: 1rem;
   }
 }

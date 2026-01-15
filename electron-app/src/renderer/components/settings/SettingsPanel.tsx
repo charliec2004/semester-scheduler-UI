@@ -62,7 +62,7 @@ export function SettingsPanel() {
   // Listen for update status changes
   useEffect(() => {
     const unsubscribe = window.electronAPI.updater.onStatusChange(setUpdateStatus);
-    return () => unsubscribe();
+    return () => { unsubscribe(); };
   }, []);
 
   useEffect(() => {
@@ -541,12 +541,12 @@ export function SettingsPanel() {
                   {isMac ? (
                     <p className="text-xs text-surface-400 mb-3">
                       This will download the installer to your Downloads folder and open it. 
-                      You'll need to drag the app to Applications to replace the old version, 
-                      then run a quick Terminal command to allow it to open (since the app isn't code-signed).
+                      You&apos;ll need to drag the app to Applications to replace the old version, 
+                      then run a quick Terminal command to allow it to open (since the app is not code-signed).
                     </p>
                   ) : (
                     <p className="text-xs text-surface-400 mb-3">
-                      The update will download in the background. Once complete, click "Restart and Install" 
+                      The update will download in the background. Once complete, click &quot;Restart and Install&quot; 
                       to automatically update and relaunch the app.
                     </p>
                   )}
@@ -613,10 +613,31 @@ export function SettingsPanel() {
               
               {updateStatus.state === 'not-available' && (
                 <p className="text-xs text-surface-500 text-center">
-                  You're on the latest version
+                  You&apos;re on the latest version
                 </p>
               )}
             </div>
+          </section>
+
+          {/* Feedback */}
+          <section>
+            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+              Feedback
+            </h3>
+            <a
+              href="https://github.com/charliec2004/semester-scheduler-UI/issues"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="btn-ghost w-full border border-surface-700 text-surface-300 hover:text-surface-100"
+            >
+              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+              </svg>
+              Report a Bug
+            </a>
+            <p className="text-xs text-surface-500 mt-2 text-center">
+              View or report issues on GitHub
+            </p>
           </section>
 
           {/* Version Info */}
