@@ -117,8 +117,11 @@ deb:
 appImage:
   license: ../LICENSE
 
-# Publish configuration (disabled for local builds)
-publish: null
+# Publish configuration - GitHub Releases for auto-updates
+publish:
+  provider: github
+  owner: charliec2004
+  repo: semester-scheduler-UI
 
 # Compression
 compression: maximum

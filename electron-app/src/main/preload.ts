@@ -17,6 +17,16 @@ import type {
   Department,
 } from './ipc-types';
 
+// Update status type (mirrors updater.ts)
+type UpdateStatus = 
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available'; version: string; releaseNotes?: string }
+  | { state: 'not-available' }
+  | { state: 'downloading'; percent: number }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; message: string };
+
 // Type-safe API exposed to renderer
 const electronAPI = {
   // ---------------------------------------------------------------------------
@@ -132,6 +142,23 @@ const electronAPI = {
   app: {
     getVersion: () => ipcRenderer.invoke('app:getVersion') as Promise<string>,
     getPaths: () => ipcRenderer.invoke('app:getPaths') as Promise<{ userData: string; temp: string; logs: string; history: string }>,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Updater
+  // ---------------------------------------------------------------------------
+  updater: {
+    checkForUpdates: () => ipcRenderer.invoke('updater:checkForUpdates') as Promise<UpdateStatus>,
+    downloadAndInstall: () => ipcRenderer.invoke('updater:downloadAndInstall') as Promise<{ success: boolean }>,
+    quitAndInstall: () => ipcRenderer.invoke('updater:quitAndInstall') as Promise<void>,
+    getStatus: () => ipcRenderer.invoke('updater:getStatus') as Promise<UpdateStatus>,
+    
+    // Event listener for status updates
+    onStatusChange: (callback: (status: UpdateStatus) => void) => {
+      const handler = (_event: IpcRendererEvent, status: UpdateStatus) => callback(status);
+      ipcRenderer.on('updater:status', handler);
+      return () => ipcRenderer.removeListener('updater:status', handler);
+    },
   },
 };
 

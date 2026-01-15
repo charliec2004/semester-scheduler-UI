@@ -36,16 +36,32 @@ function Tooltip({ text }: { text: string }) {
   );
 }
 
+type UpdateStatus = 
+  | { state: 'idle' }
+  | { state: 'checking' }
+  | { state: 'available'; version: string; releaseNotes?: string }
+  | { state: 'not-available' }
+  | { state: 'downloading'; percent: number }
+  | { state: 'downloaded'; version: string }
+  | { state: 'error'; message: string };
+
 export function SettingsPanel() {
   const { settings, saveSettings, resetSettings } = useSettingsStore();
   const { setShowSettings, showToast } = useUIStore();
   const [localSettings, setLocalSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('');
+  const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
 
   // Fetch app version from Electron (reads from package.json)
   useEffect(() => {
     window.electronAPI.app.getVersion().then(setAppVersion).catch(() => setAppVersion('unknown'));
+  }, []);
+
+  // Listen for update status changes
+  useEffect(() => {
+    const unsubscribe = window.electronAPI.updater.onStatusChange(setUpdateStatus);
+    return () => unsubscribe();
   }, []);
 
   useEffect(() => {
@@ -127,6 +143,36 @@ export function SettingsPanel() {
     if (localSettings) {
       setLocalSettings({ ...localSettings, [key]: value });
     }
+  };
+
+  const handleCheckForUpdates = async () => {
+    try {
+      const status = await window.electronAPI.updater.checkForUpdates();
+      
+      if (status.state === 'available') {
+        showToast(`Update available: v${status.version}`, 'success');
+      } else if (status.state === 'not-available') {
+        showToast('You are running the latest version', 'success');
+      } else if (status.state === 'error') {
+        showToast(`Update check failed: ${status.message}`, 'error');
+      }
+    } catch (err) {
+      console.error('Update check failed:', err);
+      showToast('Failed to check for updates', 'error');
+    }
+  };
+
+  const handleDownloadUpdate = async () => {
+    try {
+      await window.electronAPI.updater.downloadAndInstall();
+    } catch (err) {
+      console.error('Download failed:', err);
+      showToast('Failed to download update', 'error');
+    }
+  };
+
+  const handleInstallUpdate = () => {
+    window.electronAPI.updater.quitAndInstall();
   };
 
   // Lock main content scroll when modal is open
@@ -456,6 +502,94 @@ export function SettingsPanel() {
                 </svg>
                 Clear All Data
               </button>
+            </div>
+          </section>
+
+          {/* Updates */}
+          <section>
+            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+              Updates
+            </h3>
+            <div className="space-y-3">
+              {/* Status display */}
+              {updateStatus.state === 'checking' && (
+                <div className="flex items-center gap-2 text-sm text-surface-400">
+                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                  </svg>
+                  Checking for updates...
+                </div>
+              )}
+              
+              {updateStatus.state === 'downloading' && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-surface-400">Downloading update...</span>
+                    <span className="text-surface-300">{Math.round(updateStatus.percent)}%</span>
+                  </div>
+                  <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
+                    <div 
+                      className="h-full bg-accent-500 transition-all duration-300"
+                      style={{ width: `${updateStatus.percent}%` }}
+                    />
+                  </div>
+                </div>
+              )}
+              
+              {updateStatus.state === 'available' && (
+                <div className="p-3 bg-accent-900/20 border border-accent-700/50 rounded-lg">
+                  <p className="text-sm text-accent-300 font-medium mb-2">
+                    Version {updateStatus.version} available!
+                  </p>
+                  <button
+                    onClick={handleDownloadUpdate}
+                    className="btn-primary w-full text-sm"
+                  >
+                    Download Update
+                  </button>
+                </div>
+              )}
+              
+              {updateStatus.state === 'downloaded' && (
+                <div className="p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
+                  <p className="text-sm text-green-300 font-medium mb-2">
+                    Version {updateStatus.version} ready to install
+                  </p>
+                  <button
+                    onClick={handleInstallUpdate}
+                    className="btn-primary w-full text-sm bg-green-600 hover:bg-green-500"
+                  >
+                    Restart and Install
+                  </button>
+                </div>
+              )}
+              
+              {updateStatus.state === 'error' && (
+                <div className="p-3 bg-red-900/20 border border-red-700/50 rounded-lg">
+                  <p className="text-sm text-red-400">
+                    {updateStatus.message}
+                  </p>
+                </div>
+              )}
+              
+              {(updateStatus.state === 'idle' || updateStatus.state === 'not-available') && (
+                <button
+                  onClick={handleCheckForUpdates}
+                  className="btn-ghost w-full border border-surface-700"
+                >
+                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                  </svg>
+                  Check for Updates
+                </button>
+              )}
+              
+              {updateStatus.state === 'not-available' && (
+                <p className="text-xs text-surface-500 text-center">
+                  You're on the latest version
+                </p>
+              )}
             </div>
           </section>
 

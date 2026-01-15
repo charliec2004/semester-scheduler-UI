@@ -4,7 +4,7 @@
  * All operations run fully locally - no network required.
  */
 
-import { app, BrowserWindow, ipcMain, dialog, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import path from 'path';
 
 // Set app name for dock/taskbar (especially needed in dev mode)
@@ -23,6 +23,13 @@ import type {
   StaffMember,
   Department,
 } from './ipc-types';
+import {
+  initUpdater,
+  checkForUpdates,
+  downloadAndInstallUpdate,
+  quitAndInstall,
+  getUpdateStatus,
+} from './updater';
 
 const MAX_HISTORY_ENTRIES = 5;
 
@@ -264,6 +271,12 @@ app.whenReady().then(() => {
   createWindow();
   registerIpcHandlers();
   cleanupOldHistory();
+  createApplicationMenu();
+
+  // Initialize auto-updater after window is ready
+  if (mainWindow) {
+    initUpdater(mainWindow);
+  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
@@ -669,6 +682,174 @@ function registerIpcHandlers(): void {
       history: getHistoryDir(),
     };
   });
+
+  // ---------------------------------------------------------------------------
+  // Updater
+  // ---------------------------------------------------------------------------
+  ipcMain.handle('updater:checkForUpdates', async () => {
+    return checkForUpdates();
+  });
+
+  ipcMain.handle('updater:downloadAndInstall', async () => {
+    await downloadAndInstallUpdate();
+    return { success: true };
+  });
+
+  ipcMain.handle('updater:quitAndInstall', () => {
+    quitAndInstall();
+  });
+
+  ipcMain.handle('updater:getStatus', () => {
+    return getUpdateStatus();
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Application Menu
+// ---------------------------------------------------------------------------
+
+function createApplicationMenu(): void {
+  const isMac = process.platform === 'darwin';
+
+  const template: Electron.MenuItemConstructorOptions[] = [
+    // App menu (macOS only)
+    ...(isMac ? [{
+      label: app.name,
+      submenu: [
+        { role: 'about' as const },
+        { type: 'separator' as const },
+        {
+          label: 'Check for Updates...',
+          click: () => triggerUpdateCheck(),
+        },
+        { type: 'separator' as const },
+        { role: 'services' as const },
+        { type: 'separator' as const },
+        { role: 'hide' as const },
+        { role: 'hideOthers' as const },
+        { role: 'unhide' as const },
+        { type: 'separator' as const },
+        { role: 'quit' as const },
+      ],
+    }] : []),
+
+    // Edit menu
+    {
+      label: 'Edit',
+      submenu: [
+        { role: 'undo' },
+        { role: 'redo' },
+        { type: 'separator' },
+        { role: 'cut' },
+        { role: 'copy' },
+        { role: 'paste' },
+        ...(isMac ? [
+          { role: 'pasteAndMatchStyle' as const },
+          { role: 'delete' as const },
+          { role: 'selectAll' as const },
+        ] : [
+          { role: 'delete' as const },
+          { type: 'separator' as const },
+          { role: 'selectAll' as const },
+        ]),
+      ],
+    },
+
+    // View menu
+    {
+      label: 'View',
+      submenu: [
+        { role: 'reload' },
+        { role: 'forceReload' },
+        { role: 'toggleDevTools' },
+        { type: 'separator' },
+        { role: 'resetZoom' },
+        { role: 'zoomIn' },
+        { role: 'zoomOut' },
+        { type: 'separator' },
+        { role: 'togglefullscreen' },
+      ],
+    },
+
+    // Window menu
+    {
+      label: 'Window',
+      submenu: [
+        { role: 'minimize' },
+        { role: 'zoom' },
+        ...(isMac ? [
+          { type: 'separator' as const },
+          { role: 'front' as const },
+          { type: 'separator' as const },
+          { role: 'window' as const },
+        ] : [
+          { role: 'close' as const },
+        ]),
+      ],
+    },
+
+    // Help menu
+    {
+      role: 'help',
+      submenu: [
+        {
+          label: 'Learn More',
+          click: async () => {
+            await shell.openExternal('https://charliec2004.github.io/semester-scheduler-UI/');
+          },
+        },
+        {
+          label: 'View on GitHub',
+          click: async () => {
+            await shell.openExternal('https://github.com/charliec2004/semester-scheduler-UI');
+          },
+        },
+        ...(!isMac ? [
+          { type: 'separator' as const },
+          {
+            label: 'Check for Updates...',
+            click: () => triggerUpdateCheck(),
+          },
+        ] : []),
+      ],
+    },
+  ];
+
+  const menu = Menu.buildFromTemplate(template);
+  Menu.setApplicationMenu(menu);
+}
+
+/**
+ * Trigger update check from menu and show appropriate dialog
+ */
+async function triggerUpdateCheck(): Promise<void> {
+  const status = await checkForUpdates();
+
+  if (status.state === 'available') {
+    const result = await dialog.showMessageBox(mainWindow!, {
+      type: 'info',
+      title: 'Update Available',
+      message: `Version ${status.version} is available`,
+      detail: status.releaseNotes || 'A new version of Scheduler is available. Would you like to download it now?',
+      buttons: ['Download', 'Later'],
+      defaultId: 0,
+      cancelId: 1,
+    });
+
+    if (result.response === 0) {
+      await downloadAndInstallUpdate();
+    }
+  } else if (status.state === 'not-available') {
+    dialog.showMessageBox(mainWindow!, {
+      type: 'info',
+      title: 'No Updates Available',
+      message: 'You are running the latest version',
+      detail: `Current version: ${app.getVersion()}`,
+      buttons: ['OK'],
+    });
+  } else if (status.state === 'error') {
+    dialog.showErrorBox('Update Check Failed', status.message);
+  }
 }
 
 function buildSolverArgs(config: SolverRunConfig): string[] {
