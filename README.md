@@ -13,12 +13,29 @@ Pre-built installers are available for all major platforms:
 
 | Platform | Download | Notes |
 |----------|----------|-------|
-| **macOS** (Apple Silicon) | `.dmg`, `.zip` | For M1/M2/M3 Macs. Right-click → Open to bypass Gatekeeper. |
-| **macOS** (Intel) | `.dmg`, `.zip` | For Intel-based Macs |
+| **macOS** (Apple Silicon) | `.dmg`, `.zip` | For M1/M2/M3/M4 Macs. See macOS instructions below. |
+| **macOS** (Intel) | `.dmg`, `.zip` | For Intel-based Macs. See macOS instructions below. |
 | **Windows** | `.exe` (installer), `.zip` (portable) | Windows 10+ (64-bit). Click "More info" → "Run anyway" if SmartScreen warns. |
 | **Linux** | `.AppImage`, `.deb` | Ubuntu 18.04+, Debian 10+, Fedora. For AppImage: `chmod +x` then run. |
 
-> **Note**: Binaries are not code-signed. See platform-specific notes above for first-run instructions.
+> **Note**: Binaries are not code-signed. See platform-specific notes below for first-run instructions.
+
+### macOS First Launch
+
+The app is not notarized, so macOS Gatekeeper will initially block it. To open:
+
+1. Open the `.dmg` and drag **Scheduler** to Applications
+2. Open **Finder → Applications**
+3. **Right-click** (or Control-click) on Scheduler → click **Open**
+4. In the dialog, click **Open** again
+
+**If you still see "damaged" or no Open option appears:**
+
+```bash
+xattr -cr /Applications/Scheduler.app
+```
+
+Then open the app normally.
 
 SHA256 checksums are provided with each release for verification.
 

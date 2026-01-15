@@ -41,11 +41,11 @@ export function SettingsPanel() {
   const { setShowSettings, showToast } = useUIStore();
   const [localSettings, setLocalSettings] = useState<AppSettings | null>(null);
   const [saving, setSaving] = useState(false);
-  const [appVersion, setAppVersion] = useState<string>('1.0.2');
+  const [appVersion, setAppVersion] = useState<string>('');
 
-  // Fetch app version from Electron
+  // Fetch app version from Electron (reads from package.json)
   useEffect(() => {
-    window.electronAPI.app.getVersion().then(setAppVersion).catch(() => {});
+    window.electronAPI.app.getVersion().then(setAppVersion).catch(() => setAppVersion('unknown'));
   }, []);
 
   useEffect(() => {

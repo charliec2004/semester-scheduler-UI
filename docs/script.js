@@ -1,7 +1,7 @@
 /**
  * Scheduler Download Page Script
  * Fetches latest release from GitHub API and populates download links
- * @version 1.0.2
+ * @version 1.0.3
  */
 
 (function() {
@@ -12,25 +12,24 @@
   const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 
   // Asset name patterns for each platform
-  // Electron-builder output varies by platform:
-  // - macOS: Scheduler-{version}-{arch}.dmg, Scheduler-{version}-{arch}-mac.zip
-  // - Windows: Scheduler.Setup.{version}.exe (NSIS installer), Scheduler.{version}.exe (portable)
-  // - Linux: Scheduler-{version}.AppImage, semester-scheduler_{version}_amd64.deb
+  // Patterns use .* to match ANY version format (1.0.0, 1.0.0-beta.1, 10.0.0, etc.)
+  // 
+  // Expected file naming (from electron-builder.yml):
+  //   macOS: Scheduler-{version}-{arch}-mac.dmg, Scheduler-{version}-{arch}-mac.zip
+  //   Windows: Scheduler-{version}-x64-win.exe, Scheduler-{version}-x64-win.zip
+  //   Linux: Scheduler-{version}-x64.AppImage, semester-scheduler_{version}_amd64.deb
   const ASSET_PATTERNS = {
-    // macOS
-    'mac-arm64-dmg': /Scheduler-.*-arm64\.dmg$/i,
-    'mac-x64-dmg': /Scheduler-.*-x64\.dmg$/i,
+    // macOS - files have -mac suffix
+    'mac-arm64-dmg': /Scheduler-.*-arm64(-mac)?\.dmg$/i,
+    'mac-x64-dmg': /Scheduler-.*-x64(-mac)?\.dmg$/i,
     'mac-arm64-zip': /Scheduler-.*-arm64-mac\.zip$/i,
     'mac-x64-zip': /Scheduler-.*-x64-mac\.zip$/i,
     
-    // Windows (x64 only)
-    // NSIS installer: Scheduler.Setup.X.X.X.exe (note: dots, not dashes)
-    // Portable: Scheduler.X.X.X.exe
-    'win-installer': /Scheduler\.Setup\.[0-9]+\.[0-9]+\.[0-9]+\.exe$/i,
-    'win-portable': /Scheduler\.[0-9]+\.[0-9]+\.[0-9]+\.exe$/i,
+    // Windows - files have -win suffix
+    'win-installer': /Scheduler-.*-x64-win\.exe$|Scheduler[.\-]?Setup[.\-]?.*\.exe$/i,
+    'win-portable': /Scheduler-.*-x64-win\.zip$/i,
     
-    // Linux
-    // AppImage doesn't include architecture in filename
+    // Linux - standard naming
     'linux-appimage': /Scheduler-.*\.AppImage$/i,
     'linux-deb': /semester-scheduler_.*_amd64\.deb$/i,
     

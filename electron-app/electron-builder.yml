@@ -7,10 +7,12 @@
 
 appId: com.scheduler.semester
 productName: Scheduler
-copyright: Copyright © 2024
+copyright: Copyright © 2026
 
-# Artifact naming with architecture suffix
-artifactName: "${productName}-${version}-${arch}.${ext}"
+# Artifact naming - each platform defines its own to avoid filename conflicts
+# macOS: Scheduler-{version}-{arch}.dmg, Scheduler-{version}-{arch}-mac.zip
+# Windows: Scheduler-{version}-{arch}.exe, Scheduler-{version}-{arch}-win.zip  
+# Linux: Scheduler-{version}-{arch}.AppImage, semester-scheduler_{version}_{arch}.deb
 
 directories:
   output: release
@@ -35,12 +37,22 @@ extraResources:
     to: samples
 
 # macOS Configuration
+# NOTE: This app is NOT code-signed or notarized.
+# Users must bypass Gatekeeper on first launch:
+#   1. Right-click the app → Open → Open (in dialog)
+#   2. Or run: xattr -cr /Applications/Scheduler.app
 mac:
   category: public.app-category.productivity
   icon: assets/icon.icns
   darkModeSupport: true
-  hardenedRuntime: true
+  # IMPORTANT: Do NOT set hardenedRuntime for unsigned apps!
+  # hardenedRuntime: true causes "corrupted" errors without proper code signing.
+  hardenedRuntime: false
   gatekeeperAssess: false
+  # Explicitly disable code signing for distribution without a Developer ID
+  identity: null
+  # macOS naming: DMGs are Mac-only, ZIPs get -mac suffix for clarity
+  artifactName: "${productName}-${version}-${arch}-mac.${ext}"
   target:
     - target: dmg
       arch:
@@ -52,6 +64,8 @@ mac:
         - arm64
 
 dmg:
+  # Use UDBZ format for better compatibility with unsigned apps
+  format: UDBZ
   contents:
     - x: 130
       y: 220
@@ -62,10 +76,14 @@ dmg:
   window:
     width: 540
     height: 380
+  # Disable DMG code signing (we're not signing the app)
+  sign: false
 
 # Windows Configuration
 win:
   icon: assets/icon.ico
+  # Windows-specific naming to avoid conflicts with macOS zips
+  artifactName: "${productName}-${version}-${arch}-win.${ext}"
   target:
     - target: nsis
       arch:
