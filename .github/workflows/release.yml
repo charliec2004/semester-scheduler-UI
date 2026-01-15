@@ -132,6 +132,7 @@ jobs:
           path: |
             electron-app/release/*.dmg
             electron-app/release/*.zip
+            electron-app/release/*.yml
           if-no-files-found: warn
 
       - name: Upload Windows artifacts
@@ -142,6 +143,7 @@ jobs:
           path: |
             electron-app/release/*.exe
             electron-app/release/*.zip
+            electron-app/release/*.yml
           if-no-files-found: warn
 
       - name: Upload Linux artifacts
@@ -152,6 +154,7 @@ jobs:
           path: |
             electron-app/release/*.AppImage
             electron-app/release/*.deb
+            electron-app/release/*.yml
           if-no-files-found: warn
 
   # Create release with all artifacts
