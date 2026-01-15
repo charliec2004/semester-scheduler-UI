@@ -88,27 +88,20 @@ jobs:
         run: |
           .\scripts\bundle-python.ps1
 
-      # Ensure no code signing on macOS
-      - name: Disable macOS code signing
-        if: matrix.platform == 'mac'
-        run: |
-          # List any existing signing identities (for debugging)
-          echo "Existing signing identities:"
-          security find-identity -v -p codesigning || echo "None found"
-          # Create empty keychain to prevent any signing
-          security create-keychain -p "" build.keychain || true
-          security default-keychain -s build.keychain || true
-
       # Build the Electron app
       - name: Build Electron app (macOS)
         if: matrix.platform == 'mac'
         working-directory: electron-app
-        run: npm run package -- --mac --arm64 --x64 --publish never
+        run: |
+          # Unset any signing-related env vars that might be set by the runner
+          unset CSC_LINK
+          unset CSC_KEY_PASSWORD
+          unset CSC_NAME
+          npm run package -- --mac --arm64 --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Completely disable code signing
+          # Disable code signing identity auto-discovery
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
-          CSC_LINK: ""
 
       - name: Build Electron app (Windows)
         if: matrix.platform == 'win'

@@ -46,10 +46,9 @@ mac:
   icon: assets/icon.icns
   darkModeSupport: true
   # IMPORTANT: Completely disable code signing for unsigned distribution
+  # Code signing is disabled via CSC_IDENTITY_AUTO_DISCOVERY=false in CI
   hardenedRuntime: false
   gatekeeperAssess: false
-  # Use ~ for actual YAML null to disable signing
-  identity: ~
   # macOS naming: DMGs are Mac-only, ZIPs get -mac suffix for clarity
   artifactName: "${productName}-${version}-${arch}-mac.${ext}"
   target:
