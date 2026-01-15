@@ -11,7 +11,7 @@ interface ToastProps {
 }
 
 export function Toast({ message, type }: ToastProps) {
-  const { hideToast } = useUIStore();
+  const { hideToast, showSettings } = useUIStore();
 
   const icons = {
     success: (
@@ -34,17 +34,20 @@ export function Toast({ message, type }: ToastProps) {
   };
 
   const bgColors = {
-    success: 'bg-accent-500/10 border-accent-500/30',
-    error: 'bg-danger-500/10 border-danger-500/30',
-    info: 'bg-surface-700 border-surface-600',
+    success: 'bg-surface-800 border-accent-500/50',
+    error: 'bg-surface-800 border-danger-500/50',
+    info: 'bg-surface-800 border-surface-600',
   };
+
+  // Position on left when settings panel is open (it covers the right side)
+  const positionClass = showSettings ? 'left-6' : 'right-6';
 
   return (
     <div
       role="alert"
       aria-live="polite"
       className={`
-        fixed bottom-6 right-6 z-50 flex items-center gap-3 px-4 py-3
+        fixed bottom-6 ${positionClass} z-50 flex items-center gap-3 px-4 py-3
         border rounded-lg shadow-xl animate-slide-up
         ${bgColors[type]}
       `}

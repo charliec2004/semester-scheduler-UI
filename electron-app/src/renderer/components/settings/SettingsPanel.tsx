@@ -52,6 +52,7 @@ export function SettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
+  const isMac = navigator.platform.toLowerCase().includes('mac');
 
   // Fetch app version from Electron (reads from package.json)
   useEffect(() => {
@@ -207,7 +208,7 @@ export function SettingsPanel() {
         aria-labelledby="settings-title"
       >
         {/* Header */}
-        <div className="sticky top-0 bg-surface-900 border-b border-surface-700 px-6 py-4 flex items-center justify-between">
+        <div className="sticky top-0 z-[60] bg-surface-900 border-b border-surface-700 px-6 py-4 flex items-center justify-between">
           <h2 id="settings-title" className="text-lg font-display font-semibold">Settings</h2>
           <button 
             onClick={handleClose}
@@ -512,16 +513,6 @@ export function SettingsPanel() {
             </h3>
             <div className="space-y-3">
               {/* Status display */}
-              {updateStatus.state === 'checking' && (
-                <div className="flex items-center gap-2 text-sm text-surface-400">
-                  <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                  </svg>
-                  Checking for updates...
-                </div>
-              )}
-              
               {updateStatus.state === 'downloading' && (
                 <div className="space-y-2">
                   <div className="flex items-center justify-between text-sm">
@@ -534,6 +525,11 @@ export function SettingsPanel() {
                       style={{ width: `${updateStatus.percent}%` }}
                     />
                   </div>
+                  {isMac && (
+                    <p className="text-xs text-surface-500 mt-2">
+                      Once complete, the installer will open automatically.
+                    </p>
+                  )}
                 </div>
               )}
               
@@ -542,6 +538,18 @@ export function SettingsPanel() {
                   <p className="text-sm text-accent-300 font-medium mb-2">
                     Version {updateStatus.version} available!
                   </p>
+                  {isMac ? (
+                    <p className="text-xs text-surface-400 mb-3">
+                      This will download the installer to your Downloads folder and open it. 
+                      You'll need to drag the app to Applications to replace the old version, 
+                      then run a quick Terminal command to allow it to open (since the app isn't code-signed).
+                    </p>
+                  ) : (
+                    <p className="text-xs text-surface-400 mb-3">
+                      The update will download in the background. Once complete, click "Restart and Install" 
+                      to automatically update and relaunch the app.
+                    </p>
+                  )}
                   <button
                     onClick={handleDownloadUpdate}
                     className="btn-primary w-full text-sm"
@@ -555,6 +563,9 @@ export function SettingsPanel() {
                 <div className="p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
                   <p className="text-sm text-green-300 font-medium mb-2">
                     Version {updateStatus.version} ready to install
+                  </p>
+                  <p className="text-xs text-surface-400 mb-3">
+                    The app will close and relaunch automatically with the new version.
                   </p>
                   <button
                     onClick={handleInstallUpdate}
@@ -573,15 +584,30 @@ export function SettingsPanel() {
                 </div>
               )}
               
-              {(updateStatus.state === 'idle' || updateStatus.state === 'not-available') && (
+              {(updateStatus.state === 'idle' || updateStatus.state === 'not-available' || updateStatus.state === 'checking') && (
                 <button
                   onClick={handleCheckForUpdates}
-                  className="btn-ghost w-full border border-surface-700"
+                  disabled={updateStatus.state === 'checking'}
+                  className={`btn-ghost w-full border border-surface-700 ${
+                    updateStatus.state === 'checking' ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
                 >
-                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                  </svg>
-                  Check for Updates
+                  {updateStatus.state === 'checking' ? (
+                    <>
+                      <svg className="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
+                      </svg>
+                      Checking...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Check for Updates
+                    </>
+                  )}
                 </button>
               )}
               
