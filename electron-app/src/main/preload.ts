@@ -39,6 +39,9 @@ const electronAPI = {
     saveCsvToTemp: (opts: { content: string; filename: string }) =>
       ipcRenderer.invoke('files:saveCsvToTemp', opts) as Promise<{ path: string }>,
     
+    saveCsv: (opts: { kind: 'staff' | 'dept'; content: string }) =>
+      ipcRenderer.invoke('files:saveCsv', opts) as Promise<{ path?: string; canceled: boolean }>,
+    
     downloadSample: (kind: 'staff' | 'dept') =>
       ipcRenderer.invoke('files:downloadSample', kind) as Promise<{ path?: string; canceled: boolean }>,
     

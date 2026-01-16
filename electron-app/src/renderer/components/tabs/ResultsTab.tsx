@@ -3,13 +3,33 @@
  * Shows solver progress, logs (accordion), output downloads, and generation history
  */
 
-import { useRef, useEffect, useState } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { useSolverStore, useHistoryStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import type { HistoryEntry } from '../../../main/ipc-types';
 
+// Parse solver logs to detect specific issues
+function parseLogDiagnostics(logs: Array<{ text: string; type: string }>): {
+  hasTrainingNoOverlap: boolean;
+  hasInvalidEmployee: boolean;
+  hasTimesetConflict: boolean;
+  invalidEmployeeName?: string;
+} {
+  const logText = logs.map(l => l.text).join('\n');
+  
+  return {
+    hasTrainingNoOverlap: logText.includes('no overlapping availability'),
+    hasInvalidEmployee: /└─\s*nan:/i.test(logText) || logText.includes('nan: max'),
+    hasTimesetConflict: logText.includes('timeset') && logText.includes('conflict'),
+    invalidEmployeeName: logText.match(/└─\s*(nan):/i)?.[1],
+  };
+}
+
 export function ResultsTab() {
   const { running, progress, logs, result, reset } = useSolverStore();
+  
+  // Parse logs to detect specific issues
+  const diagnostics = useMemo(() => parseLogDiagnostics(logs), [logs]);
   const { history, loadHistory, deleteEntry } = useHistoryStore();
   const { showToast, setActiveTab } = useUIStore();
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -187,12 +207,24 @@ export function ResultsTab() {
 
       {/* Result Status */}
       {result && (
-        <div className={`card ${result.success ? 'bg-accent-500/10 border-accent-500/30' : 'bg-danger-500/10 border-danger-500/30'}`}>
+        <div className={`card ${
+          result.success 
+            ? 'bg-accent-500/10 border-accent-500/30' 
+            : result.errorType === 'no_solution'
+              ? 'bg-yellow-500/10 border-yellow-500/30'
+              : 'bg-danger-500/10 border-danger-500/30'
+        }`}>
           <div className="flex items-start gap-4">
             {result.success ? (
               <div className="w-12 h-12 bg-accent-500/20 rounded-full flex items-center justify-center flex-shrink-0">
                 <svg className="w-6 h-6 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            ) : result.errorType === 'no_solution' ? (
+              <div className="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                 </svg>
               </div>
             ) : (
@@ -203,14 +235,53 @@ export function ResultsTab() {
               </div>
             )}
             <div className="flex-1">
-              <h3 className={`font-semibold ${result.success ? 'text-accent-400' : 'text-danger-400'}`}>
-                {result.success ? 'Schedule Generated Successfully' : 'Generation Failed'}
+              <h3 className={`font-semibold ${
+                result.success 
+                  ? 'text-accent-400' 
+                  : result.errorType === 'no_solution'
+                    ? 'text-yellow-400'
+                    : 'text-danger-400'
+              }`}>
+                {result.success 
+                  ? 'Schedule Generated Successfully' 
+                  : result.errorType === 'no_solution'
+                    ? 'No Solution Found'
+                    : 'Generation Failed'}
               </h3>
               <p className="text-sm text-surface-400 mt-1">
                 {result.success 
                   ? `Completed in ${formatElapsed(result.elapsed)}. Download your schedule from the history below.`
-                  : result.error || 'An error occurred during optimization.'}
+                  : result.errorType === 'no_solution'
+                    ? 'The constraints are too restrictive to find a valid schedule.'
+                    : result.error || 'An error occurred during optimization.'}
               </p>
+              
+              {/* Detected Issues for No Solution */}
+              {result.errorType === 'no_solution' && (diagnostics.hasTrainingNoOverlap || diagnostics.hasInvalidEmployee) && (
+                <div className="mt-3 space-y-1">
+                  <p className="text-sm font-medium text-yellow-400">Detected Issues:</p>
+                  <ul className="text-sm text-surface-300 space-y-1">
+                    {diagnostics.hasTrainingNoOverlap && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>Training pair has no overlapping availability - they can&apos;t work together</span>
+                      </li>
+                    )}
+                    {diagnostics.hasInvalidEmployee && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>Invalid employee &quot;{diagnostics.invalidEmployeeName || 'nan'}&quot; detected - check Staff tab for empty rows</span>
+                      </li>
+                    )}
+                    {diagnostics.hasTimesetConflict && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>Forced time assignment conflicts with employee availability</span>
+                      </li>
+                    )}
+                  </ul>
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -330,32 +401,64 @@ export function ResultsTab() {
         </div>
       )}
 
-      {/* Troubleshooting */}
+      {/* Troubleshooting - Contextual based on error type */}
       {result && !result.success && (
         <div className="card bg-surface-800/50">
-          <h3 className="font-semibold text-surface-200 mb-3">Troubleshooting Tips</h3>
-          <ul className="space-y-2 text-sm text-surface-400">
-            <li className="flex items-start gap-2">
-              <span className="text-accent-400">•</span>
-              Check that at least one employee has the front desk role
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-accent-400">•</span>
-              Verify employee availability covers required time slots
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-accent-400">•</span>
-              Ensure target hours don&apos;t exceed max hours for any employee or department
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-accent-400">•</span>
-              Try increasing the solver time limit in Settings
-            </li>
-            <li className="flex items-start gap-2">
-              <span className="text-accent-400">•</span>
-              Check the logs above for specific constraint violations
-            </li>
-          </ul>
+          <h3 className="font-semibold text-surface-200 mb-3">
+            {result.errorType === 'no_solution' ? 'How to Fix This' : 'Troubleshooting Tips'}
+          </h3>
+          
+          {result.errorType === 'no_solution' ? (
+            <ul className="space-y-2 text-sm text-surface-400">
+              {diagnostics.hasInvalidEmployee && (
+                <li className="flex items-start gap-2">
+                  <span className="text-yellow-400">1.</span>
+                  <span><strong className="text-surface-200">Remove invalid employees</strong> - Go to Staff tab and delete any empty or &quot;nan&quot; entries</span>
+                </li>
+              )}
+              {diagnostics.hasTrainingNoOverlap && (
+                <li className="flex items-start gap-2">
+                  <span className="text-yellow-400">{diagnostics.hasInvalidEmployee ? '2.' : '1.'}</span>
+                  <span><strong className="text-surface-200">Remove training pair</strong> - The paired employees have no overlapping availability</span>
+                </li>
+              )}
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Check &quot;Assign Employee to Role/Time&quot;</strong> - Ensure forced assignments don&apos;t conflict with availability</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Verify front desk coverage</strong> - At least one qualified employee must be available each time slot</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Reduce hour requirements</strong> - Department targets may exceed available employee hours</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Disable 2-hour minimum blocks</strong> - In Settings, turn off &quot;Enforce 2-hour minimum department blocks&quot;</span>
+              </li>
+            </ul>
+          ) : (
+            <ul className="space-y-2 text-sm text-surface-400">
+              <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Check that your CSV files are properly formatted</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Ensure Python is installed and accessible</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Check the logs above for specific error messages</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Try restarting the application</span>
+              </li>
+            </ul>
+          )}
         </div>
       )}
     </div>

@@ -52,6 +52,7 @@ function App() {
         success: result.success,
         outputs: result.outputs,
         error: result.error,
+        errorType: result.errorType,
         elapsed: result.elapsed,
       });
     });

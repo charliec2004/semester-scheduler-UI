@@ -367,6 +367,23 @@ function registerIpcHandlers(): void {
     return { path: filePath };
   });
 
+  ipcMain.handle('files:saveCsv', async (_event, { kind, content }: { kind: 'staff' | 'dept'; content: string }) => {
+    const defaultName = kind === 'staff' ? 'employees.csv' : 'departments.csv';
+    
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: `Save ${kind === 'staff' ? 'Staff' : 'Department'} CSV`,
+      defaultPath: defaultName,
+      filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+
+    fs.writeFileSync(result.filePath, content, 'utf-8');
+    return { path: result.filePath, canceled: false };
+  });
+
   ipcMain.handle('files:downloadSample', async (_event, kind: 'staff' | 'dept') => {
     const sampleName = kind === 'staff' ? 'employees.csv.example' : 'cpd-requirements.csv.example';
     const samplePath = getResourcePath(sampleName);
@@ -618,10 +635,16 @@ function registerIpcHandlers(): void {
         // Clean up failed run directory
         deleteHistoryFiles(runId);
         
+        // Exit code 2 = no solution found (INFEASIBLE), distinct from 1 = exception
+        const isNoSolution = code === 2;
+        
         mainWindow?.webContents.send('solver:done', {
           runId,
           success: false,
-          error: `Solver exited with code ${code}`,
+          error: isNoSolution 
+            ? 'No solution found. Try relaxing constraints (training pairs, availability, or shift rules).'
+            : `Solver exited with code ${code}`,
+          errorType: isNoSolution ? 'no_solution' : 'error',
           elapsed,
         });
       }
@@ -891,6 +914,38 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
   // Experimental: minimum department block enforcement
   if (config.enforceMinDeptBlock === false) {
     args.push('--no-enforce-min-dept-block');
+  }
+
+  // Settings overrides
+  if (config.minSlots !== undefined) {
+    args.push('--min-slots', config.minSlots.toString());
+  }
+  if (config.maxSlots !== undefined) {
+    args.push('--max-slots', config.maxSlots.toString());
+  }
+  if (config.frontDeskCoverageWeight !== undefined) {
+    args.push('--front-desk-weight', config.frontDeskCoverageWeight.toString());
+  }
+  if (config.departmentTargetWeight !== undefined) {
+    args.push('--dept-target-weight', config.departmentTargetWeight.toString());
+  }
+  if (config.targetAdherenceWeight !== undefined) {
+    args.push('--target-adherence-weight', config.targetAdherenceWeight.toString());
+  }
+  if (config.collaborativeHoursWeight !== undefined) {
+    args.push('--collab-weight', config.collaborativeHoursWeight.toString());
+  }
+  if (config.shiftLengthWeight !== undefined) {
+    args.push('--shift-length-weight', config.shiftLengthWeight.toString());
+  }
+  if (config.favoredEmployeeDeptWeight !== undefined) {
+    args.push('--favor-emp-dept-weight', config.favoredEmployeeDeptWeight.toString());
+  }
+  if (config.departmentHourThreshold !== undefined) {
+    args.push('--dept-hour-threshold', config.departmentHourThreshold.toString());
+  }
+  if (config.targetHardDeltaHours !== undefined) {
+    args.push('--target-hard-delta', config.targetHardDeltaHours.toString());
   }
 
   return args;

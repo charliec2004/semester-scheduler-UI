@@ -112,6 +112,17 @@ export interface SolverRunConfig {
   favoredEmployeeDepts?: FavoredEmployeeDept[];
   shiftTimePreferences?: ShiftTimePreference[];
   enforceMinDeptBlock?: boolean; // Default true, disable to allow 1-hour dept blocks
+  // Settings overrides (from Settings panel)
+  minSlots?: number;
+  maxSlots?: number;
+  frontDeskCoverageWeight?: number;
+  departmentTargetWeight?: number;
+  targetAdherenceWeight?: number;
+  collaborativeHoursWeight?: number;
+  shiftLengthWeight?: number;
+  favoredEmployeeDeptWeight?: number;
+  departmentHourThreshold?: number;
+  targetHardDeltaHours?: number;
 }
 
 export interface SolverProgress {
@@ -130,6 +141,7 @@ export interface SolverResult {
     xlsxFormatted?: string;
   };
   error?: string;
+  errorType?: 'error' | 'no_solution';  // 'no_solution' = yellow warning (constraints too restrictive)
   elapsed: number;
 }
 
@@ -204,6 +216,7 @@ export interface IpcChannels {
   // Files
   'files:openCsv': (kind: 'staff' | 'dept') => Promise<{ path?: string; content?: string; canceled: boolean }>;
   'files:saveCsvToTemp': (opts: { content: string; filename: string }) => Promise<{ path: string }>;
+  'files:saveCsv': (opts: { kind: 'staff' | 'dept'; content: string }) => Promise<{ path?: string; canceled: boolean }>;
   'files:downloadSample': (kind: 'staff' | 'dept') => Promise<{ path?: string; canceled: boolean }>;
   'files:readFile': (path: string) => Promise<{ content: string | null; error: string | null }>;
   'files:saveOutputAs': (opts: { sourcePath: string; defaultName: string }) => Promise<{ path?: string; canceled: boolean }>;

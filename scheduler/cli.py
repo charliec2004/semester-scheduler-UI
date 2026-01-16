@@ -133,6 +133,67 @@ def build_parser() -> argparse.ArgumentParser:
         dest="enforce_min_dept_block",
         help="Disable 2-hour minimum department block enforcement.",
     )
+    # Settings-based overrides (from UI Settings panel)
+    parser.add_argument(
+        "--min-slots",
+        type=int,
+        default=None,
+        help="Minimum shift length in 30-minute slots (default: 4 = 2 hours).",
+    )
+    parser.add_argument(
+        "--max-slots",
+        type=int,
+        default=None,
+        help="Maximum shift length in 30-minute slots (default: 8 = 4 hours).",
+    )
+    parser.add_argument(
+        "--front-desk-weight",
+        type=int,
+        default=None,
+        help="Weight for front desk coverage priority (default: 10000).",
+    )
+    parser.add_argument(
+        "--dept-target-weight",
+        type=int,
+        default=None,
+        help="Weight for department target adherence (default: 1000).",
+    )
+    parser.add_argument(
+        "--target-adherence-weight",
+        type=int,
+        default=None,
+        help="Weight for employee target adherence (default: 100).",
+    )
+    parser.add_argument(
+        "--collab-weight",
+        type=int,
+        default=None,
+        help="Weight for collaborative hours bonus (default: 200).",
+    )
+    parser.add_argument(
+        "--shift-length-weight",
+        type=int,
+        default=None,
+        help="Weight for shift length bonus (default: 20).",
+    )
+    parser.add_argument(
+        "--favor-emp-dept-weight",
+        type=int,
+        default=None,
+        help="Bonus per slot for favored employee-department pairings (default: 50).",
+    )
+    parser.add_argument(
+        "--dept-hour-threshold",
+        type=int,
+        default=None,
+        help="Allowable +/- hours from department targets (default: 4).",
+    )
+    parser.add_argument(
+        "--target-hard-delta",
+        type=int,
+        default=None,
+        help="Hard bound: keep employees within +/- this many hours of target (default: 5).",
+    )
     return parser
 
 
@@ -382,7 +443,7 @@ def main(argv: list[str] | None = None) -> None:
         if not str(output_path).lower().endswith(".xlsx"):
             output_path = output_path.with_name(output_path.name + ".xlsx")
         favored_employees = _parse_favored_employees(args.favor)
-        solve_schedule(
+        status = solve_schedule(
             staff_csv=args.staff_csv,
             requirements_csv=args.requirements_csv,
             output_path=output_path,
@@ -396,7 +457,22 @@ def main(argv: list[str] | None = None) -> None:
             shift_time_preferences=shift_time_preferences,
             show_progress=args.progress,
             enforce_min_dept_block=args.enforce_min_dept_block,
+            # Settings overrides
+            min_slots_override=args.min_slots,
+            max_slots_override=args.max_slots,
+            front_desk_weight_override=args.front_desk_weight,
+            dept_target_weight_override=args.dept_target_weight,
+            target_adherence_weight_override=args.target_adherence_weight,
+            collab_weight_override=args.collab_weight,
+            shift_length_weight_override=args.shift_length_weight,
+            favor_emp_dept_weight_override=args.favor_emp_dept_weight,
+            dept_hour_threshold_override=args.dept_hour_threshold,
+            target_hard_delta_override=args.target_hard_delta,
         )
+        # Exit with error code if no solution found (INFEASIBLE or other non-success status)
+        from ortools.sat.python import cp_model
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            sys.exit(2)  # Exit code 2 = no solution found (distinct from 1 = exception)
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)

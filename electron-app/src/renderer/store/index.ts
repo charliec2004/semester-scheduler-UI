@@ -405,6 +405,7 @@ interface SolverState {
     success: boolean;
     outputs?: { xlsx?: string; xlsxFormatted?: string };
     error?: string;
+    errorType?: 'error' | 'no_solution';  // 'no_solution' = yellow warning, 'error' = red error
     elapsed: number;
   } | null;
   

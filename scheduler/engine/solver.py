@@ -28,6 +28,7 @@ from scheduler.config import (
     MIN_FRONT_DESK_SLOTS,
     MIN_SLOTS,
     OBJECTIVE_WEIGHTS,
+    ObjectiveWeights,
     SHIFT_LENGTH_DAILY_COST,
     SLOT_NAMES,
     T_SLOTS,
@@ -73,8 +74,44 @@ def solve_schedule(
     shift_time_preferences: List["ShiftTimePreference"] | None = None,
     show_progress: bool = False,
     enforce_min_dept_block: bool = True,
+    # Settings overrides (from UI Settings panel)
+    min_slots_override: int | None = None,
+    max_slots_override: int | None = None,
+    front_desk_weight_override: int | None = None,
+    dept_target_weight_override: int | None = None,
+    target_adherence_weight_override: int | None = None,
+    collab_weight_override: int | None = None,
+    shift_length_weight_override: int | None = None,
+    favor_emp_dept_weight_override: int | None = None,
+    dept_hour_threshold_override: int | None = None,
+    target_hard_delta_override: int | None = None,
 ):
     """Main function to build and solve the scheduling model"""
+    
+    # Apply settings overrides (or use config defaults)
+    MIN_SLOTS_LOCAL = min_slots_override if min_slots_override is not None else MIN_SLOTS
+    MAX_SLOTS_LOCAL = max_slots_override if max_slots_override is not None else MAX_SLOTS
+    FRONT_DESK_COVERAGE_WEIGHT_LOCAL = front_desk_weight_override if front_desk_weight_override is not None else FRONT_DESK_COVERAGE_WEIGHT
+    DEPARTMENT_HOUR_THRESHOLD_LOCAL = dept_hour_threshold_override if dept_hour_threshold_override is not None else DEPARTMENT_HOUR_THRESHOLD
+    TARGET_HARD_DELTA_HOURS_LOCAL = target_hard_delta_override if target_hard_delta_override is not None else TARGET_HARD_DELTA_HOURS
+    FAVORED_EMPLOYEE_DEPT_BONUS_LOCAL = favor_emp_dept_weight_override if favor_emp_dept_weight_override is not None else FAVORED_EMPLOYEE_DEPT_BONUS
+    
+    # Build custom objective weights with overrides
+    objective_weights = ObjectiveWeights(
+        department_target=dept_target_weight_override if dept_target_weight_override is not None else OBJECTIVE_WEIGHTS.department_target,
+        collaborative_hours=collab_weight_override if collab_weight_override is not None else OBJECTIVE_WEIGHTS.collaborative_hours,
+        target_adherence=target_adherence_weight_override if target_adherence_weight_override is not None else OBJECTIVE_WEIGHTS.target_adherence,
+        shift_length=shift_length_weight_override if shift_length_weight_override is not None else OBJECTIVE_WEIGHTS.shift_length,
+        # Keep other weights at defaults
+        office_coverage=OBJECTIVE_WEIGHTS.office_coverage,
+        single_coverage=OBJECTIVE_WEIGHTS.single_coverage,
+        department_spread=OBJECTIVE_WEIGHTS.department_spread,
+        department_day_coverage=OBJECTIVE_WEIGHTS.department_day_coverage,
+        department_scarcity=OBJECTIVE_WEIGHTS.department_scarcity,
+        underclassmen_front_desk=OBJECTIVE_WEIGHTS.underclassmen_front_desk,
+        morning_preference=OBJECTIVE_WEIGHTS.morning_preference,
+        department_total=OBJECTIVE_WEIGHTS.department_total,
+    )
 
     staff_data = load_staff_data(staff_csv)
     department_requirements = load_department_requirements(requirements_csv)
@@ -142,7 +179,7 @@ def solve_schedule(
         role: float(department_max_hours_raw[role])
         for role in department_roles
     }
-    department_hour_threshold = DEPARTMENT_HOUR_THRESHOLD
+    department_hour_threshold = DEPARTMENT_HOUR_THRESHOLD_LOCAL
     
     department_sizes = {
         role: sum(1 for employee in employees if role in qual[employee])
@@ -329,7 +366,7 @@ def solve_schedule(
     # Precompute slots where each employee can legally work a minimum-length shift
     workable_slots = {}
     for e in employees:
-        min_len = MIN_SLOTS if e.lower() not in favored_employees_normalized else FAVORED_MIN_SLOTS
+        min_len = MIN_SLOTS_LOCAL if e.lower() not in favored_employees_normalized else FAVORED_MIN_SLOTS
         workable_slots[e] = {}
         for d in days:
             avail_slots = [t for t in T if not (e in unavailable and d in unavailable[e] and t in unavailable[e][d])]
@@ -506,14 +543,14 @@ def solve_schedule(
             model.add(total_slots_today == 0).only_enforce_if(works_today.Not())
             
             # HARD CONSTRAINT: If working (works_today=1), MUST meet min slots by favor status
-            min_slots_today = FAVORED_MIN_SLOTS if is_favored else MIN_SLOTS
+            min_slots_today = FAVORED_MIN_SLOTS if is_favored else MIN_SLOTS_LOCAL
             model.add(total_slots_today >= min_slots_today).only_enforce_if(works_today)
             
             # HARD CONSTRAINT: If not working (works_today=0), total must be exactly 0
             model.add(total_slots_today == 0).only_enforce_if(works_today.Not())
             
             # Maximum shift length (always enforced)
-            max_slots_today = FAVORED_MAX_SLOTS if is_favored else MAX_SLOTS
+            max_slots_today = FAVORED_MAX_SLOTS if is_favored else MAX_SLOTS_LOCAL
             model.add(total_slots_today <= max_slots_today)
             
             # ADDITIONAL NUCLEAR OPTION: Add explicit constraint that blocks tiny shifts
@@ -772,7 +809,7 @@ def solve_schedule(
             # This is NOT a hard constraint - if truly impossible, solver can still find a solution
             # But practically, front desk will only be uncovered if NO front-desk-qualified 
             # employee is available at that time slot
-            front_desk_coverage_score += FRONT_DESK_COVERAGE_WEIGHT * has_front_desk
+            front_desk_coverage_score += FRONT_DESK_COVERAGE_WEIGHT_LOCAL * has_front_desk
             
             # HARD CONSTRAINT: At most 1 front desk at a time (no overstaffing at front desk)
             model.add(num_front_desk <= 1)
@@ -843,7 +880,7 @@ def solve_schedule(
             for t in T 
             if (emp, d, t, dept) in assign
         )
-        favored_emp_dept_bonus += int(mult * FAVORED_EMPLOYEE_DEPT_BONUS) * slots_in_dept
+        favored_emp_dept_bonus += int(mult * FAVORED_EMPLOYEE_DEPT_BONUS_LOCAL) * slots_in_dept
     
     total_department_units = sum(department_effective_units.values())
     department_max_units = {
@@ -927,7 +964,7 @@ def solve_schedule(
         # Get this employee's target (in hours, convert to slots)
         target_hours = target_weekly_hours.get(e, 11)  # Default 11 hours
         target_slots = int(target_hours * 2)  # Convert to 30-min slots
-        delta_slots = int(TARGET_HARD_DELTA_HOURS * 2)
+        delta_slots = int(TARGET_HARD_DELTA_HOURS_LOCAL * 2)
         lower_bound = max(0, target_slots - delta_slots)
         upper_bound = target_slots + delta_slots
         max_weekly_hours = weekly_hour_limits.get(e, 40)
@@ -1137,8 +1174,8 @@ def solve_schedule(
         if available_overlap_slots > 0:
             goal_slots = min(goal_slots, available_overlap_slots)
             training_available_overlap[idx] = available_overlap_slots
-            # Require at least one overlap only if feasible (reduced to soft via under var)
-            model.add(total_overlap + model.new_int_var(0, available_overlap_slots, f"training_under_soft_guard[{idx}]") >= 1)
+            # Training overlap is purely soft - no hard constraint
+            # The bonus/penalty system will encourage overlap without making the model infeasible
         training_overlap_bonus += TRAINING_OVERLAP_BONUS * total_overlap
         max_week_slots = len(T) * len(days)
         under = model.new_int_var(0, max_week_slots, f"training_under[{idx}]")
@@ -1288,22 +1325,22 @@ def solve_schedule(
     model.maximize(
         front_desk_coverage_score +             # Massive weighting baked into coverage score itself
         large_deviation_penalty +               # MASSIVE penalty for 2+ hour deviations (-5000 per person)
-        OBJECTIVE_WEIGHTS.department_target * department_target_score +
+        objective_weights.department_target * department_target_score +
         department_large_deviation_penalty +    # Severe penalty for large department deviations
-        OBJECTIVE_WEIGHTS.collaborative_hours * collaborative_hours_score +
+        objective_weights.collaborative_hours * collaborative_hours_score +
         training_overlap_penalty +
-        OBJECTIVE_WEIGHTS.office_coverage * office_coverage_score +
-        OBJECTIVE_WEIGHTS.single_coverage * single_coverage_penalty +
-        OBJECTIVE_WEIGHTS.target_adherence * target_adherence_score +
-        OBJECTIVE_WEIGHTS.department_spread * department_spread_score +
-        OBJECTIVE_WEIGHTS.department_day_coverage * department_day_coverage_score +
-        OBJECTIVE_WEIGHTS.shift_length * shift_length_bonus +
-        OBJECTIVE_WEIGHTS.department_scarcity * department_scarcity_penalty +
-        OBJECTIVE_WEIGHTS.underclassmen_front_desk * underclassmen_preference_score +
-        OBJECTIVE_WEIGHTS.morning_preference * morning_preference_score +
+        objective_weights.office_coverage * office_coverage_score +
+        objective_weights.single_coverage * single_coverage_penalty +
+        objective_weights.target_adherence * target_adherence_score +
+        objective_weights.department_spread * department_spread_score +
+        objective_weights.department_day_coverage * department_day_coverage_score +
+        objective_weights.shift_length * shift_length_bonus +
+        objective_weights.department_scarcity * department_scarcity_penalty +
+        objective_weights.underclassmen_front_desk * underclassmen_preference_score +
+        objective_weights.morning_preference * morning_preference_score +
         shift_time_pref_score +                 # Per-employee shift time preferences (morning/afternoon)
         FAVORED_HOURS_BONUS_WEIGHT * favored_hours_bonus +
-        OBJECTIVE_WEIGHTS.department_total * total_department_units +
+        objective_weights.department_total * total_department_units +
         timeset_bonus +
         favored_department_bonus +
         favored_fd_bonus +

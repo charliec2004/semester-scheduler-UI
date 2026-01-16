@@ -198,6 +198,17 @@ export function FlagsTab() {
           timesets,
           shiftTimePreferences,
           enforceMinDeptBlock: settings?.enforceMinDeptBlock ?? true,
+          // Pass all settings to solver
+          minSlots: settings?.minSlots,
+          maxSlots: settings?.maxSlots,
+          frontDeskCoverageWeight: settings?.frontDeskCoverageWeight,
+          departmentTargetWeight: settings?.departmentTargetWeight,
+          targetAdherenceWeight: settings?.targetAdherenceWeight,
+          collaborativeHoursWeight: settings?.collaborativeHoursWeight,
+          shiftLengthWeight: settings?.shiftLengthWeight,
+          favoredEmployeeDeptWeight: settings?.favoredEmployeeDeptWeight,
+          departmentHourThreshold: settings?.departmentHourThreshold,
+          targetHardDeltaHours: settings?.targetHardDeltaHours,
         },
         snapshot,
       });
@@ -619,8 +630,7 @@ export function FlagsTab() {
           </p>
           
           <TimesetForm
-            employees={employeeNames}
-            departments={departmentNames}
+            staff={staff}
             onAdd={addTimeset}
           />
 
@@ -854,14 +864,12 @@ function TrainingPairForm({
   );
 }
 
-// Timeset Form Component
+// Timeset Form Component - Left-to-right input with role-filtered departments
 function TimesetForm({
-  employees,
-  departments,
+  staff,
   onAdd,
 }: {
-  employees: string[];
-  departments: string[];
+  staff: StaffMember[];
   onAdd: (ts: TimesetRequest) => void;
 }) {
   const [employee, setEmployee] = useState('');
@@ -869,6 +877,34 @@ function TimesetForm({
   const [department, setDepartment] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
+
+  // Get qualified roles for the selected employee
+  const selectedStaff = useMemo(() => 
+    staff.find(s => s.name === employee), 
+    [staff, employee]
+  );
+  
+  const qualifiedRoles = useMemo(() => {
+    if (!selectedStaff) return [];
+    // Normalize roles and include front_desk if qualified
+    return selectedStaff.roles.map(r => r.toLowerCase().replace(/\s+/g, '_'));
+  }, [selectedStaff]);
+
+  // Reset dependent fields when employee changes
+  const handleEmployeeChange = (name: string) => {
+    setEmployee(name);
+    setDay('');
+    setDepartment('');
+    setStartTime('');
+    setEndTime('');
+  };
+
+  // Reset time fields when department changes
+  const handleDepartmentChange = (dept: string) => {
+    setDepartment(dept);
+    setStartTime('');
+    setEndTime('');
+  };
 
   const handleAdd = () => {
     if (employee && day && department && startTime && endTime) {
@@ -881,29 +917,68 @@ function TimesetForm({
     }
   };
 
+  const employeeNames = staff.map(s => s.name).filter(Boolean);
+
   return (
     <div className="grid grid-cols-6 gap-2">
-      <select value={employee} onChange={(e) => setEmployee(e.target.value)} className="input">
+      {/* 1. Employee - always enabled */}
+      <select value={employee} onChange={(e) => handleEmployeeChange(e.target.value)} className="input">
         <option value="">Employee</option>
-        {employees.map(e => <option key={e} value={e}>{e}</option>)}
+        {employeeNames.map(e => <option key={e} value={e}>{e}</option>)}
       </select>
-      <select value={day} onChange={(e) => setDay(e.target.value)} className="input">
-        <option value="">Day</option>
+      
+      {/* 2. Day - enabled after employee */}
+      <select 
+        value={day} 
+        onChange={(e) => setDay(e.target.value)} 
+        className="input"
+        disabled={!employee}
+      >
+        <option value="">{employee ? 'Day' : 'Select employee first'}</option>
         {DAY_NAMES.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
-      <select value={department} onChange={(e) => setDepartment(e.target.value)} className="input">
-        <option value="">Department</option>
-        <option value="front_desk">Front Desk</option>
-        {departments.map(d => <option key={d} value={d}>{d}</option>)}
+      
+      {/* 3. Department - enabled after employee, filtered to their roles */}
+      <select 
+        value={department} 
+        onChange={(e) => handleDepartmentChange(e.target.value)} 
+        className="input"
+        disabled={!employee}
+      >
+        <option value="">{employee ? 'Role' : 'Select employee first'}</option>
+        {qualifiedRoles.map(role => (
+          <option key={role} value={role}>
+            {role === 'front_desk' ? 'Front Desk' : role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
+          </option>
+        ))}
+        {employee && qualifiedRoles.length === 0 && (
+          <option value="" disabled>No roles assigned</option>
+        )}
       </select>
-      <select value={startTime} onChange={(e) => setStartTime(e.target.value)} className="input">
-        <option value="">Start</option>
+      
+      {/* 4. Start time - enabled after department */}
+      <select 
+        value={startTime} 
+        onChange={(e) => { setStartTime(e.target.value); setEndTime(''); }} 
+        className="input"
+        disabled={!department}
+      >
+        <option value="">{department ? 'Start' : 'Select role first'}</option>
         {TIME_OPTIONS.slice(0, -1).map(t => <option key={t} value={t}>{to12Hour(t)}</option>)}
       </select>
-      <select value={endTime} onChange={(e) => setEndTime(e.target.value)} className="input">
-        <option value="">End</option>
+      
+      {/* 5. End time - enabled after start time */}
+      <select 
+        value={endTime} 
+        onChange={(e) => setEndTime(e.target.value)} 
+        className="input"
+        disabled={!startTime}
+      >
+        <option value="">{startTime ? 'End' : 'Select start first'}</option>
         {TIME_OPTIONS.filter(t => t > startTime).map(t => <option key={t} value={t}>{to12Hour(t)}</option>)}
       </select>
+      
+      {/* 6. Add button */}
       <button 
         onClick={handleAdd}
         disabled={!employee || !day || !department || !startTime || !endTime}
