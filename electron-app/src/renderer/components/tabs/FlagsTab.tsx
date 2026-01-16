@@ -630,7 +630,7 @@ export function FlagsTab() {
                 <span className="text-sm">
                   <span className="font-medium text-surface-200">{ts.employee}</span>
                   <span className="text-surface-400"> → </span>
-                  <span className="text-accent-400">{ts.department}</span>
+                  <span className="text-accent-400">{ts.department === 'front_desk' ? 'Front Desk' : ts.department}</span>
                   <span className="text-surface-400"> on </span>
                   <span>{ts.day} {to12Hour(ts.startTime)}-{to12Hour(ts.endTime)}</span>
                 </span>
@@ -893,6 +893,7 @@ function TimesetForm({
       </select>
       <select value={department} onChange={(e) => setDepartment(e.target.value)} className="input">
         <option value="">Department</option>
+        <option value="front_desk">Front Desk</option>
         {departments.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
       <select value={startTime} onChange={(e) => setStartTime(e.target.value)} className="input">
