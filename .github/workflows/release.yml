@@ -97,7 +97,13 @@ jobs:
           unset CSC_LINK
           unset CSC_KEY_PASSWORD
           unset CSC_NAME
-          npm run package -- --mac --arm64 --x64 --publish never
+          # Build architectures separately to avoid hdiutil race conditions
+          echo "Building ARM64..."
+          npm run package -- --mac --arm64 --publish never
+          echo "Waiting for disk to settle..."
+          sleep 10
+          echo "Building x64..."
+          npm run package -- --mac --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Disable code signing identity auto-discovery
