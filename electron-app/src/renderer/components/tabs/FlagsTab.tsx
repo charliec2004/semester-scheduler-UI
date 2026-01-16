@@ -32,6 +32,15 @@ const TIME_OPTIONS = [
   '14:00', '14:30', '15:00', '15:30', '16:00', '16:30', '17:00',
 ];
 
+// Convert 24-hour time to 12-hour format for display
+function to12Hour(time24: string): string {
+  const [hourStr, min] = time24.split(':');
+  const hour = parseInt(hourStr, 10);
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
+  return `${hour12}:${min} ${period}`;
+}
+
 // Tooltip component with ? icon
 function Tooltip({ text }: { text: React.ReactNode }) {
   const [show, setShow] = useState(false);
@@ -605,7 +614,7 @@ export function FlagsTab() {
                   <span className="text-surface-400"> → </span>
                   <span className="text-accent-400">{ts.department}</span>
                   <span className="text-surface-400"> on </span>
-                  <span>{ts.day} {ts.startTime}-{ts.endTime}</span>
+                  <span>{ts.day} {to12Hour(ts.startTime)}-{to12Hour(ts.endTime)}</span>
                 </span>
                 <button 
                   onClick={() => removeTimeset(i)}
@@ -870,11 +879,11 @@ function TimesetForm({
       </select>
       <select value={startTime} onChange={(e) => setStartTime(e.target.value)} className="input">
         <option value="">Start</option>
-        {TIME_OPTIONS.slice(0, -1).map(t => <option key={t} value={t}>{t}</option>)}
+        {TIME_OPTIONS.slice(0, -1).map(t => <option key={t} value={t}>{to12Hour(t)}</option>)}
       </select>
       <select value={endTime} onChange={(e) => setEndTime(e.target.value)} className="input">
         <option value="">End</option>
-        {TIME_OPTIONS.filter(t => t > startTime).map(t => <option key={t} value={t}>{t}</option>)}
+        {TIME_OPTIONS.filter(t => t > startTime).map(t => <option key={t} value={t}>{to12Hour(t)}</option>)}
       </select>
       <button 
         onClick={handleAdd}
