@@ -20,6 +20,7 @@ import type {
   StaffMember,
   Department,
 } from './ipc-types';
+import { DEFAULT_SETTINGS } from './ipc-types';
 import {
   initUpdater,
   checkForUpdates,
@@ -54,6 +55,7 @@ const store = new Store<{
       targetHardDeltaHours: 5,
       highContrast: false,
       fontSize: 'medium',
+      enforceMinDeptBlock: true,
     },
     presets: [],
     recentFiles: {},
@@ -414,7 +416,9 @@ function registerIpcHandlers(): void {
 
   // Settings
   ipcMain.handle('settings:load', () => {
-    return store.get('settings');
+    // Merge stored settings with defaults to ensure new properties have values
+    const stored = store.get('settings') as Partial<AppSettings>;
+    return { ...DEFAULT_SETTINGS, ...stored };
   });
 
   ipcMain.handle('settings:save', (_event, settings: AppSettings) => {
@@ -882,6 +886,11 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
 
   for (const pref of config.shiftTimePreferences || []) {
     args.push('--shift-pref', `${pref.employee},${pref.day},${pref.preference}`);
+  }
+
+  // Experimental: minimum department block enforcement
+  if (config.enforceMinDeptBlock === false) {
+    args.push('--no-enforce-min-dept-block');
   }
 
   return args;

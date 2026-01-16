@@ -337,7 +337,7 @@ export function ResultsTab() {
           <ul className="space-y-2 text-sm text-surface-400">
             <li className="flex items-start gap-2">
               <span className="text-accent-400">•</span>
-              Check that at least one employee has the front_desk role
+              Check that at least one employee has the front desk role
             </li>
             <li className="flex items-start gap-2">
               <span className="text-accent-400">•</span>

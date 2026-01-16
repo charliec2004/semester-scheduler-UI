@@ -235,6 +235,62 @@ def _collect_intervals(assign, solver, employees, days, T, time_slots, role):
     return intervals
 
 
+def _find_coverage_gaps(intervals: Dict[str, List[Tuple[str, int, int]]], days, T) -> Dict[str, List[Tuple[str, int, int]]]:
+    """Find time slots with no coverage and return them as UNCOVERED intervals."""
+    gaps: Dict[str, List[Tuple[str, int, int]]] = {day: [] for day in days}
+    
+    for day in days:
+        # Create a set of all covered slots for this day
+        covered_slots = set()
+        for _, start, end in intervals.get(day, []):
+            for t in range(start, end + 1):
+                covered_slots.add(t)
+        
+        # Find uncovered slots
+        uncovered_slots = [t for t in T if t not in covered_slots]
+        if not uncovered_slots:
+            continue
+        
+        # Group consecutive uncovered slots into intervals
+        uncovered_slots.sort()
+        start = prev = uncovered_slots[0]
+        for s in uncovered_slots[1:] + [None]:
+            if s is not None and s == prev + 1:
+                prev = s
+                continue
+            gaps[day].append(("UNCOVERED", start, prev))
+            if s is not None:
+                start = prev = s
+    
+    return gaps
+
+
+def _merge_intervals_with_gaps(
+    intervals: Dict[str, List[Tuple[str, int, int]]], 
+    gaps: Dict[str, List[Tuple[str, int, int]]], 
+    days
+) -> Dict[str, List[Tuple[str, int, int, bool]]]:
+    """Merge coverage intervals with gap intervals, sorted by start time.
+    
+    Returns intervals with a 4th element indicating if it's an UNCOVERED gap.
+    """
+    merged: Dict[str, List[Tuple[str, int, int, bool]]] = {day: [] for day in days}
+    
+    for day in days:
+        # Add regular intervals (not gaps)
+        for name, start, end in intervals.get(day, []):
+            merged[day].append((name, start, end, False))
+        
+        # Add gap intervals
+        for name, start, end in gaps.get(day, []):
+            merged[day].append((name, start, end, True))
+        
+        # Sort by start time
+        merged[day].sort(key=lambda x: (x[1], x[0]))
+    
+    return merged
+
+
 def _build_frontdesk_comment_lookup(employees, qual, primary_frontdesk_department, role_display_names):
     """Return a callable mapping employee name to an optional front desk comment."""
     multi_dept_employees = set(
@@ -389,6 +445,16 @@ def export_formatted_schedule(
         "border": 1,
     })
 
+    # Uncovered cell format - red text for front desk gaps
+    uncovered_fmt = workbook.add_format({
+        "font_name": "Calibri",
+        "font_color": "#FF0000",
+        "align": "left",
+        "valign": "top",
+        "border": 1,
+        "bold": True,
+    })
+
     # Column setup: A stats, then pairs per day
     ws.set_column("A:A", 28)
     for idx in range(5):  # 5 days
@@ -419,23 +485,34 @@ def export_formatted_schedule(
                 ws.write(row, name_col + 1, "", header_fmt)
             row += 1
             
+            # Find coverage gaps and merge with intervals
+            gaps = _find_coverage_gaps(intervals, days, T)
+            merged_intervals = _merge_intervals_with_gaps(intervals, gaps, days)
+            merged_max_len = max((len(v) for v in merged_intervals.values()), default=0)
+            
             # Schedule data rows - minimum 3 rows with borders
-            grid_rows = max(3, max_len)
+            grid_rows = max(3, merged_max_len)
             for i in range(grid_rows):
                 for idx, day in enumerate(days):
-                    entries = intervals.get(day, [])
+                    entries = merged_intervals.get(day, [])
                     name_col = 1 + idx * 2
                     time_col = 1 + idx * 2 + 1
                     
                     if i < len(entries):
-                        name, start, end = entries[i]
+                        name, start, end, is_uncovered = entries[i]
                         start_str = time_slot_starts[start]
                         end_str = time_slot_starts[end]
-                        ws.write(row + i, name_col, name, cell_fmt)
-                        ws.write(row + i, time_col, _format_time_range(start_str, end_str), cell_fmt)
-                        comment = frontdesk_comment_for(name)
-                        if comment:
-                            ws.write_comment(row + i, name_col, comment)
+                        
+                        if is_uncovered:
+                            # Use red text for uncovered slots
+                            ws.write(row + i, name_col, name, uncovered_fmt)
+                            ws.write(row + i, time_col, _format_time_range(start_str, end_str), cell_fmt)
+                        else:
+                            ws.write(row + i, name_col, name, cell_fmt)
+                            ws.write(row + i, time_col, _format_time_range(start_str, end_str), cell_fmt)
+                            comment = frontdesk_comment_for(name)
+                            if comment:
+                                ws.write_comment(row + i, name_col, comment)
                     else:
                         # Empty cell with border
                         ws.write(row + i, name_col, "", empty_cell_fmt)

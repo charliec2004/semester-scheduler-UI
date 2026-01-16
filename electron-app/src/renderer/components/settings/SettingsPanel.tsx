@@ -3,21 +3,40 @@
  * Slide-out panel for configuring solver parameters and UI preferences
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useSettingsStore, useUIStore, useStaffStore, useDepartmentStore, useFlagsStore } from '../../store';
 import type { AppSettings } from '../../../main/ipc-types';
 
-// Tooltip component with ? icon
+// Tooltip component with ? icon - uses fixed positioning to avoid clipping
 function Tooltip({ text }: { text: string }) {
   const [show, setShow] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  
+  const handleMouseEnter = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      // Position below the button, constrained to viewport
+      const tooltipWidth = 256; // w-64 = 16rem = 256px
+      let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+      // Keep tooltip within viewport with 8px padding
+      left = Math.max(8, Math.min(left, window.innerWidth - tooltipWidth - 8));
+      setCoords({
+        top: rect.bottom + 8,
+        left,
+      });
+    }
+    setShow(true);
+  };
   
   return (
     <span className="relative inline-flex items-center ml-1.5">
       <button
+        ref={buttonRef}
         type="button"
-        onMouseEnter={() => setShow(true)}
+        onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setShow(false)}
-        onFocus={() => setShow(true)}
+        onFocus={handleMouseEnter}
         onBlur={() => setShow(false)}
         className="w-4 h-4 rounded-full bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-300 flex items-center justify-center text-xs font-medium transition-colors"
         aria-label="More information"
@@ -25,11 +44,11 @@ function Tooltip({ text }: { text: string }) {
         ?
       </button>
       {show && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left">
+        <div 
+          className="fixed z-[100] px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left"
+          style={{ top: coords.top, left: coords.left }}
+        >
           {text}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
-            <div className="border-4 border-transparent border-t-surface-800" />
-          </div>
         </div>
       )}
     </span>
@@ -229,25 +248,6 @@ export function SettingsPanel() {
               Solver Configuration
             </h3>
             <div className="space-y-4">
-              <div>
-                <label className="label" htmlFor="solverMaxTime">
-                  Max Solve Time (seconds)
-                  <Tooltip text="The maximum time the optimizer will spend searching for the best schedule. Longer times may find better solutions. 2-3 minutes is usually sufficient." />
-                </label>
-                <input
-                  id="solverMaxTime"
-                  type="number"
-                  min="30"
-                  max="600"
-                  value={localSettings.solverMaxTime}
-                  onChange={(e) => updateSetting('solverMaxTime', parseInt(e.target.value) || 180)}
-                  className="input"
-                />
-                <p className="text-xs text-surface-500 mt-1">
-                  How long the solver will search for an optimal solution
-                </p>
-              </div>
-
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <label className="label" htmlFor="minSlots">
@@ -481,6 +481,29 @@ export function SettingsPanel() {
                 <label htmlFor="highContrast" className="text-surface-200">
                   High contrast mode
                 </label>
+              </div>
+            </div>
+          </section>
+
+          {/* Experimental Features */}
+          <section>
+            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+              Experimental Features
+              <Tooltip text="These features are experimental and may change in future versions." />
+            </h3>
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <input
+                  type="checkbox"
+                  id="enforceMinDeptBlock"
+                  checked={localSettings.enforceMinDeptBlock}
+                  onChange={(e) => updateSetting('enforceMinDeptBlock', e.target.checked)}
+                  className="checkbox-dark flex-shrink-0"
+                />
+                <label htmlFor="enforceMinDeptBlock" className="text-surface-200">
+                  Enforce 2-hour minimum department blocks
+                </label>
+                <Tooltip text="When enabled, non-Front-Desk department assignments must be at least 2 hours. Prevents awkward 1-hour fragments within shifts. Favored employees are partially exempt but cannot split a 2-hour shift across two departments." />
               </div>
             </div>
           </section>

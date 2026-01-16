@@ -3,7 +3,7 @@
  * Configure solver flags and run the optimization
  */
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { 
   useFlagsStore, 
   useStaffStore, 
@@ -41,17 +41,36 @@ function to12Hour(time24: string): string {
   return `${hour12}:${min} ${period}`;
 }
 
-// Tooltip component with ? icon
+// Tooltip component with ? icon - uses fixed positioning to avoid clipping
 function Tooltip({ text }: { text: React.ReactNode }) {
   const [show, setShow] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+  const buttonRef = useRef<HTMLButtonElement>(null);
+  
+  const handleMouseEnter = () => {
+    if (buttonRef.current) {
+      const rect = buttonRef.current.getBoundingClientRect();
+      // Position below the button, constrained to viewport
+      const tooltipWidth = 256; // w-64 = 16rem = 256px
+      let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+      // Keep tooltip within viewport with 8px padding
+      left = Math.max(8, Math.min(left, window.innerWidth - tooltipWidth - 8));
+      setCoords({
+        top: rect.bottom + 8,
+        left,
+      });
+    }
+    setShow(true);
+  };
   
   return (
     <span className="relative inline-flex items-center ml-1.5">
       <button
+        ref={buttonRef}
         type="button"
-        onMouseEnter={() => setShow(true)}
+        onMouseEnter={handleMouseEnter}
         onMouseLeave={() => setShow(false)}
-        onFocus={() => setShow(true)}
+        onFocus={handleMouseEnter}
         onBlur={() => setShow(false)}
         className="w-4 h-4 rounded-full bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-300 flex items-center justify-center text-xs font-medium transition-colors"
         aria-label="More information"
@@ -59,11 +78,11 @@ function Tooltip({ text }: { text: React.ReactNode }) {
         ?
       </button>
       {show && (
-        <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left">
+        <div 
+          className="fixed z-[100] px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left"
+          style={{ top: coords.top, left: coords.left }}
+        >
           {text}
-          <div className="absolute top-full left-1/2 -translate-x-1/2 -mt-px">
-            <div className="border-4 border-transparent border-t-surface-800" />
-          </div>
         </div>
       )}
     </span>
@@ -178,6 +197,7 @@ export function FlagsTab() {
           favoredEmployeeDepts,
           timesets,
           shiftTimePreferences,
+          enforceMinDeptBlock: settings?.enforceMinDeptBlock ?? true,
         },
         snapshot,
       });
@@ -341,7 +361,7 @@ export function FlagsTab() {
             {Object.entries(favoredEmployees).map(([emp, mult]) => (
               <span key={emp} className="badge-success flex items-center gap-1">
                 {emp}
-                {mult !== 1 && <span className="text-warning-400">({mult}x)</span>}
+                <span className="text-accent-300 opacity-75">({mult}x)</span>
                 <button 
                   onClick={() => removeFavoredEmployee(emp)}
                   className="hover:text-danger-400"
@@ -428,11 +448,11 @@ export function FlagsTab() {
         <div className="card">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Favor Departments for Front Desk
-            <Tooltip text="When filling front desk shifts, prioritize employees from these departments. Use the strength multiplier to control priority when multiple departments are favored. Department members must be qualified for front_desk." />
+            <Tooltip text="When filling front desk shifts, prioritize employees from these departments. Use the strength multiplier to control priority when multiple departments are favored. Department members must be qualified for front desk." />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Prioritize members of these departments to cover front desk shifts.
-            At least one member must have front_desk qualification.
+            At least one member must have front desk qualification.
           </p>
           
           <div className="space-y-2">
@@ -568,9 +588,7 @@ export function FlagsTab() {
                   <span className="font-medium text-surface-200">{fed.employee}</span>
                   <span className="text-surface-400"> → </span>
                   <span className="text-accent-400">{fed.department}</span>
-                  {fed.multiplier && fed.multiplier !== 1 && (
-                    <span className="text-warning-400 ml-1">({fed.multiplier}x)</span>
-                  )}
+                  <span className="text-surface-500 ml-1">({fed.multiplier || 1}x)</span>
                 </span>
                 <button 
                   onClick={() => removeFavoredEmployeeDept(i)}
@@ -1060,7 +1078,7 @@ function FavoredEmployeeDeptForm({
           <option value="">{employee ? 'Select role...' : 'Select employee first'}</option>
           {qualifiedRoles.map(d => (
             <option key={d} value={d}>
-              {d === 'front_desk' ? '🖥️ Front Desk' : d}
+              {d === 'front_desk' ? 'Front Desk' : d}
             </option>
           ))}
         </select>

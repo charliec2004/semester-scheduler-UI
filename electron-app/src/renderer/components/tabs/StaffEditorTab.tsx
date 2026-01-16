@@ -346,9 +346,9 @@ export function StaffEditorTab() {
                                 className="text-surface-400 font-medium hover:text-accent-400 transition-colors"
                                 title={`Click to ${allAvailable ? 'clear' : 'fill'} all ${day} slots`}
                               >
-                                {day}
+                            {day}
                               </button>
-                            </th>
+                          </th>
                           );
                         })}
                       </tr>

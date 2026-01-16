@@ -120,6 +120,19 @@ def build_parser() -> argparse.ArgumentParser:
             "PREF should be 'morning' (8am-12pm) or 'afternoon' (12pm-5pm). Repeatable."
         ),
     )
+    parser.add_argument(
+        "--enforce-min-dept-block",
+        action="store_true",
+        default=True,
+        dest="enforce_min_dept_block",
+        help="Enforce 2-hour minimum for non-Front-Desk department blocks (default: enabled).",
+    )
+    parser.add_argument(
+        "--no-enforce-min-dept-block",
+        action="store_false",
+        dest="enforce_min_dept_block",
+        help="Disable 2-hour minimum department block enforcement.",
+    )
     return parser
 
 
@@ -382,6 +395,7 @@ def main(argv: list[str] | None = None) -> None:
             favored_employee_depts=favored_employee_depts,
             shift_time_preferences=shift_time_preferences,
             show_progress=args.progress,
+            enforce_min_dept_block=args.enforce_min_dept_block,
         )
     except Exception as exc:
         print(f"ERROR: {exc}", file=sys.stderr)

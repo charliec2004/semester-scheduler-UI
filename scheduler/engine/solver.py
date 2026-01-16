@@ -72,6 +72,7 @@ def solve_schedule(
     favored_employee_depts: List[FavoredEmployeeDepartment] | None = None,
     shift_time_preferences: List["ShiftTimePreference"] | None = None,
     show_progress: bool = False,
+    enforce_min_dept_block: bool = True,
 ):
     """Main function to build and solve the scheduling model"""
 
@@ -706,6 +707,46 @@ def solve_schedule(
                 
                 # Forbid single 30-minute slot for any role
                 model.add(total_role_slots != 1)
+                
+                # CONDITIONAL: Enforce 2-hour minimum for non-FD departments (when toggle ON)
+                # Non-favored employees: each non-FD department block must be >= 4 slots (2 hours)
+                if enforce_min_dept_block:
+                    is_favored = e.lower() in favored_employees_normalized
+                    if not is_favored and r != FRONT_DESK_ROLE:
+                        model.add(total_role_slots != 2)  # Not 1 hour
+                        model.add(total_role_slots != 3)  # Not 1.5 hours
+    
+    # ============================================================================
+    # STEP 9D: CROSS-DEPARTMENT SPLIT RESTRICTION (EXPERIMENTAL)
+    # ============================================================================
+    # Forbid 2-hour shifts split 1h+1h across two non-Front-Desk departments
+    # This applies to EVERYONE including favored employees
+    # A 4-slot shift cannot have exactly 2 slots in one non-FD dept and 2 in another
+    
+    if enforce_min_dept_block:
+        for e in employees:
+            for d in days:
+                # Track which non-FD depts have exactly 2 slots
+                has_2_slots = {}
+                for r in department_roles:
+                    total_r = sum(assign.get((e, d, t, r), 0) for t in T)
+                    has_2 = model.new_bool_var(f"has_2_slots[{e},{d},{r}]")
+                    model.add(total_r == 2).only_enforce_if(has_2)
+                    model.add(total_r != 2).only_enforce_if(has_2.Not())
+                    has_2_slots[r] = has_2
+                
+                # Count depts with exactly 2 slots
+                num_with_2 = sum(has_2_slots.values())
+                
+                # Total shift length
+                total_shift = sum(work[e, d, t] for t in T)
+                
+                # If 4-slot shift (2 hours), can't have 2 non-FD depts each with 2 slots (1h+1h)
+                is_4_slot_shift = model.new_bool_var(f"is_4_slot[{e},{d}]")
+                model.add(total_shift == 4).only_enforce_if(is_4_slot_shift)
+                model.add(total_shift != 4).only_enforce_if(is_4_slot_shift.Not())
+                
+                model.add(num_with_2 <= 1).only_enforce_if(is_4_slot_shift)
     
     
     # ============================================================================

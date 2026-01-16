@@ -28,6 +28,9 @@ export interface AppSettings {
   // UI preferences
   highContrast: boolean;
   fontSize: 'small' | 'medium' | 'large';
+  
+  // Experimental
+  enforceMinDeptBlock: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -44,6 +47,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   targetHardDeltaHours: 5,
   highContrast: false,
   fontSize: 'medium',
+  enforceMinDeptBlock: true,
 };
 
 // ---------------------------------------------------------------------------
@@ -107,6 +111,7 @@ export interface SolverRunConfig {
   timesets?: TimesetRequest[];
   favoredEmployeeDepts?: FavoredEmployeeDept[];
   shiftTimePreferences?: ShiftTimePreference[];
+  enforceMinDeptBlock?: boolean; // Default true, disable to allow 1-hour dept blocks
 }
 
 export interface SolverProgress {
