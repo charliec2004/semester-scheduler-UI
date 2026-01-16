@@ -129,6 +129,7 @@ interface DepartmentState {
   updateDepartment: (index: number, dept: Partial<Department>) => void;
   addDepartment: (dept: Department) => void;
   removeDepartment: (index: number) => void;
+  reorderDepartments: (fromIndex: number, toIndex: number) => void;
   setErrors: (errors: ValidationError[], warnings: ValidationError[]) => void;
   setDirty: (dirty: boolean) => void;
   clearDepartments: () => void;
@@ -157,6 +158,13 @@ export const useDepartmentStore = create<DepartmentState>((set, get) => ({
 
   removeDepartment: (index) => {
     const departments = get().departments.filter((_, i) => i !== index);
+    set({ departments, dirty: true });
+  },
+
+  reorderDepartments: (fromIndex, toIndex) => {
+    const departments = [...get().departments];
+    const [removed] = departments.splice(fromIndex, 1);
+    departments.splice(toIndex, 0, removed);
     set({ departments, dirty: true });
   },
 

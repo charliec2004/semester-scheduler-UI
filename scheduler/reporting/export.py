@@ -333,74 +333,161 @@ def export_formatted_schedule(
         for role in ordered_roles
     }
 
+    # Full day names mapping
+    day_full_names = {
+        "Mon": "Monday",
+        "Tue": "Tuesday",
+        "Wed": "Wednesday",
+        "Thu": "Thursday",
+        "Fri": "Friday",
+    }
+
     workbook = xlsxwriter.Workbook(formatted_path)
     ws = workbook.add_worksheet("Schedule")
 
-    header_fmt = workbook.add_format(
-        {"bold": True, "font_color": "black", "bg_color": "#00AEEF", "align": "center", "valign": "vcenter", "border": 1}
-    )
-    bold_fmt = workbook.add_format({"bold": True})
-    text_fmt = workbook.add_format({"align": "left", "valign": "top"})
+    # Title format - large Calibri font
+    title_fmt = workbook.add_format({
+        "font_name": "Calibri",
+        "font_size": 26,
+        "bold": False,
+    })
+
+    # Header format - cyan background, bold Calibri, all borders, LEFT aligned
+    header_fmt = workbook.add_format({
+        "bold": True,
+        "font_name": "Calibri",
+        "font_color": "black",
+        "bg_color": "#00AEEF",
+        "align": "left",
+        "valign": "vcenter",
+        "border": 1,
+    })
+
+    # Bold format for department names - Calibri Bold
+    bold_fmt = workbook.add_format({
+        "bold": True,
+        "font_name": "Calibri",
+    })
+
+    # Text format for stats - Calibri regular
+    stats_fmt = workbook.add_format({
+        "font_name": "Calibri",
+        "align": "left",
+        "valign": "top",
+    })
+
+    # Grid cell format - Calibri with borders
+    cell_fmt = workbook.add_format({
+        "font_name": "Calibri",
+        "align": "left",
+        "valign": "top",
+        "border": 1,
+    })
+
+    # Empty cell format - borders only for grid structure
+    empty_cell_fmt = workbook.add_format({
+        "border": 1,
+    })
 
     # Column setup: A stats, then pairs per day
     ws.set_column("A:A", 28)
-    day_cols = {
-        "Mon": ("B", "C"),
-        "Tue": ("D", "E"),
-        "Wed": ("F", "G"),
-        "Thu": ("H", "I"),
-        "Fri": ("J", "K"),
-    }
-    for cols in day_cols.values():
-        ws.set_column(f"{cols[0]}:{cols[0]}", 14)
-        ws.set_column(f"{cols[1]}:{cols[1]}", 18)
+    for idx in range(5):  # 5 days
+        name_col = 1 + idx * 2
+        time_col = 2 + idx * 2
+        ws.set_column(name_col, name_col, 14)
+        ws.set_column(time_col, time_col, 18)
 
-    row = 0
+    # Write title at top
+    ws.write(0, 0, "Title", title_fmt)
+    row = 1  # Start content on row 1 (right after title)
+
     for role in ordered_roles:
-        # Stats lines
+        intervals = intervals_by_role[role]
+        max_len = max((len(v) for v in intervals.values()), default=0)
         display = role_display_names.get(role, role.replace("_", " ").title())
+
         if role == FRONT_DESK_ROLE:
+            # FD: Row has FD label + day headers on same row
             counted = role_direct_slots[role] * 0.5
-            ws.write(row, 0, f"FD: {counted:.1f}", bold_fmt)
-            row += 2
+            ws.write(row, 0, f"FD: {counted:.0f}", bold_fmt)
+            
+            # Day headers on same row as FD
+            for idx, day in enumerate(days):
+                full_day = day_full_names.get(day, day)
+                name_col = 1 + idx * 2
+                ws.write(row, name_col, full_day, header_fmt)
+                ws.write(row, name_col + 1, "", header_fmt)
+            row += 1
+            
+            # Schedule data rows - minimum 3 rows with borders
+            grid_rows = max(3, max_len)
+            for i in range(grid_rows):
+                for idx, day in enumerate(days):
+                    entries = intervals.get(day, [])
+                    name_col = 1 + idx * 2
+                    time_col = 1 + idx * 2 + 1
+                    
+                    if i < len(entries):
+                        name, start, end = entries[i]
+                        start_str = time_slot_starts[start]
+                        end_str = time_slot_starts[end]
+                        ws.write(row + i, name_col, name, cell_fmt)
+                        ws.write(row + i, time_col, _format_time_range(start_str, end_str), cell_fmt)
+                        comment = frontdesk_comment_for(name)
+                        if comment:
+                            ws.write_comment(row + i, name_col, comment)
+                    else:
+                        # Empty cell with border
+                        ws.write(row + i, name_col, "", empty_cell_fmt)
+                        ws.write(row + i, time_col, "", empty_cell_fmt)
+            row += grid_rows
         else:
+            # Department: Row 1 has dept name + day headers
             stats = department_breakdown[role]
             counted = stats["focused_hours"] + stats["dual_hours_counted"]
             actual = stats["focused_hours"] + stats["dual_hours_total"]
             dual_counted = stats["dual_hours_counted"]
             dual_actual = stats["dual_hours_total"]
             focused = stats["focused_hours"]
-            ws.write(row, 0, f"{display}: {counted:.1f} ({actual:.1f})", bold_fmt)
-            ws.write(row + 1, 0, f"Dual: {dual_counted:.2f} ({dual_actual:.2f})", text_fmt)
-            ws.write(row + 2, 0, f"Focused: {focused:.2f}", text_fmt)
-            row += 4
-
-        # Day headers
-        for idx, day in enumerate(days):
-            c1 = xlsxwriter.utility.xl_col_to_name(1 + idx * 2)
-            c2 = xlsxwriter.utility.xl_col_to_name(1 + idx * 2 + 1)
-            ws.merge_range(row, 1 + idx * 2, row, 1 + idx * 2 + 1, day, header_fmt)
-
-        row += 1
-        # Collect max rows among days
-        intervals = intervals_by_role[role]
-        max_len = max((len(v) for v in intervals.values()), default=0)
-        display_rows = max(3, max_len)
-        for i in range(display_rows):
+            
+            # Dept name + day headers on same row
+            ws.write(row, 0, f"{display}: {counted:.0f} ({actual:.1f})", bold_fmt)
             for idx, day in enumerate(days):
-                entries = intervals.get(day, [])
-                if i < len(entries):
-                    name, start, end = entries[i]
-                    start_str = time_slot_starts[start]
-                    end_str = time_slot_starts[end]
-                    target_col = 1 + idx * 2
-                    ws.write(row + i, target_col, name, text_fmt)
-                    ws.write(row + i, 1 + idx * 2 + 1, _format_time_range(start_str, end_str), text_fmt)
-                    if role == FRONT_DESK_ROLE:
-                        comment = frontdesk_comment_for(name)
-                        if comment:
-                            ws.write_comment(row + i, target_col, comment)
-        row += display_rows + 2
+                full_day = day_full_names.get(day, day)
+                name_col = 1 + idx * 2
+                ws.write(row, name_col, full_day, header_fmt)
+                ws.write(row, name_col + 1, "", header_fmt)
+            row += 1
+            
+            # Grid rows: Dual line + row 0 data, Focused line + row 1 data, then more rows
+            # Minimum 3 rows of bordered cells
+            grid_rows = max(3, max_len)
+            
+            for i in range(grid_rows):
+                # Column A: Dual on row 0, Focused on row 1, empty after
+                if i == 0:
+                    ws.write(row + i, 0, f"Dual: {dual_counted:.1f} ({dual_actual:.0f})", stats_fmt)
+                elif i == 1:
+                    ws.write(row + i, 0, f"Focused: {focused:.0f}", stats_fmt)
+                
+                # Schedule data in columns B onwards
+                for idx, day in enumerate(days):
+                    entries = intervals.get(day, [])
+                    name_col = 1 + idx * 2
+                    time_col = 1 + idx * 2 + 1
+                    
+                    if i < len(entries):
+                        name, start, end = entries[i]
+                        start_str = time_slot_starts[start]
+                        end_str = time_slot_starts[end]
+                        ws.write(row + i, name_col, name, cell_fmt)
+                        ws.write(row + i, time_col, _format_time_range(start_str, end_str), cell_fmt)
+                    else:
+                        # Empty cell with border
+                        ws.write(row + i, name_col, "", empty_cell_fmt)
+                        ws.write(row + i, time_col, "", empty_cell_fmt)
+            
+            row += grid_rows
 
     workbook.close()
 

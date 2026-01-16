@@ -22,6 +22,7 @@ class StaffData:
 class DepartmentRequirements:
     targets: Dict[str, float]
     max_hours: Dict[str, float]
+    order: List[str]  # Department names in user-defined display order
 
 
 @dataclass(frozen=True)

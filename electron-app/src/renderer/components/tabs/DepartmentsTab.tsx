@@ -10,9 +10,11 @@ import { departmentsToCsv } from '../../utils/csvValidators';
 import type { Department } from '../../../main/ipc-types';
 
 export function DepartmentsTab() {
-  const { departments, updateDepartment, addDepartment, removeDepartment, dirty, setDirty, saveDepartments } = useDepartmentStore();
+  const { departments, updateDepartment, addDepartment, removeDepartment, reorderDepartments, dirty, setDirty, saveDepartments } = useDepartmentStore();
   const { showToast } = useUIStore();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const handleAddDepartment = () => {
     const newDept: Department = {
@@ -47,6 +49,39 @@ export function DepartmentsTab() {
       target: departments.reduce((sum, d) => sum + d.targetHours, 0),
       max: departments.reduce((sum, d) => sum + d.maxHours, 0),
     };
+  };
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.setData('text/plain', index.toString());
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedIndex !== null && draggedIndex !== index) {
+      setDragOverIndex(index);
+    }
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, toIndex: number) => {
+    e.preventDefault();
+    if (draggedIndex !== null && draggedIndex !== toIndex) {
+      reorderDepartments(draggedIndex, toIndex);
+    }
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   if (departments.length === 0) {
@@ -143,6 +178,7 @@ export function DepartmentsTab() {
         <table className="w-full">
           <thead className="bg-surface-800">
             <tr>
+              <th className="w-10"></th>
               <th className="text-left py-3 px-4 text-sm font-medium text-surface-300">
                 Department
               </th>
@@ -161,15 +197,41 @@ export function DepartmentsTab() {
             {departments.map((dept, index) => {
               const isEditing = editingIndex === index;
               const hasError = dept.targetHours > dept.maxHours;
+              const isDragging = draggedIndex === index;
+              const isDragOver = dragOverIndex === index;
 
               return (
                 <tr 
                   key={`dept-${index}`} 
+                  draggable
+                  onDragStart={(e) => handleDragStart(e, index)}
+                  onDragOver={(e) => handleDragOver(e, index)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, index)}
+                  onDragEnd={handleDragEnd}
                   className={`
-                    border-t border-surface-700
+                    border-t border-surface-700 transition-all
                     ${hasError ? 'bg-danger-500/5' : 'hover:bg-surface-800/50'}
+                    ${isDragging ? 'opacity-50' : ''}
+                    ${isDragOver ? 'border-t-2 border-t-accent-500' : ''}
                   `}
                 >
+                  {/* Drag Handle */}
+                  <td className="py-3 pl-2 pr-0">
+                    <div 
+                      className="cursor-grab active:cursor-grabbing text-surface-500 hover:text-surface-300 transition-colors flex items-center justify-center"
+                      title="Drag to reorder"
+                    >
+                      <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
+                        <circle cx="6" cy="5" r="1.5" />
+                        <circle cx="14" cy="5" r="1.5" />
+                        <circle cx="6" cy="10" r="1.5" />
+                        <circle cx="14" cy="10" r="1.5" />
+                        <circle cx="6" cy="15" r="1.5" />
+                        <circle cx="14" cy="15" r="1.5" />
+                      </svg>
+                    </div>
+                  </td>
                   <td className="py-3 px-4">
                     {isEditing ? (
                       <input
@@ -257,6 +319,7 @@ export function DepartmentsTab() {
           </tbody>
           <tfoot className="bg-surface-800/50">
             <tr>
+              <td></td>
               <td className="py-3 px-4 font-medium text-surface-300">
                 Total
               </td>

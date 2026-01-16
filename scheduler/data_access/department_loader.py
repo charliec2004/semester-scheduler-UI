@@ -65,9 +65,10 @@ def load_department_requirements(path: Path) -> DepartmentRequirements:
     target_col = require_column("target_hours")
     max_col = require_column("max_hours")
 
-    # Initialize dictionaries to store parsed data
+    # Initialize storage for parsed data
     department_targets: Dict[str, float] = {}
     department_max_hours: Dict[str, float] = {}
+    department_order: list[str] = []  # Track order as they appear in CSV
 
     # Iterate through each row in the CSV
     for _, row in df.iterrows():
@@ -95,7 +96,12 @@ def load_department_requirements(path: Path) -> DepartmentRequirements:
         # Store the validated data
         department_targets[department] = target_hours
         department_max_hours[department] = max_hours
+        department_order.append(department)
 
     # Return a frozen DepartmentRequirements dataclass
     # (immutable to prevent accidental modification)
-    return DepartmentRequirements(targets=department_targets, max_hours=department_max_hours)
+    return DepartmentRequirements(
+        targets=department_targets, 
+        max_hours=department_max_hours,
+        order=department_order
+    )

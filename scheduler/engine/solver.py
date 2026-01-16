@@ -113,7 +113,14 @@ def solve_schedule(
     if FRONT_DESK_ROLE not in roles:
         raise ValueError(f"Role '{FRONT_DESK_ROLE}' is required but missing from staff data.")
     roles = [FRONT_DESK_ROLE] + [role for role in roles if role != FRONT_DESK_ROLE]
-    department_roles = [role for role in roles if role != FRONT_DESK_ROLE]
+    
+    # Build department_roles in the order they appear in the departments CSV
+    # This preserves user-defined ordering from the UI
+    csv_order = department_requirements.order
+    all_dept_roles = [role for role in roles if role != FRONT_DESK_ROLE]
+    # Put departments in CSV order first, then any extras not in CSV
+    department_roles = [r for r in csv_order if r in all_dept_roles]
+    department_roles += [r for r in all_dept_roles if r not in csv_order]
     
     missing_targets = [role for role in department_roles if role not in department_hour_targets_raw]
     missing_max = [role for role in department_roles if role not in department_max_hours_raw]
