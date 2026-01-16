@@ -476,7 +476,7 @@ export function SettingsPanel() {
                   id="highContrast"
                   checked={localSettings.highContrast}
                   onChange={(e) => updateSetting('highContrast', e.target.checked)}
-                  className="w-4 h-4 rounded border-surface-600 bg-surface-800 text-accent-500 focus:ring-accent-500"
+                  className="checkbox-dark"
                 />
                 <label htmlFor="highContrast" className="text-surface-200">
                   High contrast mode
