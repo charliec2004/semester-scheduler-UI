@@ -12,7 +12,7 @@ from typing import Dict, Tuple
 
 import pandas as pd
 
-from scheduler.domain.models import DepartmentRequirements
+from scheduler.domain.models import DepartmentRequirements, normalize_department_name
 from scheduler.data_access.staff_loader import _coerce_numeric, _normalize_columns
 
 
@@ -72,8 +72,8 @@ def load_department_requirements(path: Path) -> DepartmentRequirements:
 
     # Iterate through each row in the CSV
     for _, row in df.iterrows():
-        # Extract and clean the department name (lowercase for case-insensitive matching)
-        department = str(row[dept_col]).strip().lower()
+        # Extract and normalize the department name (handles spaces, underscores, case)
+        department = normalize_department_name(str(row[dept_col]))
         
         # Validate: department name cannot be empty
         if not department:

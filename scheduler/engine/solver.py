@@ -53,6 +53,7 @@ from scheduler.domain.models import (
     ShiftTimePreference,
     TimesetRequest,
     TrainingRequest,
+    normalize_department_name,
 )
 from scheduler.reporting.console import print_schedule
 from scheduler.reporting.export import export_schedule_to_excel, export_formatted_schedule
@@ -168,7 +169,7 @@ def solve_schedule(
                 file=sys.stderr,
             )
     employees_lower = {emp.lower(): emp for emp in employees}
-    role_lookup_lower = {role.lower(): role for role in department_roles}
+    role_lookup_lower = {normalize_department_name(role): role for role in department_roles}
     day_lookup_lower = {day.lower(): day for day in days}
 
     forced_assignments: Set[tuple[str, str, int, str]] = set()
@@ -183,7 +184,7 @@ def solve_schedule(
             raise ValueError(f"--timeset day '{req.day}' is invalid. Expected one of: {', '.join(days)}.")
         day = day_lookup_lower[day_key]
 
-        dept_key = req.department.strip().lower().replace(" ", "_")
+        dept_key = normalize_department_name(req.department)
         if dept_key not in role_lookup_lower and dept_key != FRONT_DESK_ROLE:
             raise ValueError(f"--timeset department '{req.department}' not found among roles.")
         role_name = role_lookup_lower.get(dept_key, FRONT_DESK_ROLE if dept_key == FRONT_DESK_ROLE else dept_key)
@@ -214,7 +215,7 @@ def solve_schedule(
 
     favored_departments_normalized: Dict[str, FavoredDepartment] = {}
     for key, mult in favored_departments.items():
-        dept_key = key.strip().lower()
+        dept_key = normalize_department_name(key)
         if dept_key not in role_lookup_lower:
             raise ValueError(f"--favor-dept department '{key}' not found among department roles.")
         role_name = role_lookup_lower[dept_key]
@@ -222,7 +223,7 @@ def solve_schedule(
         favored_departments_normalized[role_name] = FavoredDepartment(name=role_name, multiplier=multiplier)
     favored_fd_departments_normalized: Dict[str, FavoredFrontDeskDepartment] = {}
     for key, mult in favored_frontdesk_departments.items():
-        dept_key = key.strip().lower()
+        dept_key = normalize_department_name(key)
         if dept_key not in role_lookup_lower:
             raise ValueError(f"--favor-frontdesk-dept department '{key}' not found among department roles.")
         role_name = role_lookup_lower[dept_key]
@@ -238,7 +239,7 @@ def solve_schedule(
             raise ValueError(f"--favor-employee-dept employee '{fed.employee}' not found in staff data.")
         employee = employees_lower[emp_key]
         
-        dept_key = fed.department.strip().lower().replace(" ", "_")
+        dept_key = normalize_department_name(fed.department)
         
         # Special case: front_desk is a role, not a department
         if dept_key == FRONT_DESK_ROLE:
@@ -260,7 +261,7 @@ def solve_schedule(
 
     validated_training: List[dict] = []
     for request in training_requests:
-        dept_key = request.department.strip().lower()
+        dept_key = normalize_department_name(request.department)
         if dept_key not in role_lookup_lower:
             raise ValueError(f"--training department '{request.department}' not found among department roles.")
         dept_role = role_lookup_lower[dept_key]

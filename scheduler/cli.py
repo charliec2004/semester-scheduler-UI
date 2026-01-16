@@ -7,7 +7,13 @@ import sys
 from pathlib import Path
 
 from scheduler.config import DAY_NAMES, DEFAULT_SOLVER_MAX_TIME, TIME_SLOT_STARTS
-from scheduler.domain.models import FavoredEmployeeDepartment, ShiftTimePreference, TimesetRequest, TrainingRequest
+from scheduler.domain.models import (
+    FavoredEmployeeDepartment,
+    ShiftTimePreference,
+    TimesetRequest,
+    TrainingRequest,
+    normalize_department_name,
+)
 from scheduler.engine.solver import solve_schedule
 
 
@@ -159,7 +165,7 @@ def _parse_training_args(raw_training: list[str]) -> list[TrainingRequest]:
         if person_one.lower() == person_two.lower():
             raise ValueError(f"Invalid --training value '{raw}': trainees must be different people.")
         requests.append(
-            TrainingRequest(department=dept, trainee_one=person_one, trainee_two=person_two)
+            TrainingRequest(department=normalize_department_name(dept), trainee_one=person_one, trainee_two=person_two)
         )
     return requests
 
@@ -182,7 +188,7 @@ def _parse_favored_departments(raw: list[str]) -> dict[str, float]:
             multiplier = None
         if not dept:
             raise ValueError(f"Invalid --favor-dept value '{entry}'. Department name is required.")
-        favored[dept] = multiplier if multiplier is not None else 1.0
+        favored[normalize_department_name(dept)] = multiplier if multiplier is not None else 1.0
     return favored
 
 
@@ -204,7 +210,7 @@ def _parse_favored_fd_departments(raw: list[str]) -> dict[str, float]:
             multiplier = None
         if not dept:
             raise ValueError(f"Invalid --favor-frontdesk-dept value '{entry}'. Department name is required.")
-        favored[dept] = multiplier if multiplier is not None else 1.0
+        favored[normalize_department_name(dept)] = multiplier if multiplier is not None else 1.0
     return favored
 
 
@@ -243,7 +249,7 @@ def _parse_favored_employee_depts(raw: list[str]) -> list[FavoredEmployeeDepartm
             raise ValueError(
                 f"Invalid --favor-employee-dept value '{entry}'. Both employee and department are required."
             )
-        result.append(FavoredEmployeeDepartment(employee=employee, department=dept, multiplier=multiplier))
+        result.append(FavoredEmployeeDepartment(employee=employee, department=normalize_department_name(dept), multiplier=multiplier))
     return result
 
 
@@ -339,7 +345,7 @@ def _parse_timesets(raw_timesets: list[list[str]]) -> list[TimesetRequest]:
             TimesetRequest(
                 employee=name.strip(),
                 day=_normalize_day(day),
-                department=dept.strip(),
+                department=normalize_department_name(dept),
                 start_slot=start_slot,
                 end_slot=end_slot,
             )

@@ -2,9 +2,32 @@
 
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, List, Set
+
+
+def normalize_department_name(name: str) -> str:
+    """Normalize department/role names for consistent matching.
+    
+    Converts to lowercase and replaces spaces with underscores.
+    Handles inputs like "Career Education", "career_education", "CAREER EDUCATION".
+    All become "career_education".
+    
+    Args:
+        name: The department or role name to normalize.
+        
+    Returns:
+        Normalized name (lowercase, underscores instead of spaces).
+    """
+    if not name:
+        return ""
+    # Convert to lowercase, strip whitespace, replace spaces with underscores
+    normalized = name.strip().lower()
+    # Replace multiple spaces/underscores with single underscore
+    normalized = re.sub(r'[\s_]+', '_', normalized)
+    return normalized
 
 
 @dataclass(frozen=True)

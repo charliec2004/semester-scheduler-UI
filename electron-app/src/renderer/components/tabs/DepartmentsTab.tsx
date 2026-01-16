@@ -15,6 +15,7 @@ export function DepartmentsTab() {
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [dragOverBottom, setDragOverBottom] = useState(false);
 
   const handleAddDepartment = () => {
     const newDept: Department = {
@@ -56,32 +57,49 @@ export function DepartmentsTab() {
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', index.toString());
+    
+    // Find the parent row to use as drag image (so entire row shows, not just the handle)
+    const row = (e.currentTarget as HTMLElement).closest('tr');
+    if (row) {
+      e.dataTransfer.setDragImage(row, 50, 20);
+    }
   };
 
   const handleDragOver = (e: React.DragEvent, index: number) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
-    if (draggedIndex !== null && draggedIndex !== index) {
-      setDragOverIndex(index);
-    }
+    if (draggedIndex === null || draggedIndex === index) return;
+    
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    const isBottomHalf = e.clientY > rect.top + rect.height / 2;
+    const isLastItem = index === departments.length - 1;
+    
+    setDragOverIndex(index);
+    setDragOverBottom(isBottomHalf && isLastItem);
   };
 
   const handleDragLeave = () => {
     setDragOverIndex(null);
+    setDragOverBottom(false);
   };
 
   const handleDrop = (e: React.DragEvent, toIndex: number) => {
     e.preventDefault();
-    if (draggedIndex !== null && draggedIndex !== toIndex) {
-      reorderDepartments(draggedIndex, toIndex);
-    }
+    if (draggedIndex === null || draggedIndex === toIndex) return;
+    
+    // If dropping on bottom half of last item, move to end
+    const targetIndex = dragOverBottom ? departments.length - 1 : toIndex;
+    reorderDepartments(draggedIndex, targetIndex);
+    
     setDraggedIndex(null);
     setDragOverIndex(null);
+    setDragOverBottom(false);
   };
 
   const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
+    setDragOverBottom(false);
   };
 
   if (departments.length === 0) {
@@ -199,12 +217,13 @@ export function DepartmentsTab() {
               const hasError = dept.targetHours > dept.maxHours;
               const isDragging = draggedIndex === index;
               const isDragOver = dragOverIndex === index;
+              const isLastItem = index === departments.length - 1;
+              const showTopBorder = isDragOver && !dragOverBottom;
+              const showBottomBorder = isDragOver && dragOverBottom && isLastItem;
 
               return (
                 <tr 
                   key={`dept-${index}`} 
-                  draggable
-                  onDragStart={(e) => handleDragStart(e, index)}
                   onDragOver={(e) => handleDragOver(e, index)}
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, index)}
@@ -213,12 +232,15 @@ export function DepartmentsTab() {
                     border-t border-surface-700 transition-all
                     ${hasError ? 'bg-danger-500/5' : 'hover:bg-surface-800/50'}
                     ${isDragging ? 'opacity-50' : ''}
-                    ${isDragOver ? 'border-t-2 border-t-accent-500' : ''}
+                    ${showTopBorder ? 'border-t-2 border-t-accent-500' : ''}
+                    ${showBottomBorder ? 'border-b-2 border-b-accent-500' : ''}
                   `}
                 >
                   {/* Drag Handle */}
                   <td className="py-3 pl-2 pr-0">
                     <div 
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, index)}
                       className="cursor-grab active:cursor-grabbing text-surface-500 hover:text-surface-300 transition-colors flex items-center justify-center"
                       title="Drag to reorder"
                     >

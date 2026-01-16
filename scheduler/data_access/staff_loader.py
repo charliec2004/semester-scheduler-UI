@@ -9,7 +9,7 @@ from typing import Dict, List, Optional, Set
 import pandas as pd
 
 from scheduler.config import AVAILABILITY_COLUMNS, DAY_NAMES, FRONT_DESK_ROLE, TIME_SLOT_STARTS
-from scheduler.domain.models import StaffData
+from scheduler.domain.models import StaffData, normalize_department_name
 
 
 def _normalize_columns(df: pd.DataFrame) -> Dict[str, str]:
@@ -24,10 +24,14 @@ def _normalize_columns(df: pd.DataFrame) -> Dict[str, str]:
 
 
 def _parse_roles(raw_roles: Optional[str]) -> List[str]:
-    """Parse roles from a semicolon/comma-separated string, normalized to lowercase."""
+    """Parse roles from a semicolon/comma-separated string, normalized for matching.
+    
+    Handles both spaces and underscores: "Career Education" and "career_education"
+    both become "career_education".
+    """
     if pd.isna(raw_roles):
         return []
-    return [role.strip().lower() for role in re.split(r"[;,]", str(raw_roles)) if role.strip()]
+    return [normalize_department_name(role) for role in re.split(r"[;,]", str(raw_roles)) if role.strip()]
 
 
 def _coerce_numeric(value, column_name: str, record_name: str) -> float:

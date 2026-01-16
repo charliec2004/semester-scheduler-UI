@@ -154,9 +154,9 @@ export function StaffEditorTab() {
         </div>
       </div>
 
-      <div className="grid lg:grid-cols-3 gap-6">
+      <div className="grid lg:grid-cols-3 gap-6 items-start">
         {/* Employee List */}
-        <div className="lg:col-span-1 card p-0 overflow-hidden">
+        <div className="lg:col-span-1 card p-0 overflow-hidden h-fit">
           <div className="p-4 border-b border-surface-700">
             <input
               type="text"
@@ -167,7 +167,7 @@ export function StaffEditorTab() {
               aria-label="Search employees"
             />
           </div>
-          <div className="max-h-[500px] overflow-y-auto">
+          <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
             {filteredStaff.map((employee, _index) => {
               const actualIndex = staff.indexOf(employee);
               return (

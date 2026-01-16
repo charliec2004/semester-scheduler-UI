@@ -6,9 +6,6 @@
 
 import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
 import path from 'path';
-
-// Set app name for dock/taskbar (especially needed in dev mode)
-app.setName('Scheduler');
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
 import Store from 'electron-store';
@@ -262,6 +259,9 @@ function createWindow(): void {
 }
 
 app.whenReady().then(() => {
+  // Set app name for dock/taskbar (especially needed in dev mode)
+  app.setName('Scheduler');
+  
   createWindow();
   registerIpcHandlers();
   cleanupOldHistory();
