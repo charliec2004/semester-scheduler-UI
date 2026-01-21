@@ -3,7 +3,7 @@
  * Shows solver progress, logs (accordion), output downloads, and generation history
  */
 
-import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
+import { useRef, useEffect, useState, useMemo } from 'react';
 import { useSolverStore, useHistoryStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import type { HistoryEntry } from '../../../main/ipc-types';

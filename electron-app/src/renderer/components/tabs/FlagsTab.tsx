@@ -629,7 +629,7 @@ export function FlagsTab() {
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Force a specific employee to work a role at specific times.
-            Works with any department, even if the employee isn't normally qualified.
+            Works with any department, even if the employee is not normally qualified.
           </p>
           
           <TimesetForm
@@ -926,12 +926,6 @@ function TimesetForm({
   const [department, setDepartment] = useState('');
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
-
-  // Get selected employee for availability checking
-  const selectedStaff = useMemo(() =>
-    staff.find(s => s.name === employee),
-    [staff, employee]
-  );
 
   // All departments plus Front Desk option
   const allRoles = useMemo(() => {
