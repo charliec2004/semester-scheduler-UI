@@ -31,6 +31,21 @@ import {
 
 const MAX_HISTORY_ENTRIES = 5;
 
+// Handle EPIPE errors gracefully (occurs when pipe is closed, e.g., window closes during solver)
+process.stdout?.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+});
+process.stderr?.on('error', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return;
+});
+// Catch uncaught EPIPE exceptions from console.log when pipe is broken
+process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
+  if (err.code === 'EPIPE') return; // Silently ignore broken pipe
+  // Log and exit for other errors (can't re-throw in uncaughtException handler)
+  console.error('Uncaught exception:', err);
+  process.exit(1);
+});
+
 // Initialize persistent settings store
 const store = new Store<{
   settings: AppSettings;
@@ -641,9 +656,9 @@ function registerIpcHandlers(): void {
         mainWindow?.webContents.send('solver:done', {
           runId,
           success: false,
-          error: isNoSolution 
-            ? 'No solution found. Try relaxing constraints (training pairs, availability, or shift rules).'
-            : `Solver exited with code ${code}`,
+          error: isNoSolution
+            ? 'Could not create a valid schedule with the current settings. Check the suggestions below.'
+            : `Solver encountered an unexpected error (code ${code}). Check the logs for details.`,
           errorType: isNoSolution ? 'no_solution' : 'error',
           elapsed,
         });
@@ -909,6 +924,10 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
 
   for (const pref of config.shiftTimePreferences || []) {
     args.push('--shift-pref', `${pref.employee},${pref.day},${pref.preference}`);
+  }
+
+  for (const eq of config.equalityConstraints || []) {
+    args.push('--equality', `${eq.department},${eq.employee1},${eq.employee2}`);
   }
 
   // Experimental: minimum department block enforcement

@@ -97,3 +97,11 @@ class ShiftTimePreference:
     employee: str
     day: str  # Mon, Tue, Wed, Thu, Fri
     preference: str  # 'morning' (8am-12pm) or 'afternoon' (12pm-5pm)
+
+
+@dataclass(frozen=True)
+class EqualityRequest:
+    """Request to equalize hours for two employees in a specific department."""
+    department: str
+    employee1: str
+    employee2: str

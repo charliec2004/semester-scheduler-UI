@@ -110,7 +110,21 @@ export function SettingsPanel() {
     if (!localSettings) return;
     setSaving(true);
     try {
-      await saveSettings(localSettings);
+      // Ensure all numeric values have valid defaults before saving
+      const validatedSettings: AppSettings = {
+        ...localSettings,
+        minSlots: isNaN(localSettings.minSlots) ? 4 : localSettings.minSlots,
+        maxSlots: isNaN(localSettings.maxSlots) ? 8 : localSettings.maxSlots,
+        frontDeskCoverageWeight: isNaN(localSettings.frontDeskCoverageWeight) ? 10000 : localSettings.frontDeskCoverageWeight,
+        departmentTargetWeight: isNaN(localSettings.departmentTargetWeight) ? 1000 : localSettings.departmentTargetWeight,
+        targetAdherenceWeight: isNaN(localSettings.targetAdherenceWeight) ? 100 : localSettings.targetAdherenceWeight,
+        collaborativeHoursWeight: isNaN(localSettings.collaborativeHoursWeight) ? 200 : localSettings.collaborativeHoursWeight,
+        shiftLengthWeight: isNaN(localSettings.shiftLengthWeight) ? 20 : localSettings.shiftLengthWeight,
+        favoredEmployeeDeptWeight: isNaN(localSettings.favoredEmployeeDeptWeight) ? 50 : localSettings.favoredEmployeeDeptWeight,
+        departmentHourThreshold: isNaN(localSettings.departmentHourThreshold) ? 4 : localSettings.departmentHourThreshold,
+        targetHardDeltaHours: isNaN(localSettings.targetHardDeltaHours) ? 5 : localSettings.targetHardDeltaHours,
+      };
+      await saveSettings(validatedSettings);
       showToast('Settings saved successfully', 'success');
       handleClose();
     } catch (err) {
@@ -163,6 +177,30 @@ export function SettingsPanel() {
     if (localSettings) {
       setLocalSettings({ ...localSettings, [key]: value });
     }
+  };
+
+  // Handle number input changes - allow empty/invalid values during typing
+  const handleNumberChange = (key: keyof AppSettings, value: string) => {
+    if (localSettings) {
+      // Store as number if valid, otherwise store NaN to allow clearing
+      const num = value === '' ? NaN : parseInt(value);
+      setLocalSettings({ ...localSettings, [key]: num as AppSettings[typeof key] });
+    }
+  };
+
+  // Apply default value on blur if field is empty/invalid
+  const handleNumberBlur = (key: keyof AppSettings, defaultValue: number) => {
+    if (localSettings) {
+      const current = localSettings[key];
+      if (typeof current !== 'number' || isNaN(current)) {
+        setLocalSettings({ ...localSettings, [key]: defaultValue as AppSettings[typeof key] });
+      }
+    }
+  };
+
+  // Get display value for number inputs (show empty string for NaN)
+  const getNumberValue = (value: number): string => {
+    return isNaN(value) ? '' : String(value);
   };
 
   const handleCheckForUpdates = async () => {
@@ -259,8 +297,9 @@ export function SettingsPanel() {
                     type="number"
                     min="2"
                     max="8"
-                    value={localSettings.minSlots}
-                    onChange={(e) => updateSetting('minSlots', parseInt(e.target.value) || 4)}
+                    value={getNumberValue(localSettings.minSlots)}
+                    onChange={(e) => handleNumberChange('minSlots', e.target.value)}
+                    onBlur={() => handleNumberBlur('minSlots', 4)}
                     className="input"
                   />
                   <p className="text-xs text-surface-500 mt-1">30-min slots</p>
@@ -276,8 +315,9 @@ export function SettingsPanel() {
                     type="number"
                     min="4"
                     max="16"
-                    value={localSettings.maxSlots}
-                    onChange={(e) => updateSetting('maxSlots', parseInt(e.target.value) || 8)}
+                    value={getNumberValue(localSettings.maxSlots)}
+                    onChange={(e) => handleNumberChange('maxSlots', e.target.value)}
+                    onBlur={() => handleNumberBlur('maxSlots', 8)}
                     className="input"
                   />
                   <p className="text-xs text-surface-500 mt-1">30-min slots</p>
@@ -307,8 +347,9 @@ export function SettingsPanel() {
                   min="0"
                   max="50000"
                   step="1000"
-                  value={localSettings.frontDeskCoverageWeight}
-                  onChange={(e) => updateSetting('frontDeskCoverageWeight', parseInt(e.target.value) || 10000)}
+                  value={getNumberValue(localSettings.frontDeskCoverageWeight)}
+                  onChange={(e) => handleNumberChange('frontDeskCoverageWeight', e.target.value)}
+                  onBlur={() => handleNumberBlur('frontDeskCoverageWeight', 10000)}
                   className="input"
                 />
               </div>
@@ -324,8 +365,9 @@ export function SettingsPanel() {
                   min="0"
                   max="5000"
                   step="100"
-                  value={localSettings.departmentTargetWeight}
-                  onChange={(e) => updateSetting('departmentTargetWeight', parseInt(e.target.value) || 1000)}
+                  value={getNumberValue(localSettings.departmentTargetWeight)}
+                  onChange={(e) => handleNumberChange('departmentTargetWeight', e.target.value)}
+                  onBlur={() => handleNumberBlur('departmentTargetWeight', 1000)}
                   className="input"
                 />
               </div>
@@ -341,8 +383,9 @@ export function SettingsPanel() {
                   min="0"
                   max="500"
                   step="10"
-                  value={localSettings.targetAdherenceWeight}
-                  onChange={(e) => updateSetting('targetAdherenceWeight', parseInt(e.target.value) || 100)}
+                  value={getNumberValue(localSettings.targetAdherenceWeight)}
+                  onChange={(e) => handleNumberChange('targetAdherenceWeight', e.target.value)}
+                  onBlur={() => handleNumberBlur('targetAdherenceWeight', 100)}
                   className="input"
                 />
               </div>
@@ -358,8 +401,9 @@ export function SettingsPanel() {
                   min="0"
                   max="1000"
                   step="50"
-                  value={localSettings.collaborativeHoursWeight}
-                  onChange={(e) => updateSetting('collaborativeHoursWeight', parseInt(e.target.value) || 200)}
+                  value={getNumberValue(localSettings.collaborativeHoursWeight)}
+                  onChange={(e) => handleNumberChange('collaborativeHoursWeight', e.target.value)}
+                  onBlur={() => handleNumberBlur('collaborativeHoursWeight', 200)}
                   className="input"
                 />
               </div>
@@ -375,8 +419,9 @@ export function SettingsPanel() {
                   min="0"
                   max="100"
                   step="5"
-                  value={localSettings.shiftLengthWeight}
-                  onChange={(e) => updateSetting('shiftLengthWeight', parseInt(e.target.value) || 20)}
+                  value={getNumberValue(localSettings.shiftLengthWeight)}
+                  onChange={(e) => handleNumberChange('shiftLengthWeight', e.target.value)}
+                  onBlur={() => handleNumberBlur('shiftLengthWeight', 20)}
                   className="input"
                 />
               </div>
@@ -391,8 +436,9 @@ export function SettingsPanel() {
                   min="0"
                   max="200"
                   step="10"
-                  value={localSettings.favoredEmployeeDeptWeight}
-                  onChange={(e) => updateSetting('favoredEmployeeDeptWeight', parseInt(e.target.value) || 50)}
+                  value={getNumberValue(localSettings.favoredEmployeeDeptWeight)}
+                  onChange={(e) => handleNumberChange('favoredEmployeeDeptWeight', e.target.value)}
+                  onBlur={() => handleNumberBlur('favoredEmployeeDeptWeight', 50)}
                   className="input"
                 />
                 <p className="text-xs text-surface-500 mt-1">
@@ -419,8 +465,9 @@ export function SettingsPanel() {
                   type="number"
                   min="0"
                   max="10"
-                  value={localSettings.departmentHourThreshold}
-                  onChange={(e) => updateSetting('departmentHourThreshold', parseInt(e.target.value) || 4)}
+                  value={getNumberValue(localSettings.departmentHourThreshold)}
+                  onChange={(e) => handleNumberChange('departmentHourThreshold', e.target.value)}
+                  onBlur={() => handleNumberBlur('departmentHourThreshold', 4)}
                   className="input"
                 />
                 <p className="text-xs text-surface-500 mt-1">
@@ -438,8 +485,9 @@ export function SettingsPanel() {
                   type="number"
                   min="1"
                   max="10"
-                  value={localSettings.targetHardDeltaHours}
-                  onChange={(e) => updateSetting('targetHardDeltaHours', parseInt(e.target.value) || 5)}
+                  value={getNumberValue(localSettings.targetHardDeltaHours)}
+                  onChange={(e) => handleNumberChange('targetHardDeltaHours', e.target.value)}
+                  onBlur={() => handleNumberBlur('targetHardDeltaHours', 5)}
                   className="input"
                 />
                 <p className="text-xs text-surface-500 mt-1">

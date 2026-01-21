@@ -13,7 +13,7 @@ import {
   useUIStore,
   createConfigSnapshot,
 } from '../../store';
-import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, ShiftTimePreference, StaffMember } from '../../../main/ipc-types';
+import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, ShiftTimePreference, EqualityConstraint, StaffMember } from '../../../main/ipc-types';
 import { staffToCsv, departmentsToCsv } from '../../utils/csvValidators';
 
 // Simple UUID generator for browser compatibility
@@ -98,6 +98,7 @@ export function FlagsTab() {
     favoredEmployeeDepts, addFavoredEmployeeDept, removeFavoredEmployeeDept,
     timesets, addTimeset, removeTimeset,
     shiftTimePreferences, addShiftTimePreference, removeShiftTimePreference,
+    equalityConstraints, addEqualityConstraint, removeEqualityConstraint,
     maxSolveSeconds, setMaxSolveSeconds,
     presets, savePreset, applyPreset, deletePreset,
   } = useFlagsStore();
@@ -140,6 +141,7 @@ export function FlagsTab() {
         favoredEmployeeDepts,
         timesets,
         shiftTimePreferences,
+        equalityConstraints,
         maxSolveSeconds,
       };
       
@@ -197,6 +199,7 @@ export function FlagsTab() {
           favoredEmployeeDepts,
           timesets,
           shiftTimePreferences,
+          equalityConstraints,
           enforceMinDeptBlock: settings?.enforceMinDeptBlock ?? true,
           // Pass all settings to solver
           minSlots: settings?.minSlots,
@@ -331,16 +334,16 @@ export function FlagsTab() {
           
           <div className="flex gap-2 mb-4 items-end">
             <div className="flex-1">
-              <select
-                value={newFavored}
-                onChange={(e) => setNewFavored(e.target.value)}
+            <select
+              value={newFavored}
+              onChange={(e) => setNewFavored(e.target.value)}
                 className="input w-full"
-              >
-                <option value="">Select employee...</option>
+            >
+              <option value="">Select employee...</option>
                 {employeeNames.filter(n => !(n in favoredEmployees)).map(name => (
-                  <option key={name} value={name}>{name}</option>
-                ))}
-              </select>
+                <option key={name} value={name}>{name}</option>
+              ))}
+            </select>
             </div>
             <div className="w-36 sm:w-40 flex-shrink-0">
               <div className="flex items-center gap-1 mb-1">
@@ -472,18 +475,18 @@ export function FlagsTab() {
               const mult = favoredFrontDeskDepts[dept] ?? 1.0;
               return (
                 <div key={dept} className="flex items-center gap-3 hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
-                  <input
-                    type="checkbox"
+                <input
+                  type="checkbox"
                     checked={isChecked}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: 1.0 });
-                      } else {
-                        const { [dept]: _removed, ...rest } = favoredFrontDeskDepts;
-                        void _removed;
-                        setFavoredFrontDeskDepts(rest);
-                      }
-                    }}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: 1.0 });
+                    } else {
+                      const { [dept]: _removed, ...rest } = favoredFrontDeskDepts;
+                      void _removed;
+                      setFavoredFrontDeskDepts(rest);
+                    }
+                  }}
                     className="checkbox-dark"
                   />
                   <span className="text-sm text-surface-200 flex-1">{dept}</span>
@@ -531,18 +534,18 @@ export function FlagsTab() {
               const mult = favoredDepartments[dept] ?? 1.0;
               return (
                 <div key={dept} className="flex items-center gap-3 hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
-                  <input
-                    type="checkbox"
+                <input
+                  type="checkbox"
                     checked={isChecked}
-                    onChange={(e) => {
-                      if (e.target.checked) {
-                        setFavoredDepartments({ ...favoredDepartments, [dept]: 1.0 });
-                      } else {
-                        const { [dept]: _removed, ...rest } = favoredDepartments;
-                        void _removed;
-                        setFavoredDepartments(rest);
-                      }
-                    }}
+                  onChange={(e) => {
+                    if (e.target.checked) {
+                      setFavoredDepartments({ ...favoredDepartments, [dept]: 1.0 });
+                    } else {
+                      const { [dept]: _removed, ...rest } = favoredDepartments;
+                      void _removed;
+                      setFavoredDepartments(rest);
+                    }
+                  }}
                     className="checkbox-dark"
                   />
                   <span className="text-sm text-surface-200 flex-1">{dept}</span>
@@ -625,12 +628,13 @@ export function FlagsTab() {
             <Tooltip text="Creates a hard requirement for an employee to work in a specific department at specific times. Unlike soft preferences, this will be enforced if possible. Use sparingly as too many constraints may make scheduling impossible." />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
-            Force a specific employee to work a role at specific times. 
-            Use this to favor someone for a particular role (they must be qualified).
+            Force a specific employee to work a role at specific times.
+            Works with any department, even if the employee isn't normally qualified.
           </p>
           
           <TimesetForm
             staff={staff}
+            departments={departmentNames}
             onAdd={addTimeset}
           />
 
@@ -655,6 +659,49 @@ export function FlagsTab() {
                 </button>
               </div>
             ))}
+          </div>
+        </div>
+
+        {/* Equality - Equalize hours between two employees in a department */}
+        <div className="card lg:col-span-2">
+          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
+            Equality
+            <Tooltip text="Equalizes hours between two employees within a specific department only. Both employees must be qualified for the department and have the same target hours. The solver will try to give them equal time in that department, helping ensure fair distribution when two people should get the same opportunity." />
+          </h3>
+          <p className="text-sm text-surface-400 mb-4">
+            Give two employees equal hours in a specific department
+          </p>
+          
+          <EqualityForm
+            departments={departmentNames}
+            staff={staff}
+            onAdd={addEqualityConstraint}
+          />
+
+          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-2 mt-4">
+            {equalityConstraints.map((eq, i) => (
+              <div key={i} className="flex items-center justify-between bg-surface-800 rounded-lg px-3 py-2">
+                <span className="text-sm">
+                  <span className="text-accent-400">{eq.department}</span>
+                  <span className="text-surface-400">: </span>
+                  <span className="font-medium text-surface-200">{eq.employee1}</span>
+                  <span className="text-surface-400"> = </span>
+                  <span className="font-medium text-surface-200">{eq.employee2}</span>
+                </span>
+                <button 
+                  onClick={() => removeEqualityConstraint(i)}
+                  className="text-surface-400 hover:text-danger-400 ml-2"
+                  aria-label={`Remove ${eq.employee1} = ${eq.employee2} equality`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                  </svg>
+                </button>
+              </div>
+            ))}
+            {equalityConstraints.length === 0 && (
+              <span className="text-sm text-surface-500">No equality constraints set</span>
+            )}
           </div>
         </div>
 
@@ -864,12 +911,14 @@ function TrainingPairForm({
   );
 }
 
-// Timeset Form Component - Left-to-right input with role-filtered departments
+// Timeset Form Component - Shows all departments (not just qualified ones)
 function TimesetForm({
   staff,
+  departments,
   onAdd,
 }: {
   staff: StaffMember[];
+  departments: string[];
   onAdd: (ts: TimesetRequest) => void;
 }) {
   const [employee, setEmployee] = useState('');
@@ -878,17 +927,21 @@ function TimesetForm({
   const [startTime, setStartTime] = useState('');
   const [endTime, setEndTime] = useState('');
 
-  // Get qualified roles for the selected employee
-  const selectedStaff = useMemo(() => 
-    staff.find(s => s.name === employee), 
+  // Get selected employee for availability checking
+  const selectedStaff = useMemo(() =>
+    staff.find(s => s.name === employee),
     [staff, employee]
   );
-  
-  const qualifiedRoles = useMemo(() => {
-    if (!selectedStaff) return [];
-    // Normalize roles and include front_desk if qualified
-    return selectedStaff.roles.map(r => r.toLowerCase().replace(/\s+/g, '_'));
-  }, [selectedStaff]);
+
+  // All departments plus Front Desk option
+  const allRoles = useMemo(() => {
+    const normalized = departments.map(d => d.toLowerCase().replace(/\s+/g, '_'));
+    // Add front_desk if not already present
+    if (!normalized.includes('front_desk')) {
+      normalized.push('front_desk');
+    }
+    return normalized;
+  }, [departments]);
 
   // Reset dependent fields when employee changes
   const handleEmployeeChange = (name: string) => {
@@ -938,22 +991,19 @@ function TimesetForm({
         {DAY_NAMES.map(d => <option key={d} value={d}>{d}</option>)}
       </select>
       
-      {/* 3. Department - enabled after employee, filtered to their roles */}
-      <select 
-        value={department} 
-        onChange={(e) => handleDepartmentChange(e.target.value)} 
+      {/* 3. Department - enabled after employee, shows all departments */}
+      <select
+        value={department}
+        onChange={(e) => handleDepartmentChange(e.target.value)}
         className="input"
         disabled={!employee}
       >
         <option value="">{employee ? 'Role' : 'Select employee first'}</option>
-        {qualifiedRoles.map(role => (
+        {allRoles.map(role => (
           <option key={role} value={role}>
             {role === 'front_desk' ? 'Front Desk' : role.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase())}
           </option>
         ))}
-        {employee && qualifiedRoles.length === 0 && (
-          <option value="" disabled>No roles assigned</option>
-        )}
       </select>
       
       {/* 4. Start time - enabled after department */}
@@ -1140,24 +1190,24 @@ function FavoredEmployeeDeptForm({
     <div className="flex gap-2 items-end">
       <div className="flex-1">
         <select value={employee} onChange={(e) => { setEmployee(e.target.value); setDepartment(''); }} className="input w-full">
-          <option value="">Select employee...</option>
-          {employees.map(e => <option key={e} value={e}>{e}</option>)}
-        </select>
+        <option value="">Select employee...</option>
+        {employees.map(e => <option key={e} value={e}>{e}</option>)}
+      </select>
       </div>
       <div className="flex-1">
-        <select 
-          value={department} 
-          onChange={(e) => setDepartment(e.target.value)} 
+      <select 
+        value={department} 
+        onChange={(e) => setDepartment(e.target.value)} 
           className="input w-full"
-          disabled={!employee}
-        >
-          <option value="">{employee ? 'Select role...' : 'Select employee first'}</option>
-          {qualifiedRoles.map(d => (
-            <option key={d} value={d}>
+        disabled={!employee}
+      >
+        <option value="">{employee ? 'Select role...' : 'Select employee first'}</option>
+        {qualifiedRoles.map(d => (
+          <option key={d} value={d}>
               {d === 'front_desk' ? 'Front Desk' : d}
-            </option>
-          ))}
-        </select>
+          </option>
+        ))}
+      </select>
       </div>
       <div className="w-36 sm:w-40 flex-shrink-0">
         <div className="flex items-center gap-1 mb-1">
@@ -1183,6 +1233,136 @@ function FavoredEmployeeDeptForm({
       >
         Add
       </button>
+    </div>
+  );
+}
+
+// Equality Form Component - Left-to-right input with target hours validation
+function EqualityForm({
+  departments,
+  staff,
+  onAdd,
+}: {
+  departments: string[];
+  staff: StaffMember[];
+  onAdd: (eq: EqualityConstraint) => void;
+}) {
+  const [department, setDepartment] = useState('');
+  const [employee1, setEmployee1] = useState('');
+  const [employee2, setEmployee2] = useState('');
+  const [validationError, setValidationError] = useState('');
+
+  // Get employees qualified for the selected department
+  const qualifiedEmployees = useMemo(() => {
+    if (!department) return [];
+    return staff.filter(s => {
+      // Check if employee has this department in their roles
+      return s.roles.some(role => 
+        role.toLowerCase().replace(/\s+/g, '_') === department.toLowerCase().replace(/\s+/g, '_')
+      );
+    });
+  }, [department, staff]);
+
+  // Get qualified employee names (excluding already selected employee1)
+  const qualifiedNames1 = useMemo(() => qualifiedEmployees.map(e => e.name), [qualifiedEmployees]);
+  const qualifiedNames2 = useMemo(() => 
+    qualifiedEmployees.filter(e => e.name !== employee1).map(e => e.name), 
+    [qualifiedEmployees, employee1]
+  );
+
+  // Validate target hours match
+  useEffect(() => {
+    if (employee1 && employee2) {
+      const emp1Data = staff.find(s => s.name === employee1);
+      const emp2Data = staff.find(s => s.name === employee2);
+      if (emp1Data && emp2Data && emp1Data.targetHours !== emp2Data.targetHours) {
+        setValidationError(`Target hours mismatch: ${employee1} has ${emp1Data.targetHours}hrs, ${employee2} has ${emp2Data.targetHours}hrs`);
+      } else {
+        setValidationError('');
+      }
+    } else {
+      setValidationError('');
+    }
+  }, [employee1, employee2, staff]);
+
+  const handleDepartmentChange = (dept: string) => {
+    setDepartment(dept);
+    setEmployee1('');
+    setEmployee2('');
+    setValidationError('');
+  };
+
+  const handleEmployee1Change = (emp: string) => {
+    setEmployee1(emp);
+    setEmployee2('');
+  };
+
+  const handleAdd = () => {
+    if (department && employee1 && employee2 && !validationError) {
+      onAdd({ department, employee1, employee2 });
+      setDepartment('');
+      setEmployee1('');
+      setEmployee2('');
+      setValidationError('');
+    }
+  };
+
+  const canAdd = department && employee1 && employee2 && !validationError;
+
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap sm:flex-nowrap gap-2">
+        {/* 1. Department - always enabled */}
+        <select 
+          value={department} 
+          onChange={(e) => handleDepartmentChange(e.target.value)} 
+          className="input w-full sm:flex-1"
+        >
+          <option value="">Department</option>
+          {departments.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+        
+        {/* 2. Employee 1 - enabled after department */}
+        <select 
+          value={employee1} 
+          onChange={(e) => handleEmployee1Change(e.target.value)} 
+          className="input w-full sm:flex-1"
+          disabled={!department}
+        >
+          <option value="">{department ? 'Person 1' : 'Select department first'}</option>
+          {qualifiedNames1.map(e => <option key={e} value={e}>{e}</option>)}
+        </select>
+        
+        {/* 3. Employee 2 - enabled after employee 1 */}
+        <select 
+          value={employee2} 
+          onChange={(e) => setEmployee2(e.target.value)} 
+          className="input w-full sm:flex-1"
+          disabled={!employee1}
+        >
+          <option value="">{employee1 ? 'Person 2' : 'Select person 1 first'}</option>
+          {qualifiedNames2.map(e => <option key={e} value={e}>{e}</option>)}
+        </select>
+        
+        {/* 4. Add button */}
+        <button 
+          onClick={handleAdd}
+          disabled={!canAdd}
+          className="btn-secondary flex-shrink-0 px-4 w-full sm:w-auto"
+        >
+          Add
+        </button>
+      </div>
+      
+      {/* Validation error message */}
+      {validationError && (
+        <div className="text-sm text-danger-400 flex items-center gap-1">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+          </svg>
+          {validationError}
+        </div>
+      )}
     </div>
   );
 }

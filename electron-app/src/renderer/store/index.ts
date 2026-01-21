@@ -13,6 +13,7 @@ import type {
   TimesetRequest,
   FavoredEmployeeDept,
   ShiftTimePreference,
+  EqualityConstraint,
   SolverProgress,
   ValidationError,
   HistoryEntry,
@@ -197,6 +198,7 @@ interface FlagsState {
   favoredEmployeeDepts: FavoredEmployeeDept[];
   timesets: TimesetRequest[];
   shiftTimePreferences: ShiftTimePreference[];
+  equalityConstraints: EqualityConstraint[];
   maxSolveSeconds: number;
   presets: FlagPreset[];
   
@@ -223,6 +225,10 @@ interface FlagsState {
   addShiftTimePreference: (pref: ShiftTimePreference) => void;
   removeShiftTimePreference: (index: number) => void;
   
+  setEqualityConstraints: (constraints: EqualityConstraint[]) => void;
+  addEqualityConstraint: (constraint: EqualityConstraint) => void;
+  removeEqualityConstraint: (index: number) => void;
+  
   setMaxSolveSeconds: (seconds: number) => void;
   
   loadPresets: () => Promise<void>;
@@ -242,6 +248,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
   favoredEmployeeDepts: [],
   timesets: [],
   shiftTimePreferences: [],
+  equalityConstraints: [],
   maxSolveSeconds: 300,
   presets: [],
 
@@ -300,6 +307,22 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
     set({ shiftTimePreferences: get().shiftTimePreferences.filter((_, i) => i !== index) });
   },
 
+  setEqualityConstraints: (constraints) => set({ equalityConstraints: constraints }),
+  addEqualityConstraint: (constraint) => {
+    // Prevent duplicates (same department + employees in either order)
+    const exists = get().equalityConstraints.some(
+      c => c.department === constraint.department && 
+           ((c.employee1 === constraint.employee1 && c.employee2 === constraint.employee2) ||
+            (c.employee1 === constraint.employee2 && c.employee2 === constraint.employee1))
+    );
+    if (!exists) {
+      set({ equalityConstraints: [...get().equalityConstraints, constraint] });
+    }
+  },
+  removeEqualityConstraint: (index) => {
+    set({ equalityConstraints: get().equalityConstraints.filter((_, i) => i !== index) });
+  },
+
   setMaxSolveSeconds: (seconds) => set({ maxSolveSeconds: seconds }),
 
   loadPresets: async () => {
@@ -326,6 +349,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
       favoredEmployeeDepts: preset.favoredEmployeeDepts || [],
       timesets: preset.timesets,
       shiftTimePreferences: preset.shiftTimePreferences || [],
+      equalityConstraints: preset.equalityConstraints || [],
       maxSolveSeconds: preset.maxSolveSeconds ?? get().maxSolveSeconds,
     });
   },
@@ -340,6 +364,7 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
     favoredEmployeeDepts: [],
     timesets: [],
     shiftTimePreferences: [],
+    equalityConstraints: [],
     maxSolveSeconds: 300,
   }),
 }));
@@ -385,6 +410,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
       useFlagsStore.getState().setFavoredEmployeeDepts(config.favoredEmployeeDepts || []);
       useFlagsStore.getState().setTimesets(config.timesets);
       useFlagsStore.getState().setShiftTimePreferences(config.shiftTimePreferences || []);
+      useFlagsStore.getState().setEqualityConstraints(config.equalityConstraints || []);
       useFlagsStore.getState().setMaxSolveSeconds(config.maxSolveSeconds);
       return true;
     }
@@ -482,6 +508,7 @@ export function createConfigSnapshot(): ConfigSnapshot {
     favoredEmployeeDepts: flags.favoredEmployeeDepts,
     timesets: flags.timesets,
     shiftTimePreferences: flags.shiftTimePreferences,
+    equalityConstraints: flags.equalityConstraints,
     maxSolveSeconds: flags.maxSolveSeconds,
   };
 }

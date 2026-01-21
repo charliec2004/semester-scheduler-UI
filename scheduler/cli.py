@@ -8,6 +8,7 @@ from pathlib import Path
 
 from scheduler.config import DAY_NAMES, DEFAULT_SOLVER_MAX_TIME, TIME_SLOT_STARTS
 from scheduler.domain.models import (
+    EqualityRequest,
     FavoredEmployeeDepartment,
     ShiftTimePreference,
     TimesetRequest,
@@ -118,6 +119,16 @@ def build_parser() -> argparse.ArgumentParser:
         help=(
             "Soft preference for an employee's shift time on a specific day. "
             "PREF should be 'morning' (8am-12pm) or 'afternoon' (12pm-5pm). Repeatable."
+        ),
+    )
+    parser.add_argument(
+        "--equality",
+        action="append",
+        default=[],
+        metavar="DEPT,PERSON1,PERSON2",
+        help=(
+            "Soft constraint to equalize hours between two employees in a specific department. "
+            "Both must be qualified for the department. Repeatable."
         ),
     )
     parser.add_argument(
@@ -373,6 +384,40 @@ def _parse_shift_time_preferences(raw: list[str]) -> list[ShiftTimePreference]:
     return result
 
 
+def _parse_equality_constraints(raw: list[str]) -> list[EqualityRequest]:
+    """Parse --equality arguments into structured requests.
+    
+    Format: DEPT,PERSON1,PERSON2
+    """
+    result: list[EqualityRequest] = []
+    for entry in raw:
+        value = entry.strip()
+        if value.startswith("[") and value.endswith("]"):
+            value = value[1:-1]
+        parts = [p.strip() for p in value.split(",")]
+        if len(parts) != 3:
+            raise ValueError(
+                f"Invalid --equality value '{entry}'. Expected format: DEPT,PERSON1,PERSON2"
+            )
+        dept, person1, person2 = parts
+        if not dept or not person1 or not person2:
+            raise ValueError(
+                f"Invalid --equality value '{entry}'. Department and both employee names are required."
+            )
+        if person1.lower() == person2.lower():
+            raise ValueError(
+                f"Invalid --equality value '{entry}': employees must be different people."
+            )
+        result.append(
+            EqualityRequest(
+                department=normalize_department_name(dept),
+                employee1=person1,
+                employee2=person2,
+            )
+        )
+    return result
+
+
 def _parse_timesets(raw_timesets: list[list[str]]) -> list[TimesetRequest]:
     """Parse --timeset entries into structured requests."""
     time_to_slot = {t: idx for idx, t in enumerate(TIME_SLOT_STARTS)}
@@ -439,6 +484,7 @@ def main(argv: list[str] | None = None) -> None:
         timeset_requests = _parse_timesets(args.timeset)
         favored_employee_depts = _parse_favored_employee_depts(args.favor_employee_dept)
         shift_time_preferences = _parse_shift_time_preferences(args.shift_pref)
+        equality_requests = _parse_equality_constraints(args.equality)
         output_path = args.output
         if not str(output_path).lower().endswith(".xlsx"):
             output_path = output_path.with_name(output_path.name + ".xlsx")
@@ -455,6 +501,7 @@ def main(argv: list[str] | None = None) -> None:
             timeset_requests=timeset_requests,
             favored_employee_depts=favored_employee_depts,
             shift_time_preferences=shift_time_preferences,
+            equality_requests=equality_requests,
             show_progress=args.progress,
             enforce_min_dept_block=args.enforce_min_dept_block,
             # Settings overrides

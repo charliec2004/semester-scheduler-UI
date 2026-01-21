@@ -3,37 +3,190 @@
  * Shows solver progress, logs (accordion), output downloads, and generation history
  */
 
-import { useRef, useEffect, useState, useMemo } from 'react';
+import { useRef, useEffect, useState, useMemo, useCallback } from 'react';
 import { useSolverStore, useHistoryStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import type { HistoryEntry } from '../../../main/ipc-types';
 
-// Parse solver logs to detect specific issues
+// Rotating status messages shown during optimization
+const SOLVER_STATUS_MESSAGES = [
+  // Classic operations
+  'Optimizing schedule...',
+  'Crunching the numbers...',
+  'Balancing workloads...',
+  'Fine-tuning assignments...',
+  // Clever/fun ones
+  'Juggling time slots...',
+  'Playing schedule tetris...',
+  'Connecting the dots...',
+  'Solving the puzzle...',
+  'Working some magic...',
+  'Making it all fit...',
+  'Shuffling the deck...',
+  'Finding the sweet spot...',
+  'Doing the math...',
+  'Running simulations...',
+  'Exploring possibilities...',
+  'Weighing the options...',
+  'Piecing it together...',
+  'Checking all the boxes...',
+  'Crossing the t\'s...',
+  'Dotting the i\'s...',
+  'Spinning up solutions...',
+  'Calibrating constraints...',
+  'Harmonizing schedules...',
+  'Orchestrating shifts...',
+  'Aligning the stars...',
+  'Brewing the perfect mix...',
+  'Untangling conflicts...',
+  'Smoothing out wrinkles...',
+  'Polishing the details...',
+  'Almost there...',
+  'Just a bit more...',
+  'Getting closer...',
+  'Refining results...',
+  'Double-checking everything...',
+  'Making final adjustments...',
+];
+
+// Parse solver stats from logs
+function parseSolverStats(logs: Array<{ text: string; type: string }>): {
+  employees?: number;
+  days?: number;
+  timeSlotsPerDay?: number;
+  assignmentVariables?: number;
+  constraints?: number;
+  totalVariables?: number;
+} {
+  const logText = logs.map(l => l.text).join('\n');
+
+  const employeesMatch = logText.match(/- (\d+) employees/);
+  const daysMatch = logText.match(/- (\d+) days/);
+  const slotsMatch = logText.match(/- (\d+) time slots per day/);
+  const assignVarsMatch = logText.match(/- (\d+) assignment variables/);
+  const constraintsMatch = logText.match(/- ([\d,]+) constraints/);
+  const totalVarsMatch = logText.match(/- ([\d,]+) total variables/);
+
+  return {
+    employees: employeesMatch ? parseInt(employeesMatch[1]) : undefined,
+    days: daysMatch ? parseInt(daysMatch[1]) : undefined,
+    timeSlotsPerDay: slotsMatch ? parseInt(slotsMatch[1]) : undefined,
+    assignmentVariables: assignVarsMatch ? parseInt(assignVarsMatch[1]) : undefined,
+    constraints: constraintsMatch ? parseInt(constraintsMatch[1].replace(/,/g, '')) : undefined,
+    totalVariables: totalVarsMatch ? parseInt(totalVarsMatch[1].replace(/,/g, '')) : undefined,
+  };
+}
+
+// Parse solver logs to detect specific issues and extract helpful details
 function parseLogDiagnostics(logs: Array<{ text: string; type: string }>): {
   hasTrainingNoOverlap: boolean;
   hasInvalidEmployee: boolean;
   hasTimesetConflict: boolean;
+  hasFrontDeskGap: boolean;
+  hasNotQualified: boolean;
+  hasEmployeeNotFound: boolean;
+  hasDepartmentNotFound: boolean;
+  hasAvailabilityConflict: boolean;
+  hasLimitedAvailability: boolean;
   invalidEmployeeName?: string;
+  notFoundName?: string;
+  notQualifiedDetails?: string;
+  frontDeskGapDetails?: string;
+  availabilityDetails?: string;
+  timesetConflicts: string[];
+  limitedAvailEmployees: string[];
 } {
   const logText = logs.map(l => l.text).join('\n');
-  
+
+  // Extract specific error details from log messages
+  const notFoundMatch = logText.match(/employee ['"]([^'"]+)['"] not found/i) ||
+                        logText.match(/person ['"]([^'"]+)['"] not found/i);
+  const notQualifiedMatch = logText.match(/['"]([^'"]+)['"] is not qualified for.*['"]([^'"]+)['"]/i);
+  const frontDeskMatch = logText.match(/Front desk has no available staff at: ([^\n]+)/i);
+  const availabilityMatch = logText.match(/['"]([^'"]+)['"] is unavailable on ([^\n]+)/i) ||
+                            logText.match(/CONFLICT: ([^\n]+)/i);
+
+  // Extract all timeset conflicts (format: "CONFLICT: Name is unavailable on Day at Time")
+  const timesetConflicts: string[] = [];
+  const conflictMatches = logText.matchAll(/CONFLICT: ([^\n]+)/g);
+  for (const match of conflictMatches) {
+    timesetConflicts.push(match[1]);
+  }
+
+  // Also match "WARNING:" lines that contain availability info
+  const warningMatches = logText.matchAll(/WARNING: ([^\n]*unavailable[^\n]*)/gi);
+  for (const match of warningMatches) {
+    if (!timesetConflicts.includes(match[1])) {
+      timesetConflicts.push(match[1]);
+    }
+  }
+
+  // Extract limited availability employees
+  const limitedAvailEmployees: string[] = [];
+  const limitedMatches = logText.matchAll(/- ([^:]+): (\d+)% available/g);
+  for (const match of limitedMatches) {
+    limitedAvailEmployees.push(`${match[1]} (${match[2]}% available)`);
+  }
+
   return {
     hasTrainingNoOverlap: logText.includes('no overlapping availability'),
     hasInvalidEmployee: /└─\s*nan:/i.test(logText) || logText.includes('nan: max'),
-    hasTimesetConflict: logText.includes('timeset') && logText.includes('conflict'),
+    hasTimesetConflict: logText.includes('CONFLICT:') || (logText.includes('timeset') && logText.includes('unavailable')),
+    hasFrontDeskGap: logText.includes('Front desk has no available staff'),
+    hasNotQualified: logText.includes('is not qualified for'),
+    hasEmployeeNotFound: logText.includes('not found in staff') || (logText.includes('employee') && logText.includes('not found')),
+    hasDepartmentNotFound: logText.includes('department') && logText.includes('not found'),
+    hasAvailabilityConflict: logText.includes('is unavailable on') || logText.includes('CONFLICT:'),
+    hasLimitedAvailability: limitedAvailEmployees.length > 0,
     invalidEmployeeName: logText.match(/└─\s*(nan):/i)?.[1],
+    notFoundName: notFoundMatch?.[1],
+    notQualifiedDetails: notQualifiedMatch ? `${notQualifiedMatch[1]} for ${notQualifiedMatch[2]}` : undefined,
+    frontDeskGapDetails: frontDeskMatch?.[1],
+    availabilityDetails: availabilityMatch ? availabilityMatch[1] : undefined,
+    timesetConflicts,
+    limitedAvailEmployees,
   };
 }
 
 export function ResultsTab() {
   const { running, progress, logs, result, reset } = useSolverStore();
-  
-  // Parse logs to detect specific issues
+
+  // Parse logs to detect specific issues and extract stats
   const diagnostics = useMemo(() => parseLogDiagnostics(logs), [logs]);
+  const solverStats = useMemo(() => parseSolverStats(logs), [logs]);
   const { history, loadHistory, deleteEntry } = useHistoryStore();
   const { showToast, setActiveTab } = useUIStore();
   const logContainerRef = useRef<HTMLDivElement>(null);
   const [logsExpanded, setLogsExpanded] = useState(false);
+  const [statusMessageIndex, setStatusMessageIndex] = useState(0);
+
+  // Rotate status messages every 4-5 seconds while running
+  useEffect(() => {
+    if (!running) {
+      setStatusMessageIndex(0);
+      return;
+    }
+
+    const rotateMessage = () => {
+      setStatusMessageIndex(prev => (prev + 1) % SOLVER_STATUS_MESSAGES.length);
+    };
+
+    // Random interval between 5-6 seconds
+    const scheduleNext = () => {
+      const delay = 5000 + Math.random() * 1000;
+      return setTimeout(() => {
+        rotateMessage();
+        timerId = scheduleNext();
+      }, delay);
+    };
+
+    let timerId = scheduleNext();
+    return () => clearTimeout(timerId);
+  }, [running]);
+
+  const currentStatusMessage = SOLVER_STATUS_MESSAGES[statusMessageIndex];
+  // Key for triggering animation on message change
+  const messageKey = `msg-${statusMessageIndex}`;
 
   useEffect(() => {
     loadHistory();
@@ -184,7 +337,12 @@ export function ResultsTab() {
       {running && (
         <div className="card">
           <div className="flex items-center justify-between mb-2">
-            <span className="text-sm font-medium text-surface-300">Optimizing schedule...</span>
+            <span
+              key={messageKey}
+              className="text-sm font-medium status-message-enter"
+            >
+              {currentStatusMessage}
+            </span>
             <span className="text-sm text-accent-400">
               {progress ? `~${Math.round(progress.percent)}%` : 'Starting...'}
             </span>
@@ -249,37 +407,187 @@ export function ResultsTab() {
                     : 'Generation Failed'}
               </h3>
               <p className="text-sm text-surface-400 mt-1">
-                {result.success 
+                {result.success
                   ? `Completed in ${formatElapsed(result.elapsed)}. Download your schedule from the history below.`
                   : result.errorType === 'no_solution'
-                    ? 'The constraints are too restrictive to find a valid schedule.'
-                    : result.error || 'An error occurred during optimization.'}
+                    ? 'The current requirements cannot all be satisfied together. See suggestions below.'
+                    : result.error || 'Something went wrong. Check the logs below for details.'}
               </p>
-              
-              {/* Detected Issues for No Solution */}
-              {result.errorType === 'no_solution' && (diagnostics.hasTrainingNoOverlap || diagnostics.hasInvalidEmployee) && (
+
+              {/* Solver Stats - shown on success */}
+              {result.success && solverStats.constraints && (
+                <div className="mt-4 pt-4 border-t border-accent-500/20">
+                  <div className="grid grid-cols-3 gap-4 text-center">
+                    <div>
+                      <div className="text-2xl font-bold text-accent-400">
+                        {solverStats.constraints?.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-surface-400">constraints solved</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-accent-400">
+                        {solverStats.totalVariables?.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-surface-400">variables optimized</div>
+                    </div>
+                    <div>
+                      <div className="text-2xl font-bold text-accent-400">
+                        {solverStats.assignmentVariables?.toLocaleString()}
+                      </div>
+                      <div className="text-xs text-surface-400">possible assignments</div>
+                    </div>
+                  </div>
+                  <p className="text-xs text-surface-500 text-center mt-3">
+                    Evaluated {((solverStats.days || 5) * (solverStats.timeSlotsPerDay || 18) * (solverStats.employees || 12)).toLocaleString()} schedule combinations across {solverStats.days || 5} days
+                  </p>
+                </div>
+              )}
+
+              {/* Detected Issues - shown for both no_solution and errors */}
+              {!result.success && (
                 <div className="mt-3 space-y-1">
-                  <p className="text-sm font-medium text-yellow-400">Detected Issues:</p>
-                  <ul className="text-sm text-surface-300 space-y-1">
+                  <p className={`text-sm font-medium ${result.errorType === 'no_solution' ? 'text-yellow-400' : 'text-danger-400'}`}>
+                    {result.errorType === 'no_solution' ? 'Possible Causes:' : 'Error Details:'}
+                  </p>
+                  <ul className="text-sm text-surface-300 space-y-1.5">
+                    {/* Employee not found errors */}
+                    {diagnostics.hasEmployeeNotFound && (
+                      <li className="flex items-start gap-2">
+                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span>
+                          <strong>Employee not found:</strong> &quot;{diagnostics.notFoundName || 'unknown'}&quot; doesn&apos;t exist in the Staff tab.
+                          Double-check the spelling matches exactly.
+                        </span>
+                      </li>
+                    )}
+                    {/* Department not found errors */}
+                    {diagnostics.hasDepartmentNotFound && (
+                      <li className="flex items-start gap-2">
+                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span>
+                          <strong>Department not found:</strong> A department name in your flags doesn&apos;t match any department in the Departments tab.
+                        </span>
+                      </li>
+                    )}
+                    {/* Not qualified errors */}
+                    {diagnostics.hasNotQualified && (
+                      <li className="flex items-start gap-2">
+                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span>
+                          <strong>Not qualified:</strong> {diagnostics.notQualifiedDetails
+                            ? `${diagnostics.notQualifiedDetails}. Add this role to their qualifications in the Staff tab.`
+                            : 'An employee is assigned to a role they\'re not qualified for. Check the Staff tab.'}
+                        </span>
+                      </li>
+                    )}
+                    {/* Training pair overlap issues */}
                     {diagnostics.hasTrainingNoOverlap && (
                       <li className="flex items-start gap-2">
                         <span className="text-yellow-500">•</span>
-                        <span>Training pair has no overlapping availability - they can&apos;t work together</span>
+                        <span>
+                          <strong>Training pair conflict:</strong> The two employees have no overlapping availability, so they can never work together.
+                          Adjust their availability in the Staff tab or remove this training pair.
+                        </span>
                       </li>
                     )}
+                    {/* Invalid employee (nan) */}
                     {diagnostics.hasInvalidEmployee && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
-                        <span>Invalid employee &quot;{diagnostics.invalidEmployeeName || 'nan'}&quot; detected - check Staff tab for empty rows</span>
+                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span>
+                          <strong>Empty employee row:</strong> There&apos;s a blank or invalid row in your staff data.
+                          Go to the Staff tab and remove any empty rows.
+                        </span>
                       </li>
                     )}
-                    {diagnostics.hasTimesetConflict && (
+                    {/* Timeset/availability conflict - show all conflicts */}
+                    {diagnostics.hasTimesetConflict && diagnostics.timesetConflicts.length > 0 && (
                       <li className="flex items-start gap-2">
                         <span className="text-yellow-500">•</span>
-                        <span>Forced time assignment conflicts with employee availability</span>
+                        <span>
+                          <strong>Forced assignment conflicts:</strong>
+                          <ul className="mt-1 ml-4 space-y-0.5">
+                            {diagnostics.timesetConflicts.map((conflict, i) => (
+                              <li key={i} className="text-surface-300">{conflict}</li>
+                            ))}
+                          </ul>
+                        </span>
+                      </li>
+                    )}
+                    {diagnostics.hasTimesetConflict && diagnostics.timesetConflicts.length === 0 && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>
+                          <strong>Forced assignment conflict:</strong> {diagnostics.availabilityDetails
+                            ? `${diagnostics.availabilityDetails}. The employee is marked unavailable at the time you're trying to assign them.`
+                            : 'An employee is being forced to work during a time they\'re marked unavailable. Check the Solver Output below for details.'}
+                        </span>
+                      </li>
+                    )}
+                    {/* Availability conflict without timeset */}
+                    {diagnostics.hasAvailabilityConflict && !diagnostics.hasTimesetConflict && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>
+                          <strong>Availability conflict:</strong> {diagnostics.availabilityDetails
+                            ? `${diagnostics.availabilityDetails}. Remove the flag or update their availability.`
+                            : 'A flag references a time when the employee is unavailable.'}
+                        </span>
+                      </li>
+                    )}
+                    {/* Limited availability employees */}
+                    {diagnostics.hasLimitedAvailability && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>
+                          <strong>Limited availability:</strong> Some employees have very restricted schedules:
+                          <ul className="mt-1 ml-4 space-y-0.5">
+                            {diagnostics.limitedAvailEmployees.slice(0, 5).map((emp, i) => (
+                              <li key={i} className="text-surface-300">{emp}</li>
+                            ))}
+                            {diagnostics.limitedAvailEmployees.length > 5 && (
+                              <li className="text-surface-400">...and {diagnostics.limitedAvailEmployees.length - 5} more</li>
+                            )}
+                          </ul>
+                        </span>
+                      </li>
+                    )}
+                    {/* Front desk coverage gap */}
+                    {diagnostics.hasFrontDeskGap && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>
+                          <strong>Front desk gap:</strong> {diagnostics.frontDeskGapDetails
+                            ? `No one is available to cover front desk at: ${diagnostics.frontDeskGapDetails}`
+                            : 'There are time slots with no front desk coverage possible.'}
+                          {' '}Add more employees with front desk qualification or expand their availability.
+                        </span>
+                      </li>
+                    )}
+                    {/* Generic suggestion if no specific issues detected */}
+                    {result.errorType === 'no_solution' &&
+                      !diagnostics.hasTrainingNoOverlap &&
+                      !diagnostics.hasInvalidEmployee &&
+                      !diagnostics.hasTimesetConflict &&
+                      !diagnostics.hasFrontDeskGap &&
+                      !diagnostics.hasNotQualified &&
+                      !diagnostics.hasEmployeeNotFound &&
+                      !diagnostics.hasDepartmentNotFound &&
+                      !diagnostics.hasAvailabilityConflict && (
+                      <li className="flex items-start gap-2">
+                        <span className="text-yellow-500">•</span>
+                        <span>
+                          <strong>Too many constraints:</strong> The combination of employee availability, target hours, and department requirements
+                          can&apos;t all be satisfied. Try reducing target hours, relaxing availability, or removing some flags.
+                        </span>
                       </li>
                     )}
                   </ul>
+                  {result.errorType === 'no_solution' && (
+                    <p className="text-xs text-surface-500 mt-2">
+                      Tip: Expand &quot;Solver Output&quot; below for detailed diagnostic information.
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -333,6 +641,67 @@ export function ResultsTab() {
         </div>
       )}
 
+      {/* Troubleshooting - Contextual based on error type */}
+      {result && !result.success && (
+        <div className="card bg-surface-800/50">
+          <h3 className="font-semibold text-surface-200 mb-3">
+            {result.errorType === 'no_solution' ? 'How to Fix This' : 'Troubleshooting Tips'}
+          </h3>
+          
+          {result.errorType === 'no_solution' ? (
+          <ul className="space-y-2 text-sm text-surface-400">
+              {diagnostics.hasInvalidEmployee && (
+                <li className="flex items-start gap-2">
+                  <span className="text-yellow-400">1.</span>
+                  <span><strong className="text-surface-200">Remove invalid employees</strong> - Go to Staff tab and delete any empty or &quot;nan&quot; entries</span>
+                </li>
+              )}
+              {diagnostics.hasTrainingNoOverlap && (
+                <li className="flex items-start gap-2">
+                  <span className="text-yellow-400">{diagnostics.hasInvalidEmployee ? '2.' : '1.'}</span>
+                  <span><strong className="text-surface-200">Remove training pair</strong> - The paired employees have no overlapping availability</span>
+                </li>
+              )}
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Check &quot;Assign Employee to Role/Time&quot;</strong> - Ensure forced assignments don&apos;t conflict with availability</span>
+              </li>
+              <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Verify front desk coverage</strong> - At least one qualified employee must be available each time slot</span>
+              </li>
+            <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Reduce hour requirements</strong> - Department targets may exceed available employee hours</span>
+            </li>
+            <li className="flex items-start gap-2">
+                <span className="text-yellow-400">•</span>
+                <span><strong className="text-surface-200">Disable 2-hour minimum blocks</strong> - In Settings, turn off &quot;Enforce 2-hour minimum department blocks&quot;</span>
+              </li>
+            </ul>
+          ) : (
+            <ul className="space-y-2 text-sm text-surface-400">
+              <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Check that your CSV files are properly formatted</span>
+            </li>
+            <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Ensure Python is installed and accessible</span>
+            </li>
+            <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Check the logs above for specific error messages</span>
+            </li>
+            <li className="flex items-start gap-2">
+                <span className="text-danger-400">•</span>
+                <span>Try restarting the application</span>
+            </li>
+          </ul>
+          )}
+        </div>
+      )}
+
       {/* Generation History */}
       {history.length > 0 && (
         <div className="card">
@@ -368,7 +737,7 @@ export function ResultsTab() {
                     </svg>
                   </button>
                 </div>
-                
+
                 <div className="flex gap-2">
                   {entry.hasXlsx && (
                     <button
@@ -398,67 +767,6 @@ export function ResultsTab() {
               </div>
             ))}
           </div>
-        </div>
-      )}
-
-      {/* Troubleshooting - Contextual based on error type */}
-      {result && !result.success && (
-        <div className="card bg-surface-800/50">
-          <h3 className="font-semibold text-surface-200 mb-3">
-            {result.errorType === 'no_solution' ? 'How to Fix This' : 'Troubleshooting Tips'}
-          </h3>
-          
-          {result.errorType === 'no_solution' ? (
-            <ul className="space-y-2 text-sm text-surface-400">
-              {diagnostics.hasInvalidEmployee && (
-                <li className="flex items-start gap-2">
-                  <span className="text-yellow-400">1.</span>
-                  <span><strong className="text-surface-200">Remove invalid employees</strong> - Go to Staff tab and delete any empty or &quot;nan&quot; entries</span>
-                </li>
-              )}
-              {diagnostics.hasTrainingNoOverlap && (
-                <li className="flex items-start gap-2">
-                  <span className="text-yellow-400">{diagnostics.hasInvalidEmployee ? '2.' : '1.'}</span>
-                  <span><strong className="text-surface-200">Remove training pair</strong> - The paired employees have no overlapping availability</span>
-                </li>
-              )}
-              <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
-                <span><strong className="text-surface-200">Check &quot;Assign Employee to Role/Time&quot;</strong> - Ensure forced assignments don&apos;t conflict with availability</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
-                <span><strong className="text-surface-200">Verify front desk coverage</strong> - At least one qualified employee must be available each time slot</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
-                <span><strong className="text-surface-200">Reduce hour requirements</strong> - Department targets may exceed available employee hours</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
-                <span><strong className="text-surface-200">Disable 2-hour minimum blocks</strong> - In Settings, turn off &quot;Enforce 2-hour minimum department blocks&quot;</span>
-              </li>
-            </ul>
-          ) : (
-            <ul className="space-y-2 text-sm text-surface-400">
-              <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
-                <span>Check that your CSV files are properly formatted</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
-                <span>Ensure Python is installed and accessible</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
-                <span>Check the logs above for specific error messages</span>
-              </li>
-              <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
-                <span>Try restarting the application</span>
-              </li>
-            </ul>
-          )}
         </div>
       )}
     </div>

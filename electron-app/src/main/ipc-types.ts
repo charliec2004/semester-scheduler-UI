@@ -99,6 +99,12 @@ export interface ShiftTimePreference {
   preference: 'morning' | 'afternoon'; // morning = 8am-12pm, afternoon = 12pm-5pm
 }
 
+export interface EqualityConstraint {
+  department: string;
+  employee1: string;
+  employee2: string;
+}
+
 export interface SolverRunConfig {
   staffPath: string;
   deptPath: string;
@@ -111,6 +117,7 @@ export interface SolverRunConfig {
   timesets?: TimesetRequest[];
   favoredEmployeeDepts?: FavoredEmployeeDept[];
   shiftTimePreferences?: ShiftTimePreference[];
+  equalityConstraints?: EqualityConstraint[];
   enforceMinDeptBlock?: boolean; // Default true, disable to allow 1-hour dept blocks
   // Settings overrides (from Settings panel)
   minSlots?: number;
@@ -169,6 +176,7 @@ export interface ConfigSnapshot {
   timesets: TimesetRequest[];
   favoredEmployeeDepts: FavoredEmployeeDept[];
   shiftTimePreferences: ShiftTimePreference[];
+  equalityConstraints: EqualityConstraint[];
   maxSolveSeconds: number;
 }
 
@@ -205,6 +213,7 @@ export interface FlagPreset {
   timesets: TimesetRequest[];
   favoredEmployeeDepts: FavoredEmployeeDept[];
   shiftTimePreferences: ShiftTimePreference[];
+  equalityConstraints: EqualityConstraint[];
   maxSolveSeconds?: number;
 }
 

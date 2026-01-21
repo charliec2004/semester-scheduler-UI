@@ -297,6 +297,46 @@
   .stagger-5 { animation-delay: 250ms; }
 }
 
+/* Solver status message animations */
+@keyframes statusShimmer {
+  0% {
+    background-position: 200% center;
+  }
+  100% {
+    background-position: -200% center;
+  }
+}
+
+@keyframes statusFadeSlide {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.status-message-enter {
+  display: inline-block;
+  color: transparent;
+  background: linear-gradient(
+    90deg,
+    #a1a1aa 0%,
+    #a1a1aa 35%,
+    #22d3ee 50%,
+    #a1a1aa 65%,
+    #a1a1aa 100%
+  );
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation:
+    statusFadeSlide 0.35s ease-out,
+    statusShimmer 2.5s ease-in-out infinite;
+}
+
 /* Scrollbar gutter - prevents layout shift when scrollbar appears/disappears */
 .scrollbar-gutter-stable {
   scrollbar-gutter: stable;
