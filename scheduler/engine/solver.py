@@ -199,6 +199,10 @@ def solve_schedule(
         for role in roles
     }
     ROLE_DISPLAY_NAMES[FRONT_DESK_ROLE] = "Front Desk"
+    # Override with user's original names from CSV (preserves their capitalization)
+    for normalized, original in department_requirements.display_names.items():
+        if normalized in ROLE_DISPLAY_NAMES:
+            ROLE_DISPLAY_NAMES[normalized] = original
 
     if favored_employees_normalized:
         unknown_favored = [

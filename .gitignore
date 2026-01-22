@@ -34,9 +34,14 @@ venv/
 questions.md
 notes.md
 
-# Real files
+# Real data files (user's actual data, not samples)
 cpd-requirements.csv
 employees.csv
 cpd-requirements-interterm.csv
 employees-interterm.csv
 departments.csv
+requirements.csv
+
+# Allow sample files
+!electron-app/samples/employees.csv
+!electron-app/samples/requirements.csv

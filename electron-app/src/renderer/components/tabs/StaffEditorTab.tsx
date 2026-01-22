@@ -7,6 +7,7 @@ import { useState, useMemo } from 'react';
 import { useStaffStore, useDepartmentStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import { staffToCsv, AVAILABILITY_COLUMNS } from '../../utils/csvValidators';
+import { COMMON_ROLES } from '@shared/constants';
 import type { StaffMember } from '../../../main/ipc-types';
 
 const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'];
@@ -24,8 +25,6 @@ function formatTime12h(time24: string): string {
   const hour12 = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour;
   return `${hour12}:${min} ${ampm}`;
 }
-
-const COMMON_ROLES = ['front_desk', 'career_education', 'marketing', 'employer_engagement', 'events', 'data_systems'];
 
 export function StaffEditorTab() {
   const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty, saveStaff } = useStaffStore();
@@ -170,6 +169,7 @@ export function StaffEditorTab() {
           <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
             {filteredStaff.map((employee, _index) => {
               const actualIndex = staff.indexOf(employee);
+              const hasNoRoles = employee.roles.length === 0;
               return (
                 <button
                   key={actualIndex}
@@ -178,14 +178,24 @@ export function StaffEditorTab() {
                     w-full px-4 py-3 text-left border-b border-surface-800 last:border-0
                     hover:bg-surface-800 transition-colors
                     ${selectedIndex === actualIndex ? 'bg-surface-800 border-l-2 border-l-accent-500' : ''}
+                    ${hasNoRoles ? 'bg-warning-500/10 border-l-2 border-l-warning-500' : ''}
                   `}
                 >
-                  <div className="font-medium text-surface-200">
+                  <div className={`font-medium ${hasNoRoles ? 'text-warning-400' : 'text-surface-200'}`}>
                     {employee.name || <span className="text-surface-500 italic">Unnamed</span>}
+                    {hasNoRoles && (
+                      <svg className="w-4 h-4 inline ml-2 text-warning-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                      </svg>
+                    )}
                   </div>
-                  <div className="text-sm text-surface-400 mt-0.5">
-                    {employee.roles.slice(0, 2).join(', ')}
-                    {employee.roles.length > 2 && ` +${employee.roles.length - 2}`}
+                  <div className={`text-sm mt-0.5 ${hasNoRoles ? 'text-warning-400' : 'text-surface-400'}`}>
+                    {hasNoRoles ? 'No qualifications' : (
+                      <>
+                        {employee.roles.slice(0, 2).join(', ')}
+                        {employee.roles.length > 2 && ` +${employee.roles.length - 2}`}
+                      </>
+                    )}
                   </div>
                   <div className="text-xs text-surface-500 mt-1">
                     Year {employee.year} · {employee.targetHours}h target

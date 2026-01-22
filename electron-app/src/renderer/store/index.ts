@@ -68,6 +68,7 @@ interface StaffState {
   updateStaffMember: (index: number, member: Partial<StaffMember>) => void;
   addStaffMember: (member: StaffMember) => void;
   removeStaffMember: (index: number) => void;
+  removeRoleFromAllStaff: (role: string) => void;
   setErrors: (errors: ValidationError[], warnings: ValidationError[]) => void;
   setDirty: (dirty: boolean) => void;
   clearStaff: () => void;
@@ -96,6 +97,14 @@ export const useStaffStore = create<StaffState>((set, get) => ({
 
   removeStaffMember: (index) => {
     const staff = get().staff.filter((_, i) => i !== index);
+    set({ staff, dirty: true });
+  },
+
+  removeRoleFromAllStaff: (role) => {
+    const staff = get().staff.map(member => ({
+      ...member,
+      roles: member.roles.filter(r => r !== role),
+    }));
     set({ staff, dirty: true });
   },
 
@@ -158,8 +167,14 @@ export const useDepartmentStore = create<DepartmentState>((set, get) => ({
   },
 
   removeDepartment: (index) => {
+    const deptToRemove = get().departments[index];
     const departments = get().departments.filter((_, i) => i !== index);
     set({ departments, dirty: true });
+    // Also remove this department's role from all staff members
+    if (deptToRemove) {
+      const normalizedRole = deptToRemove.name.toLowerCase().replace(/\s+/g, '_');
+      useStaffStore.getState().removeRoleFromAllStaff(normalizedRole);
+    }
   },
 
   reorderDepartments: (fromIndex, toIndex) => {

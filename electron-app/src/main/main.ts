@@ -112,7 +112,7 @@ function getResourcePath(relativePath: string): string {
       return path.join(process.resourcesPath, 'python', relativePath);
     }
     // Sample files are in the 'samples' subdirectory
-    if (relativePath.endsWith('.example')) {
+    if (relativePath === 'employees.csv' || relativePath === 'requirements.csv') {
       return path.join(process.resourcesPath, 'samples', relativePath);
     }
     return path.join(process.resourcesPath, relativePath);
@@ -400,12 +400,12 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('files:downloadSample', async (_event, kind: 'staff' | 'dept') => {
-    const sampleName = kind === 'staff' ? 'employees.csv.example' : 'cpd-requirements.csv.example';
+    const sampleName = kind === 'staff' ? 'employees.csv' : 'requirements.csv';
     const samplePath = getResourcePath(sampleName);
-    
+
     const result = await dialog.showSaveDialog(mainWindow!, {
       title: `Save Sample ${kind === 'staff' ? 'Staff' : 'Department'} CSV`,
-      defaultPath: sampleName.replace('.example', ''),
+      defaultPath: sampleName,
       filters: [{ name: 'CSV Files', extensions: ['csv'] }],
     });
 

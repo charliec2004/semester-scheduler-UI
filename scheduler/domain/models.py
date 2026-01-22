@@ -45,7 +45,8 @@ class StaffData:
 class DepartmentRequirements:
     targets: Dict[str, float]
     max_hours: Dict[str, float]
-    order: List[str]  # Department names in user-defined display order
+    order: List[str]  # Department names in user-defined display order (normalized)
+    display_names: Dict[str, str]  # normalized_name -> original display name from CSV
 
 
 @dataclass(frozen=True)

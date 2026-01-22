@@ -21,15 +21,8 @@ export const AVAILABILITY_COLUMNS = DAY_NAMES.flatMap(day =>
   TIME_SLOT_STARTS.map(time => `${day}_${time}`)
 );
 
-// Common roles
-export const COMMON_ROLES = [
-  'front_desk',
-  'career_education',
-  'marketing',
-  'employer_engagement',
-  'events',
-  'data_systems',
-] as const;
+// Common roles - only front_desk is hard-coded; other roles come from departments
+export const COMMON_ROLES: readonly string[] = ['front_desk'];
 
 export type Role = typeof COMMON_ROLES[number] | string;
 

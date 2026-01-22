@@ -69,11 +69,14 @@ def load_department_requirements(path: Path) -> DepartmentRequirements:
     department_targets: Dict[str, float] = {}
     department_max_hours: Dict[str, float] = {}
     department_order: list[str] = []  # Track order as they appear in CSV
+    department_display_names: Dict[str, str] = {}  # normalized -> original name
 
     # Iterate through each row in the CSV
     for _, row in df.iterrows():
+        # Capture original name before normalization (for display in output)
+        original_name = str(row[dept_col]).strip()
         # Extract and normalize the department name (handles spaces, underscores, case)
-        department = normalize_department_name(str(row[dept_col]))
+        department = normalize_department_name(original_name)
         
         # Validate: department name cannot be empty
         if not department:
@@ -97,11 +100,13 @@ def load_department_requirements(path: Path) -> DepartmentRequirements:
         department_targets[department] = target_hours
         department_max_hours[department] = max_hours
         department_order.append(department)
+        department_display_names[department] = original_name
 
     # Return a frozen DepartmentRequirements dataclass
     # (immutable to prevent accidental modification)
     return DepartmentRequirements(
-        targets=department_targets, 
+        targets=department_targets,
         max_hours=department_max_hours,
-        order=department_order
+        order=department_order,
+        display_names=department_display_names,
     )

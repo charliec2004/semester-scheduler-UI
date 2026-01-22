@@ -116,8 +116,9 @@ export function FlagsTab() {
 
   const employeeNames = useMemo(() => staff.map(s => s.name).filter(Boolean), [staff]);
   const departmentNames = useMemo(() => departments.map(d => d.name).filter(Boolean), [departments]);
+  const staffWithNoRoles = useMemo(() => staff.filter(s => s.roles.length === 0), [staff]);
 
-  const canRun = staff.length > 0 && departments.length > 0;
+  const canRun = staff.length > 0 && departments.length > 0 && staffWithNoRoles.length === 0;
 
   const handleAddFavored = () => {
     if (newFavored && !(newFavored in favoredEmployees)) {
@@ -284,10 +285,19 @@ export function FlagsTab() {
               d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
           </svg>
           <div>
-            <p className="font-medium text-warning-400">Missing Data</p>
+            <p className="font-medium text-warning-400">Cannot Run Solver</p>
             <p className="text-sm text-warning-300 mt-1">
               {staff.length === 0 && 'Import or create staff data. '}
               {departments.length === 0 && 'Import or create department data. '}
+              {staffWithNoRoles.length > 0 && (
+                <>
+                  {staffWithNoRoles.length === 1
+                    ? `${staffWithNoRoles[0].name || 'An employee'} has no qualifications. `
+                    : `${staffWithNoRoles.length} employees have no qualifications: ${staffWithNoRoles.slice(0, 3).map(s => s.name || 'Unnamed').join(', ')}${staffWithNoRoles.length > 3 ? '...' : ''}. `
+                  }
+                  Assign roles in the Staff tab.
+                </>
+              )}
             </p>
           </div>
         </div>
