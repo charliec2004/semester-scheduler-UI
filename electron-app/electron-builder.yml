@@ -97,6 +97,8 @@ nsis:
   uninstallerIcon: assets/icon.ico
   license: ../LICENSE
   deleteAppDataOnUninstall: true
+  # Must match the win.artifactName for auto-update to work
+  artifactName: "${productName}-${version}-${arch}-win.${ext}"
 
 # Linux Configuration
 linux:
