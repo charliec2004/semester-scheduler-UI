@@ -116,6 +116,25 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
+      # NSIS ignores artifactName - rename files to match what latest.yml expects
+      - name: Fix Windows installer filename
+        if: matrix.platform == 'win'
+        working-directory: electron-app/release
+        shell: bash
+        run: |
+          echo "Before rename:"
+          ls -la *.exe || true
+          # Rename Scheduler.Setup.X.X.X.exe to Scheduler-Setup-X.X.X.exe
+          for f in Scheduler.Setup.*.exe; do
+            if [ -f "$f" ]; then
+              newname=$(echo "$f" | sed 's/Scheduler\.Setup\./Scheduler-Setup-/')
+              echo "Renaming $f to $newname"
+              mv "$f" "$newname"
+            fi
+          done
+          echo "After rename:"
+          ls -la *.exe || true
+
       - name: Build Electron app (Linux)
         if: matrix.platform == 'linux'
         working-directory: electron-app

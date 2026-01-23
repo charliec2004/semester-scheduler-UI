@@ -97,8 +97,8 @@ nsis:
   uninstallerIcon: assets/icon.ico
   license: ../LICENSE
   deleteAppDataOnUninstall: true
-  # NSIS uses dots in filenames - match that pattern for latest.yml consistency
-  artifactName: "${productName}.Setup.${version}.${ext}"
+  # This sets the filename in latest.yml - CI renames the actual file to match
+  artifactName: "${productName}-Setup-${version}.${ext}"
 
 # Linux Configuration
 linux:
