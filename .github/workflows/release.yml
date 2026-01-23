@@ -116,27 +116,6 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-      # Fix Windows installer filename - NSIS uses dots but latest.yml expects dashes
-      - name: Fix Windows installer filename
-        if: matrix.platform == 'win'
-        working-directory: electron-app/release
-        shell: pwsh
-        run: |
-          # Rename "Scheduler.Setup.X.X.X.exe" to "Scheduler-Setup-X.X.X.exe"
-          Get-ChildItem -Filter "Scheduler.Setup.*.exe" | ForEach-Object {
-            $newName = $_.Name -replace '\.Setup\.', '-Setup-'
-            Write-Host "Renaming $($_.Name) to $newName"
-            Rename-Item $_.FullName -NewName $newName
-          }
-          # Also rename the portable exe if it exists
-          Get-ChildItem -Filter "Scheduler.*.exe" | Where-Object { $_.Name -notmatch 'Setup' } | ForEach-Object {
-            $newName = $_.Name -replace '^Scheduler\.', 'Scheduler-'
-            Write-Host "Renaming $($_.Name) to $newName"
-            Rename-Item $_.FullName -NewName $newName
-          }
-          Write-Host "Files after rename:"
-          Get-ChildItem *.exe
-
       - name: Build Electron app (Linux)
         if: matrix.platform == 'linux'
         working-directory: electron-app

@@ -97,9 +97,8 @@ nsis:
   uninstallerIcon: assets/icon.ico
   license: ../LICENSE
   deleteAppDataOnUninstall: true
-  # NSIS installer naming - use explicit dashes to avoid space-to-dot conversion
-  # This ensures latest.yml and the actual file have matching names
-  artifactName: "${productName}-Setup-${version}.${ext}"
+  # NSIS uses dots in filenames - match that pattern for latest.yml consistency
+  artifactName: "${productName}.Setup.${version}.${ext}"
 
 # Linux Configuration
 linux:
