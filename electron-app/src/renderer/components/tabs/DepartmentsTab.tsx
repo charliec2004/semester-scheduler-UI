@@ -170,10 +170,16 @@ export function DepartmentsTab() {
     <div className="space-y-6 animate-fade-in">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-display font-semibold text-surface-100 mb-1">
-            Department Budgets
-          </h2>
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-display font-semibold text-surface-100">
+              Department Budgets
+            </h2>
+            <Button onClick={handleExport} variant="secondary" size="sm" disabled={departments.length === 0}>
+              <Download className="h-4 w-4" strokeWidth={1.8} />
+              Export CSV
+            </Button>
+          </div>
           <p className="text-surface-400">
             {departments.length} department{departments.length !== 1 ? 's' : ''} 
             {dirty && <span className="ml-2 text-warning-300">(unsaved changes)</span>}
@@ -206,10 +212,6 @@ export function DepartmentsTab() {
           >
             <Check className="h-4 w-4" strokeWidth={1.8} />
             Save
-          </Button>
-          <Button onClick={handleExport} variant="secondary" size="sm" disabled={departments.length === 0}>
-            <Download className="h-4 w-4" strokeWidth={1.8} />
-            Export CSV
           </Button>
         </div>
       </div>
@@ -324,7 +326,7 @@ export function DepartmentsTab() {
                         inlineDepartmentNameClassName,
                         isEditing
                           ? 'border-input bg-background text-foreground'
-                          : 'border-transparent bg-transparent text-surface-300 shadow-none hover:border-border/70 hover:text-surface-100',
+                          : 'border-transparent bg-transparent font-medium text-surface-200 shadow-none hover:border-border/70 hover:text-surface-100',
                         !isEditing ? 'cursor-text placeholder:text-surface-500' : '',
                       ].join(' ')}
                       placeholder={isEditing ? 'Department name' : 'Unnamed'}

@@ -3,7 +3,7 @@
  * Weekly schedule: periods when the student cannot work, plus optional buffer slots.
  */
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, Download, Plus, Trash2 } from 'lucide-react';
 import { useStaffStore, useDepartmentStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
@@ -179,6 +179,18 @@ function formatBlockTimeLabel(time24: string): string {
   return formatTime12h(time24);
 }
 
+function normalizeRoleValue(role: string): string {
+  return role.trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function toTitleCaseWords(value: string): string {
+  return value
+    .split(/\s+/)
+    .filter(Boolean)
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+}
+
 interface AvailabilityBlockTimeInputsProps {
   rowKey: string;
   startTime: string;
@@ -307,16 +319,42 @@ export function StaffEditorTab() {
   const [searchTerm, setSearchTerm] = useState('');
   const [employeeToDelete, setEmployeeToDelete] = useState<{ index: number; name: string } | null>(null);
 
-  const availableRoles = useMemo(() => {
-    const roles = new Set(COMMON_ROLES);
+  const roleLabelMap = useMemo(() => {
+    const labels = new Map<string, string>();
+    labels.set('front_desk', 'Front Desk');
     departments.forEach((d) => {
-      const normalized = d.name.trim().toLowerCase().replace(/\s+/g, '_');
+      const normalized = normalizeRoleValue(d.name);
       if (normalized) {
-        roles.add(normalized);
+        labels.set(normalized, d.name.trim());
       }
     });
-    return Array.from(roles).filter(Boolean).sort();
+    return labels;
   }, [departments]);
+
+  const availableRoles = useMemo(() => {
+    const roles = new Set(COMMON_ROLES);
+    roleLabelMap.forEach((_, role) => roles.add(role));
+    return Array.from(roles).filter(Boolean).sort();
+  }, [roleLabelMap]);
+
+  const formatRoleLabel = useCallback((role: string) => {
+    const normalized = normalizeRoleValue(role);
+    const mapped = roleLabelMap.get(normalized);
+    if (mapped) {
+      return mapped;
+    }
+
+    const trimmed = role.trim();
+    if (!trimmed) {
+      return '';
+    }
+
+    if (trimmed.includes('_')) {
+      return toTitleCaseWords(trimmed.replace(/_/g, ' '));
+    }
+
+    return trimmed;
+  }, [roleLabelMap]);
 
   const filteredStaff = useMemo(() => {
     if (!searchTerm) return staff;
@@ -324,9 +362,12 @@ export function StaffEditorTab() {
     return staff.filter(
       s =>
         s.name.toLowerCase().includes(term) ||
-        s.roles.some(r => r.includes(term)),
+        s.roles.some(r =>
+          r.toLowerCase().includes(term) ||
+          formatRoleLabel(r).toLowerCase().includes(term),
+        ),
     );
-  }, [staff, searchTerm]);
+  }, [staff, searchTerm, formatRoleLabel]);
 
   const handleAddEmployee = () => {
     const unavailabilityBlocks = createEmptyUnavailabilityBlocks();
@@ -414,8 +455,14 @@ export function StaffEditorTab() {
   return (
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
-        <div>
-          <h2 className="text-2xl font-display font-semibold text-surface-100 mb-1">Staff Editor</h2>
+        <div className="space-y-1">
+          <div className="flex items-center gap-3">
+            <h2 className="text-2xl font-display font-semibold text-surface-100">Staff Editor</h2>
+            <Button onClick={handleExport} variant="secondary" size="sm" disabled={staff.length === 0}>
+              <Download className="h-4 w-4" strokeWidth={1.8} />
+              Export CSV
+            </Button>
+          </div>
           <p className="text-surface-400">
             {staff.length} employee{staff.length !== 1 ? 's' : ''}
             {dirty && <span className="ml-2 text-warning-300">(unsaved changes)</span>}
@@ -458,10 +505,6 @@ export function StaffEditorTab() {
             <Check className="h-4 w-4" strokeWidth={1.8} />
             Save
           </Button>
-          <Button onClick={handleExport} variant="secondary" size="sm" disabled={staff.length === 0}>
-            <Download className="h-4 w-4" strokeWidth={1.8} />
-            Export CSV
-          </Button>
         </div>
       </div>
 
@@ -503,7 +546,7 @@ export function StaffEditorTab() {
                       'No qualifications'
                     ) : (
                       <>
-                        {employee.roles.slice(0, 2).map((role) => role.replace(/_/g, ' ')).join(', ')}
+                        {employee.roles.slice(0, 2).map((role) => formatRoleLabel(role)).join(', ')}
                         {employee.roles.length > 2 && ` +${employee.roles.length - 2}`}
                       </>
                     )}
@@ -588,13 +631,15 @@ export function StaffEditorTab() {
                 <h3 className="font-semibold text-surface-200 mb-1">Roles / Qualifications</h3>
                 <div className="flex flex-wrap gap-2">
                   {availableRoles.map(role => {
-                    const isSelected = selectedEmployee.roles.includes(role);
+                    const isSelected = selectedEmployee.roles.some(
+                      selectedRole => normalizeRoleValue(selectedRole) === role,
+                    );
                     return (
                       <button
                         key={role}
                         onClick={() => {
                           const newRoles = isSelected
-                            ? selectedEmployee.roles.filter(r => r !== role)
+                            ? selectedEmployee.roles.filter(r => normalizeRoleValue(r) !== role)
                             : [...selectedEmployee.roles, role];
                           updateStaffMember(selectedIndex!, { roles: newRoles });
                         }}
@@ -604,7 +649,7 @@ export function StaffEditorTab() {
                         `}
                         aria-pressed={isSelected}
                       >
-                        {role.replace(/_/g, ' ')}
+                        {formatRoleLabel(role)}
                       </button>
                     );
                   })}
