@@ -6,7 +6,7 @@ type NoticeVariant = 'neutral' | 'success' | 'warning' | 'error' | 'info';
 
 const variantClasses: Record<NoticeVariant, string> = {
   neutral: 'border-border bg-surface-900/60 text-surface-100',
-  success: 'border-border bg-surface-900/60 text-surface-100',
+  success: 'border-[hsl(var(--action-primary-border)/0.5)] bg-[hsl(var(--action-primary)/0.14)] text-[hsl(var(--action-primary-foreground))]',
   warning: 'border-warning-400/55 bg-warning-500/12 text-surface-100',
   error: 'border-danger-700/45 bg-danger-700/10 text-surface-100',
   info: 'border-border bg-surface-900/60 text-surface-100',
@@ -14,7 +14,7 @@ const variantClasses: Record<NoticeVariant, string> = {
 
 const iconClasses: Record<NoticeVariant, string> = {
   neutral: 'text-surface-300',
-  success: 'text-surface-200',
+  success: 'text-[hsl(var(--action-primary-foreground))]',
   warning: 'text-warning-300',
   error: 'text-danger-300',
   info: 'text-surface-300',
@@ -71,6 +71,8 @@ export function NoticePanel({
                   ? 'text-warning-100/90'
                   : variant === 'error'
                     ? 'text-danger-100/90'
+                    : variant === 'success'
+                      ? 'text-[hsl(var(--action-primary-foreground)/0.82)]'
                     : 'text-surface-400',
               )}
             >

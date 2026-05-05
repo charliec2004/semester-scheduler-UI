@@ -10,7 +10,6 @@ import { DropZone } from '../ui/DropZone';
 import { Button } from '../ui/button';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { NoticePanel } from '../ui/notice-panel';
-import { QuickStartGuide } from '../ui/QuickStartGuide';
 import { validateStaffCsv, validateDepartmentCsv, parseStaffCsv, parseDepartmentCsv } from '../../utils/csvValidators';
 import type { HistoryEntry } from '../../../main/ipc-types';
 
@@ -351,8 +350,6 @@ export function ImportTab() {
           {renderIssues(deptValidationWarnings, 'warning', 'Warnings')}
         </div>
       </div>
-
-      <QuickStartGuide />
       <ConfirmDialog
         open={configToDelete !== null}
         onOpenChange={(open) => {

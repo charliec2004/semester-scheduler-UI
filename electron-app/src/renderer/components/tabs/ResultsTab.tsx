@@ -44,13 +44,78 @@ const SOLVER_STATUS_MESSAGES = [
   'Brewing the perfect mix...',
   'Untangling conflicts...',
   'Smoothing out wrinkles...',
-  'Polishing the details...',
-  'Almost there...',
-  'Just a bit more...',
-  'Getting closer...',
   'Refining results...',
-  'Double-checking everything...',
-  'Making final adjustments...',
+  'Mapping the mayhem...',
+  'Sorting out the shuffle...',
+  'Measuring twice...',
+  'Threading the needle...',
+  'Taming the timetable...',
+  'Settling the chaos...',
+  'Coaxing the pieces together...',
+  'Massaging the constraints...',
+  'Squaring the circle...',
+  'Counting every corner case...',
+  'Looking for clean handoffs...',
+  'Finding room to breathe...',
+  'Nudging things into place...',
+  'Resolving calendar diplomacy...',
+  'Negotiating with the spreadsheet gods...',
+  'Keeping all the plates spinning...',
+  'Turning conflicts into compromises...',
+  'Checking the edge cases...',
+  'Giving every shift a fair shake...',
+  'Making the puzzle less impossible...',
+  'Tracing every dependency...',
+  'Finding the hidden openings...',
+  'Rebalancing the equation...',
+  'Fitting square pegs neatly...',
+  'Untying the scheduling knots...',
+  'Lining up the dominoes...',
+  'Clearing the bottlenecks...',
+  'Comparing tradeoffs...',
+  'Searching for a cleaner fit...',
+  'Taking another angle...',
+  'Keeping the constraints happy...',
+  'Finding order in the overlap...',
+  'Weaving the hours together...',
+  'Hunting for the best match...',
+  'Balancing the impossible triangle...',
+  'Reducing the drama...',
+  'Syncing all the moving parts...',
+  'Pressure-testing the plan...',
+  'Sharpening the solution...',
+  'Putting each hour in its place...',
+  'Finding the least-worst miracle...',
+  'Translating chaos into coverage...',
+  'Closing the gaps...',
+  'Sifting through combinations...',
+  'Making the hard parts behave...',
+  'Checking who fits where...',
+  'Shaving off the rough edges...',
+  'Looking for a better arrangement...',
+  'Keeping the whole machine aligned...',
+  'Filling in the blanks...',
+  'Following the breadcrumbs...',
+  'Letting the pieces click...',
+  'Chasing the optimal setup...',
+  'Getting all the gears to mesh...',
+  'Tightening the blueprint...',
+  'Coordinating the moving pieces...',
+  'Finding the smoothest path...',
+  'Making the numbers behave...',
+  'Reading the room...',
+  'Checking the fit...',
+  'Exploring the trade space...',
+  'Untangling the overlap...',
+  'Keeping the balance steady...',
+  'Testing the combinations...',
+  'Matching skills to slots...',
+  'Working through the constraints...',
+  'Sorting the signal from the noise...',
+  'Laying out the possibilities...',
+  'Reconciling the requirements...',
+  'Working the angles...',
+  'Balancing the moving parts...',
 ];
 
 // Parse solver stats from logs
@@ -152,6 +217,27 @@ function parseLogDiagnostics(logs: Array<{ text: string; type: string }>): {
   };
 }
 
+function cleanErrorText(error?: string | null): string | null {
+  if (!error) return null;
+
+  return error
+    .replace(/^Error Details:\s*/i, '')
+    .replace(/^Error details:\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim() || null;
+}
+
+function getLatestMeaningfulLogLine(logs: Array<{ text: string; type: string }>): string | null {
+  for (let i = logs.length - 1; i >= 0; i -= 1) {
+    const text = logs[i]?.text?.trim();
+    if (!text) continue;
+    if (/^(INFO|DEBUG):/i.test(text)) continue;
+    return text;
+  }
+
+  return null;
+}
+
 export function ResultsTab() {
   const { running, progress, logs, result, reset } = useSolverStore();
   const isCancelled = result?.errorType === 'cancelled';
@@ -159,6 +245,8 @@ export function ResultsTab() {
   // Parse logs to detect specific issues and extract stats
   const diagnostics = useMemo(() => parseLogDiagnostics(logs), [logs]);
   const solverStats = useMemo(() => parseSolverStats(logs), [logs]);
+  const cleanedErrorText = useMemo(() => cleanErrorText(result?.error), [result?.error]);
+  const fallbackLogLine = useMemo(() => getLatestMeaningfulLogLine(logs), [logs]);
   const { history, loadHistory, deleteEntry } = useHistoryStore();
   const { showToast, setActiveTab } = useUIStore();
   const logContainerRef = useRef<HTMLDivElement>(null);
@@ -286,6 +374,24 @@ export function ResultsTab() {
     return formatElapsed(remaining);
   };
 
+  const hasSpecificDiagnostics =
+    diagnostics.hasEmployeeNotFound ||
+    diagnostics.hasDepartmentNotFound ||
+    diagnostics.hasNotQualified ||
+    diagnostics.hasTrainingNoOverlap ||
+    diagnostics.hasInvalidEmployee ||
+    diagnostics.hasTimesetConflict ||
+    diagnostics.hasAvailabilityConflict ||
+    diagnostics.hasLimitedAvailability ||
+    diagnostics.hasFrontDeskGap;
+
+  const rawErrorDetails =
+    cleanedErrorText &&
+    cleanedErrorText !== 'Solver encountered an unexpected error (code 1).' &&
+    cleanedErrorText !== 'No schedule could satisfy all constraints.'
+      ? cleanedErrorText
+      : fallbackLogLine;
+
   // No runs yet and no history
   if (!running && !result && logs.length === 0 && history.length === 0) {
     return (
@@ -377,54 +483,54 @@ export function ResultsTab() {
 
       {/* Result Status */}
       {result && (
-        <div className="card bg-surface-900/70">
-          <NoticePanel
-            variant={
-              result.success
-                ? 'success'
-                : result.errorType === 'cancelled'
-                  ? 'neutral'
-                  : result.errorType === 'no_solution'
-                    ? 'warning'
-                    : 'error'
-            }
-            title={
+        <NoticePanel
+          variant={
+            result.success
+              ? 'success'
+              : result.errorType === 'cancelled'
+                ? 'neutral'
+                : result.errorType === 'no_solution'
+                  ? 'warning'
+                  : 'error'
+          }
+          title={
+            result.success 
+              ? 'Schedule generated successfully' 
+              : result.errorType === 'cancelled'
+                ? 'Generation cancelled'
+              : result.errorType === 'no_solution'
+                ? 'No solution found'
+                : 'Generation failed'
+          }
+          description={
+            result.success
+              ? `Completed in ${formatElapsed(result.elapsed)}. Download your schedule from the history below.`
+              : result.errorType === 'cancelled'
+                ? 'The current run was stopped before completion. You can adjust inputs and start a new generation anytime.'
+              : result.errorType === 'no_solution'
+                ? 'The current requirements cannot all be satisfied together. Review the likely causes below.'
+                : cleanedErrorText || 'Something went wrong. Check the solver output below for details.'
+          }
+          icon={
+            result.success ? <CheckCircle2 className="h-4 w-4 text-surface-200" strokeWidth={1.9} /> :
+            result.errorType === 'cancelled' ? <Ban className="h-4 w-4 text-surface-300" strokeWidth={1.9} /> :
+            result.errorType === 'no_solution' ? <AlertTriangle className="h-4 w-4 text-warning-300" strokeWidth={1.9} /> :
+            <XCircle className="h-4 w-4 text-danger-300" strokeWidth={1.9} />
+          }
+          className="bg-surface-900/55"
+        >
+          <div className="space-y-3">
+            <h3 className={`font-semibold ${
               result.success 
-                ? 'Schedule generated successfully' 
+                ? 'text-surface-100' 
                 : result.errorType === 'cancelled'
-                  ? 'Generation cancelled'
+                  ? 'text-surface-200'
                 : result.errorType === 'no_solution'
-                  ? 'No solution found'
-                  : 'Generation failed'
-            }
-            description={
-              result.success
-                ? `Completed in ${formatElapsed(result.elapsed)}. Download your schedule from the history below.`
-                : result.errorType === 'cancelled'
-                  ? 'The current run was stopped before completion. You can adjust inputs and start a new generation anytime.'
-                : result.errorType === 'no_solution'
-                  ? 'The current requirements cannot all be satisfied together. See suggestions below.'
-                  : result.error || 'Something went wrong. Check the logs below for details.'
-            }
-            icon={
-              result.success ? <CheckCircle2 className="h-4 w-4 text-surface-200" strokeWidth={1.9} /> :
-              result.errorType === 'cancelled' ? <Ban className="h-4 w-4 text-surface-300" strokeWidth={1.9} /> :
-              result.errorType === 'no_solution' ? <AlertTriangle className="h-4 w-4 text-warning-300" strokeWidth={1.9} /> :
-              <XCircle className="h-4 w-4 text-danger-300" strokeWidth={1.9} />
-            }
-          >
-            <div className="space-y-3">
-              <h3 className={`font-semibold ${
-                result.success 
-                  ? 'text-surface-100' 
-                  : result.errorType === 'cancelled'
-                    ? 'text-surface-200'
-                  : result.errorType === 'no_solution'
-                    ? 'text-warning-200'
-                    : 'text-danger-200'
-              }`}>
-                {result.success ? 'Solver summary' : result.errorType === 'no_solution' ? 'Possible causes' : result.errorType === 'cancelled' ? 'Run status' : 'Error details'}
-              </h3>
+                  ? 'text-warning-200'
+                  : 'text-danger-200'
+            }`}>
+              {result.success ? 'Solver summary' : result.errorType === 'no_solution' ? 'Likely causes' : result.errorType === 'cancelled' ? 'Run status' : 'What went wrong'}
+            </h3>
               {/* Solver Stats - shown on success */}
               {result.success && solverStats.constraints && (
                 <div className="border-t border-border/70 pt-3">
@@ -457,9 +563,7 @@ export function ResultsTab() {
               {/* Detected Issues - shown for both no_solution and errors */}
               {!result.success && result.errorType !== 'cancelled' && (
                 <div className="space-y-1">
-                  <p className={`text-sm font-medium ${result.errorType === 'no_solution' ? 'text-warning-200' : 'text-danger-200'}`}>
-                    {result.errorType === 'no_solution' ? 'Possible Causes:' : 'Error Details:'}
-                  </p>
+                  {hasSpecificDiagnostics ? (
                   <ul className="text-sm text-surface-300 space-y-1.5">
                     {/* Employee not found errors */}
                     {diagnostics.hasEmployeeNotFound && (
@@ -594,6 +698,15 @@ export function ResultsTab() {
                       </li>
                     )}
                   </ul>
+                  ) : rawErrorDetails ? (
+                    <div className="rounded-md border border-border/70 bg-surface-950/70 px-3 py-2 font-mono text-[12px] leading-5 text-surface-300">
+                      {rawErrorDetails}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-surface-400">
+                      No structured diagnostics were returned. Expand Solver Output below for the raw solver response.
+                    </p>
+                  )}
                   {result.errorType === 'no_solution' && (
                     <p className="text-xs text-surface-500 mt-2">
                       Tip: Expand &quot;Solver Output&quot; below for detailed diagnostic information.
@@ -602,8 +715,7 @@ export function ResultsTab() {
                 </div>
               )}
             </div>
-          </NoticePanel>
-        </div>
+        </NoticePanel>
       )}
 
       {/* Solver Logs - Accordion */}
@@ -654,7 +766,7 @@ export function ResultsTab() {
 
       {/* Troubleshooting - Contextual based on error type */}
       {result && !result.success && result.errorType !== 'cancelled' && (
-        <div className="card bg-surface-800/50">
+        <div className="space-y-3 rounded-lg border border-border bg-surface-800/35 px-4 py-4">
           <h3 className="font-semibold text-surface-200 mb-3">
             {result.errorType === 'no_solution' ? 'How to Fix This' : 'Troubleshooting Tips'}
           </h3>
@@ -752,20 +864,20 @@ export function ResultsTab() {
                   {entry.hasXlsx && (
                     <Button
                       onClick={() => handleDownload(entry.id, 'xlsx')}
+                      variant="secondary"
                       className="flex-1"
                     >
                       <Download className="h-4 w-4" strokeWidth={1.8} />
-                      Download Schedule
+                      Download Raw Schedule + Analytics
                     </Button>
                   )}
                   {entry.hasFormattedXlsx && (
                     <Button
                       onClick={() => handleDownload(entry.id, 'xlsxFormatted')}
-                      variant="secondary"
                       className="flex-1"
                     >
                       <Download className="h-4 w-4" strokeWidth={1.8} />
-                      Download Formatted
+                      Download Formatted Schedule
                     </Button>
                   )}
                 </div>
