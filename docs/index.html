@@ -11,18 +11,27 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <a class="skip-link" href="#main-content">Skip to downloads</a>
   <div class="container">
-    <header>
-      <div class="logo">
-        <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-          <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-        </svg>
-        <h1>Scheduler</h1>
+    <header class="hero">
+      <div class="hero-top">
+        <div class="logo">
+          <div class="logo-tile">
+            <svg class="logo-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div class="hero-copy-block">
+            <h1>Semester Scheduler</h1>
+            <p class="tagline">Optimized weekly scheduling for student employees</p>
+          </div>
+        </div>
+        <span class="hero-kicker">Desktop Downloads</span>
       </div>
-      <p class="tagline">Optimized weekly scheduling for student employees</p>
+      <p class="hero-description">Choose the latest release for your platform, install it locally, and verify the package with published checksums if needed.</p>
     </header>
 
-    <main>
+    <main id="main-content" class="page-content">
       <!-- Version Info -->
       <section class="version-info" id="version-info">
         <span class="version-badge" id="version-badge">Loading...</span>
