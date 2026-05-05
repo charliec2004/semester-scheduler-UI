@@ -671,8 +671,8 @@ export function StaffEditorTab() {
                   Add commitments or other times they are not available (classes, etc.). End time is exclusive (e.g.{' '}
                   <span className="text-surface-400">10:00</span> ends at the 9:50 slot). Type times like{' '}
                   <span className="text-surface-400">8:00 AM</span>, <span className="text-surface-400">2pm</span>, or{' '}
-                  <span className="text-surface-400">17:00</span>. Use buffer checkboxes to mark the first or last {SLOT_MINUTES}
-                  -minute slot inside the blocked window as travel/buffer time.
+                  <span className="text-surface-400">17:00</span>. Use buffer checkboxes to block the extra {SLOT_MINUTES}
+                  -minute slot immediately before or after the selected window for travel/buffer time.
                 </p>
 
                 <div className="space-y-4">

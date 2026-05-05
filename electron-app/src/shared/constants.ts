@@ -61,14 +61,14 @@ export interface DayTravelBuffer {
 
 /**
  * Periods when the student CANNOT work (classes, etc.), on the 10-minute grid.
- * endTime is exclusive. Buffer flags mark the first/last slot inside the block as travel/buffer time.
+ * endTime is exclusive. Buffer flags extend unavailability by one slot before/after the block.
  */
 export interface UnavailabilityBlock {
   startTime: string;
   endTime: string;
-  /** Mark the first slot inside this block as buffer/travel time. */
+  /** Block the slot immediately before this (e.g. travel to a commitment). */
   bufferBeforeStart: boolean;
-  /** Mark the last slot inside this block as buffer/travel time. */
+  /** Block the slot immediately after this ends (e.g. done at 2:00 PM but cannot start work until 2:10). */
   bufferAfterEnd: boolean;
 }
 
@@ -219,13 +219,13 @@ export function createFullWorkDayAvailability(): Record<string, boolean> {
 }
 
 /**
- * Derive work-availability (true = can work) from unavailability blocks.
- * Buffer flags only affect UI semantics inside the blocked window, not extra slots outside it.
+ * Derive work-availability (true = can work) from unavailability blocks + edge buffers.
  */
 export function unavailabilityBlocksToFlatWorkAvailability(
   blocks: Record<DayName, UnavailabilityBlock[]>,
 ): Record<string, boolean> {
   const out = createFullWorkDayAvailability();
+  const n = TIME_SLOT_STARTS.length;
   for (const day of DAY_NAMES) {
     const dayBlocks = blocks[day] ?? [];
     for (const block of dayBlocks) {
@@ -237,6 +237,12 @@ export function unavailabilityBlocksToFlatWorkAvailability(
       const endIdx = exclusiveEndMinutesToSlotCount(nb.endTime);
       for (let i = startIdx; i < endIdx; i += 1) {
         out[`${day}_${TIME_SLOT_STARTS[i]}`] = false;
+      }
+      if (nb.bufferBeforeStart && startIdx > 0) {
+        out[`${day}_${TIME_SLOT_STARTS[startIdx - 1]}`] = false;
+      }
+      if (nb.bufferAfterEnd && endIdx < n) {
+        out[`${day}_${TIME_SLOT_STARTS[endIdx]}`] = false;
       }
     }
   }
@@ -526,11 +532,11 @@ export function dayUnavailabilityToTimelineSlotStates(
     for (let i = startIdx; i < endIdx; i += 1) {
       result[i] = 'busy';
     }
-    if (nb.bufferBeforeStart && startIdx < endIdx) {
-      result[startIdx] = 'buffer';
+    if (nb.bufferBeforeStart && startIdx > 0) {
+      result[startIdx - 1] = 'buffer';
     }
-    if (nb.bufferAfterEnd && endIdx > startIdx) {
-      result[endIdx - 1] = 'buffer';
+    if (nb.bufferAfterEnd && endIdx < n) {
+      result[endIdx] = 'buffer';
     }
   }
   return result;
