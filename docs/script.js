@@ -8,7 +8,7 @@
   'use strict';
 
   const REPO_OWNER = 'charliec2004';
-  const REPO_NAME = 'semester-scheduler-UI';
+  const REPO_NAME = 'semester-scheduler-app';
   const API_URL = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/releases/latest`;
 
   // Asset name patterns for each platform

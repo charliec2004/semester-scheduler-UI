@@ -15,7 +15,7 @@ import { exec } from 'child_process';
 
 // GitHub repository info
 const GITHUB_OWNER = 'charliec2004';
-const GITHUB_REPO = 'semester-scheduler-UI';
+const GITHUB_REPO = 'semester-scheduler-app';
 
 export type UpdateStatus = 
   | { state: 'idle' }

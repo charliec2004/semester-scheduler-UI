@@ -4,8 +4,8 @@ This folder stores the implementation plan for the cosmetic Electron UI redesign
 
 ## Files
 
-- [Cosmetic Redesign Plan](</Users/charles/Documents/PROJECTS/semester-scheduler-ui/docs/design/cosmetic-redesign-plan.md>)
-- [Theme Strategy](</Users/charles/Documents/PROJECTS/semester-scheduler-ui/docs/design/theme-strategy.md>)
+- [Cosmetic Redesign Plan](</Users/charles/Documents/PROJECTS/semester-scheduler-app/docs/design/cosmetic-redesign-plan.md>)
+- [Theme Strategy](</Users/charles/Documents/PROJECTS/semester-scheduler-app/docs/design/theme-strategy.md>)
 
 ## Scope
 

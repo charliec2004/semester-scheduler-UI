@@ -847,13 +847,13 @@ function createApplicationMenu(): void {
         {
           label: 'Learn More',
           click: async () => {
-            await shell.openExternal('https://charliec2004.github.io/semester-scheduler-UI/');
+            await shell.openExternal('https://charliec2004.github.io/semester-scheduler-app/');
           },
         },
         {
           label: 'View on GitHub',
           click: async () => {
-            await shell.openExternal('https://github.com/charliec2004/semester-scheduler-UI');
+            await shell.openExternal('https://github.com/charliec2004/semester-scheduler-app');
           },
         },
         ...(!isMac ? [

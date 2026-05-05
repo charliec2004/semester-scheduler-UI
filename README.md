@@ -3,11 +3,11 @@
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![OR-Tools](https://img.shields.io/badge/OR--Tools-9.0+-green.svg)](https://developers.google.com/optimization)
-[![Release](https://img.shields.io/github/v/release/charliec2004/semester-scheduler-UI)](https://github.com/charliec2004/semester-scheduler-UI/releases/latest)
+[![Release](https://img.shields.io/github/v/release/charliec2004/semester-scheduler-app)](https://github.com/charliec2004/semester-scheduler-app/releases/latest)
 
 ## Downloads
 
-**[📥 Download the latest release](https://charliec2004.github.io/semester-scheduler-UI/)**
+**[📥 Download the latest release](https://charliec2004.github.io/semester-scheduler-app/)**
 
 Pre-built installers are available for all major platforms:
 

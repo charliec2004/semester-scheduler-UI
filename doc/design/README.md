@@ -52,7 +52,7 @@ These docs are based on current `shadcn/ui` guidance pulled via Context7, especi
 
 ## Document Map
 
-- [Visual Language](</Users/charles/Documents/PROJECTS/semester-scheduler-ui/doc/design/visual-language.md>)
-- [Shadcn Rules](</Users/charles/Documents/PROJECTS/semester-scheduler-ui/doc/design/shadcn-rules.md>)
-- [Implementation Scope](</Users/charles/Documents/PROJECTS/semester-scheduler-ui/doc/design/implementation-scope.md>)
-- [Inspiration Research](</Users/charles/Documents/PROJECTS/semester-scheduler-ui/doc/design/inspiration-research.md>)
+- [Visual Language](</Users/charles/Documents/PROJECTS/semester-scheduler-app/doc/design/visual-language.md>)
+- [Shadcn Rules](</Users/charles/Documents/PROJECTS/semester-scheduler-app/doc/design/shadcn-rules.md>)
+- [Implementation Scope](</Users/charles/Documents/PROJECTS/semester-scheduler-app/doc/design/implementation-scope.md>)
+- [Inspiration Research](</Users/charles/Documents/PROJECTS/semester-scheduler-app/doc/design/inspiration-research.md>)

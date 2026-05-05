@@ -8,7 +8,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "https://github.com/charliec2004/semester-scheduler-UI.git"
+    "url": "https://github.com/charliec2004/semester-scheduler-app.git"
   },
   "main": "dist/main/main/main.js",
   "scripts": {

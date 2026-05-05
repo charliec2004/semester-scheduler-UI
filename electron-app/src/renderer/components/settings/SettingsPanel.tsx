@@ -741,7 +741,7 @@ export function SettingsPanel() {
             </h3>
             <Button asChild variant="outline" className="w-full justify-center text-surface-300 hover:text-surface-100">
               <a
-                href="https://github.com/charliec2004/semester-scheduler-UI/issues"
+                href="https://github.com/charliec2004/semester-scheduler-app/issues"
                 target="_blank"
                 rel="noopener noreferrer"
               >
