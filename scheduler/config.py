@@ -98,6 +98,8 @@ AVAILABILITY_COLUMNS = [f"{day}_{time}" for day in DAY_NAMES for time in TIME_SL
 LEGACY_AVAILABILITY_COLUMNS = [f"{day}_{time}" for day in DAY_NAMES for time in LEGACY_TIME_SLOT_STARTS]
 TRAVEL_BUFFER_BEFORE_COLUMNS = {day: f"{day}_before_next_commitment" for day in DAY_NAMES}
 TRAVEL_BUFFER_AFTER_COLUMNS = {day: f"{day}_after_previous_commitment" for day in DAY_NAMES}
+AVAILABILITY_BLOCKS_JSON_COLUMN = "availability_blocks"
+UNAVAILABILITY_BLOCKS_JSON_COLUMN = "unavailability_blocks"
 T_SLOTS = list(range(len(SLOT_NAMES)))
 
 # ---------------------------------------------------------------------------

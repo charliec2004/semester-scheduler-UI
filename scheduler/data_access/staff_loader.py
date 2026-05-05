@@ -2,23 +2,27 @@
 
 from __future__ import annotations
 
+import json
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Set
+from typing import Any, Dict, List, Optional, Set
 
 import pandas as pd
 
 from scheduler.config import (
+    AVAILABILITY_BLOCKS_JSON_COLUMN,
     AVAILABILITY_COLUMNS,
     DAY_NAMES,
     FRONT_DESK_ROLE,
     LEGACY_AVAILABILITY_COLUMNS,
     LEGACY_SLOT_MINUTES,
     LEGACY_TIME_SLOT_STARTS,
+    MINUTES_PER_HOUR,
     SLOT_MINUTES,
     TIME_SLOT_STARTS,
     TRAVEL_BUFFER_AFTER_COLUMNS,
     TRAVEL_BUFFER_BEFORE_COLUMNS,
+    UNAVAILABILITY_BLOCKS_JSON_COLUMN,
     is_slot_aligned_hours,
 )
 from scheduler.domain.models import StaffData, normalize_department_name
@@ -71,21 +75,150 @@ def _require_slot_aligned_hours(value: float, column_name: str, record_name: str
     return value
 
 
+def _parse_time_to_minutes(time_str: str) -> int:
+    parts = time_str.strip().split(":")
+    if len(parts) != 2:
+        raise ValueError(f"Invalid time string: {time_str!r}")
+    return int(parts[0]) * MINUTES_PER_HOUR + int(parts[1])
+
+
+def _exclusive_end_to_slot_count(end_exclusive: str) -> int:
+    end_min = _parse_time_to_minutes(end_exclusive)
+    count = 0
+    for slot_time in TIME_SLOT_STARTS:
+        if _parse_time_to_minutes(slot_time) < end_min:
+            count += 1
+        else:
+            break
+    return count
+
+
+def _start_time_to_index(start: str) -> int:
+    try:
+        return TIME_SLOT_STARTS.index(start)
+    except ValueError as exc:
+        raise ValueError(f"Invalid slot start time {start!r}") from exc
+
+
+def _raw_available_from_legacy_work_blocks(day_blocks: List[Dict[str, Any]]) -> List[bool]:
+    """Legacy JSON: periods when the student CAN work (Electron legacyAvailabilityBlocksToFlatWork)."""
+    slot_count = len(TIME_SLOT_STARTS)
+    raw = [False] * slot_count
+    for block in day_blocks:
+        start = block.get("startTime") or block.get("start_time")
+        end = block.get("endTime") or block.get("end_time")
+        if start is None or end is None:
+            continue
+        travel_before = bool(block.get("travelBefore") or block.get("travel_before"))
+        travel_after = bool(block.get("travelAfter") or block.get("travel_after"))
+        start_i = _start_time_to_index(str(start))
+        end_i = _exclusive_end_to_slot_count(str(end))
+        for i in range(start_i, end_i):
+            raw[i] = True
+        if travel_before and start_i < end_i:
+            raw[start_i] = False
+        if travel_after and start_i < end_i:
+            raw[end_i - 1] = False
+    return raw
+
+
+def _raw_available_from_unavailability(day_blocks: List[Dict[str, Any]]) -> List[bool]:
+    """Periods when the student CANNOT work + optional one-slot buffers (Electron unavailabilityBlocksToFlatWorkAvailability)."""
+    slot_count = len(TIME_SLOT_STARTS)
+    raw = [True] * slot_count
+    for block in day_blocks:
+        start = block.get("startTime") or block.get("start_time")
+        end = block.get("endTime") or block.get("end_time")
+        if start is None or end is None:
+            continue
+        buffer_before = bool(
+            block.get("bufferBeforeStart") or block.get("buffer_before_start")
+        )
+        buffer_after = bool(block.get("bufferAfterEnd") or block.get("buffer_after_end"))
+        start_i = _start_time_to_index(str(start))
+        end_i = _exclusive_end_to_slot_count(str(end))
+        for i in range(start_i, end_i):
+            raw[i] = False
+        if buffer_before and start_i > 0:
+            raw[start_i - 1] = False
+        if buffer_after and end_i < slot_count:
+            raw[end_i] = False
+    return raw
+
+
+def _try_parse_unavailability_blocks(row: Any, column_map: Dict[str, str]) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+    col = column_map.get(UNAVAILABILITY_BLOCKS_JSON_COLUMN.lower())
+    if not col:
+        return None
+    value = row[col]
+    if pd.isna(value) or str(value).strip() == "":
+        return None
+    try:
+        data = json.loads(str(value))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for day in DAY_NAMES:
+        v = data.get(day)
+        if v is None:
+            out[day] = []
+        elif isinstance(v, list):
+            out[day] = [b for b in v if isinstance(b, dict)]
+        else:
+            return None
+    if not any(out[d] for d in DAY_NAMES):
+        return None
+    return out
+
+
+def _try_parse_legacy_availability_blocks(row: Any, column_map: Dict[str, str]) -> Optional[Dict[str, List[Dict[str, Any]]]]:
+    col = column_map.get(AVAILABILITY_BLOCKS_JSON_COLUMN.lower())
+    if not col:
+        return None
+    value = row[col]
+    if pd.isna(value) or str(value).strip() == "":
+        return None
+    try:
+        data = json.loads(str(value))
+    except json.JSONDecodeError:
+        return None
+    if not isinstance(data, dict):
+        return None
+    out: Dict[str, List[Dict[str, Any]]] = {}
+    for day in DAY_NAMES:
+        v = data.get(day)
+        if v is None:
+            out[day] = []
+        elif isinstance(v, list):
+            out[day] = [b for b in v if isinstance(b, dict)]
+        else:
+            return None
+    if not any(out[d] for d in DAY_NAMES):
+        return None
+    return out
+
+
 def _resolve_availability_schema(column_map: Dict[str, str], path: Path) -> str:
     has_current_grid = all(column.lower() in column_map for column in AVAILABILITY_COLUMNS)
-    has_legacy_grid = all(column.lower() in column_map for column in LEGACY_AVAILABILITY_COLUMNS)
-
     if has_current_grid:
         return "current"
+    has_legacy_grid = all(column.lower() in column_map for column in LEGACY_AVAILABILITY_COLUMNS)
     if has_legacy_grid:
         return "legacy"
+    if column_map.get(UNAVAILABILITY_BLOCKS_JSON_COLUMN.lower()) or column_map.get(
+        AVAILABILITY_BLOCKS_JSON_COLUMN.lower()
+    ):
+        return "json_only"
 
     missing_current = [col for col in AVAILABILITY_COLUMNS if col.lower() not in column_map]
     preview = ", ".join(missing_current[:5])
     suffix = "..." if len(missing_current) > 5 else ""
     raise ValueError(
         f"Missing availability columns in {path}: {preview}{suffix}. "
-        "Provide either the full 10-minute grid or the legacy 30-minute grid."
+        "Provide unavailability_blocks or availability_blocks JSON, the full 10-minute grid, "
+        "or the legacy 30-minute grid."
     )
 
 
@@ -153,6 +286,9 @@ def load_staff_data(path: Path) -> StaffData:
         employee_year[name] = int(year_value)
 
         availability: Dict[str, List[int]] = {}
+        unavail_payload = _try_parse_unavailability_blocks(row, column_map)
+        legacy_blocks_payload = _try_parse_legacy_availability_blocks(row, column_map)
+
         for day in DAY_NAMES:
             before_buffer_col = column_map.get(TRAVEL_BUFFER_BEFORE_COLUMNS[day].lower())
             after_buffer_col = column_map.get(TRAVEL_BUFFER_AFTER_COLUMNS[day].lower())
@@ -160,17 +296,30 @@ def load_staff_data(path: Path) -> StaffData:
             after_buffer = _coerce_bool_flag(row[after_buffer_col]) if after_buffer_col else False
 
             raw_available: List[bool]
-            if availability_schema == "current":
+            if unavail_payload is not None:
+                raw_available = _raw_available_from_unavailability(unavail_payload.get(day, []))
+                before_buffer = False
+                after_buffer = False
+            elif legacy_blocks_payload is not None:
+                raw_available = _raw_available_from_legacy_work_blocks(legacy_blocks_payload.get(day, []))
+                before_buffer = False
+                after_buffer = False
+            elif availability_schema == "current":
                 raw_available = []
                 for start_time in TIME_SLOT_STARTS:
                     column = column_map[f"{day}_{start_time}".lower()]
                     raw_available.append(_coerce_bool_flag(row[column]))
-            else:
+            elif availability_schema == "legacy":
                 raw_available = []
                 for start_time in LEGACY_TIME_SLOT_STARTS:
                     column = column_map[f"{day}_{start_time}".lower()]
                     is_available = _coerce_bool_flag(row[column])
                     raw_available.extend([is_available] * legacy_stride)
+            else:
+                raise ValueError(
+                    f"Employee '{name}': unavailability_blocks / availability_blocks is missing or invalid JSON, "
+                    "but this file uses JSON-only schedule columns (no per-slot grid)."
+                )
 
             blocked_slots = set()
             if before_buffer:

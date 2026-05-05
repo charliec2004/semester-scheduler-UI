@@ -4,13 +4,17 @@
  */
 
 import { useState } from 'react';
+import { Check, Download, GripVertical, Plus, Trash2 } from 'lucide-react';
+import { NoticePanel } from '../ui/notice-panel';
+import { Button } from '../ui/button';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { HourInput } from '../ui/hour-input';
+import { Input } from '../ui/input';
 import { useDepartmentStore, useStaffStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import { departmentsToCsv } from '../../utils/csvValidators';
-import { SLOT_MINUTES } from '@shared/constants';
+import { formatHoursLabel } from '../../utils/hours';
 import type { Department } from '../../../main/ipc-types';
-
-const HOUR_INPUT_STEP = SLOT_MINUTES / 60;
 
 export function DepartmentsTab() {
   const { departments, updateDepartment, addDepartment, removeDepartment, reorderDepartments, dirty, setDirty, saveDepartments } = useDepartmentStore();
@@ -21,6 +25,9 @@ export function DepartmentsTab() {
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragOverBottom, setDragOverBottom] = useState(false);
+  const [departmentToDelete, setDepartmentToDelete] = useState<{ index: number; name: string } | null>(null);
+  const inlineDepartmentNameClassName =
+    'h-8 w-full rounded-md px-2.5 py-1 text-left text-[13px] transition-colors placeholder:italic';
 
   const handleAddDepartment = () => {
     const newDept: Department = {
@@ -32,6 +39,12 @@ export function DepartmentsTab() {
     // Set editing index to the new department (will be at end of array)
     setEditingIndex(departments.length);
     setEditingName('');
+  };
+
+  const beginEditingDepartment = (index: number, name: string) => {
+    if (editingIndex === index) return;
+    setEditingIndex(index);
+    setEditingName(name);
   };
 
   const commitDepartmentName = (index: number) => {
@@ -114,6 +127,24 @@ export function DepartmentsTab() {
     setDragOverBottom(false);
   };
 
+  const confirmDeleteDepartment = async () => {
+    if (!departmentToDelete) return;
+
+    try {
+      removeDepartment(departmentToDelete.index);
+      await saveDepartments();
+      if (useStaffStore.getState().dirty) {
+        await saveStaff();
+      }
+      showToast('Department deleted', 'info');
+    } catch (err) {
+      console.error('Failed to save after delete:', err);
+      showToast('Failed to save changes', 'error');
+    } finally {
+      setDepartmentToDelete(null);
+    }
+  };
+
   if (departments.length === 0) {
     return (
       <EmptyState
@@ -145,17 +176,18 @@ export function DepartmentsTab() {
           </h2>
           <p className="text-surface-400">
             {departments.length} department{departments.length !== 1 ? 's' : ''} 
-            {dirty && <span className="text-warning-400 ml-2">(unsaved changes)</span>}
+            {dirty && <span className="ml-2 text-warning-300">(unsaved changes)</span>}
+          </p>
+          <p className="mt-1 text-sm text-surface-500">
+            Front Desk is already included as a built-in department. Add only your additional departments here.
           </p>
         </div>
         <div className="flex gap-3">
-          <button onClick={handleAddDepartment} className="btn-secondary">
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-            </svg>
+          <Button onClick={handleAddDepartment} variant="secondary" size="sm">
+            <Plus className="h-4 w-4" strokeWidth={1.8} />
             Add Department
-          </button>
-          <button 
+          </Button>
+          <Button
             onClick={async () => {
               try {
                 await saveDepartments();
@@ -167,18 +199,18 @@ export function DepartmentsTab() {
                 console.error('Failed to save departments:', err);
                 showToast('Failed to save department data', 'error');
               }
-            }} 
-            className="btn-primary"
+            }}
             disabled={!dirty || departments.length === 0}
+            variant="default"
+            size="sm"
           >
-            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-            </svg>
+            <Check className="h-4 w-4" strokeWidth={1.8} />
             Save
-          </button>
-          <button onClick={handleExport} className="btn-secondary" disabled={departments.length === 0}>
+          </Button>
+          <Button onClick={handleExport} variant="secondary" size="sm" disabled={departments.length === 0}>
+            <Download className="h-4 w-4" strokeWidth={1.8} />
             Export CSV
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -192,14 +224,14 @@ export function DepartmentsTab() {
             <div className="text-sm text-surface-400">Departments</div>
           </div>
           <div>
-            <div className="text-3xl font-display font-semibold text-accent-400">
-              {totals.target}h
+            <div className="text-3xl font-display font-semibold text-surface-200">
+              {formatHoursLabel(totals.target)}
             </div>
             <div className="text-sm text-surface-400">Total Target Hours</div>
           </div>
           <div>
             <div className="text-3xl font-display font-semibold text-surface-300">
-              {totals.max}h
+              {formatHoursLabel(totals.max)}
             </div>
             <div className="text-sm text-surface-400">Total Max Hours</div>
           </div>
@@ -245,10 +277,10 @@ export function DepartmentsTab() {
                   onDragEnd={handleDragEnd}
                   className={`
                     border-t border-surface-700 transition-all
-                    ${hasError ? 'bg-danger-500/5' : 'hover:bg-surface-800/50'}
+                    ${hasError ? 'bg-surface-900/70' : 'hover:bg-surface-800/50'}
                     ${isDragging ? 'opacity-50' : ''}
-                    ${showTopBorder ? 'border-t-2 border-t-accent-500' : ''}
-                    ${showBottomBorder ? 'border-b-2 border-b-accent-500' : ''}
+                    ${showTopBorder ? 'border-t-2 border-t-foreground/40' : ''}
+                    ${showBottomBorder ? 'border-b-2 border-b-foreground/40' : ''}
                   `}
                 >
                   {/* Drag Handle */}
@@ -259,106 +291,78 @@ export function DepartmentsTab() {
                       className="cursor-grab active:cursor-grabbing text-surface-500 hover:text-surface-300 transition-colors flex items-center justify-center"
                       title="Drag to reorder"
                     >
-                      <svg className="w-5 h-5" viewBox="0 0 20 20" fill="currentColor">
-                        <circle cx="6" cy="5" r="1.5" />
-                        <circle cx="14" cy="5" r="1.5" />
-                        <circle cx="6" cy="10" r="1.5" />
-                        <circle cx="14" cy="10" r="1.5" />
-                        <circle cx="6" cy="15" r="1.5" />
-                        <circle cx="14" cy="15" r="1.5" />
-                      </svg>
+                      <GripVertical className="h-4 w-4" strokeWidth={1.8} />
                     </div>
                   </td>
                   <td className="py-3 px-4">
-                    {isEditing ? (
-                      <input
-                        type="text"
-                        value={editingName}
-                        onChange={(e) => setEditingName(e.target.value)}
-                        onBlur={() => commitDepartmentName(index)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') {
-                            commitDepartmentName(index);
-                          }
-                          if (e.key === 'Escape') {
-                            setEditingIndex(null);
-                            setEditingName('');
-                          }
-                        }}
-                        className="input py-1"
-                        placeholder="Department name"
-                        autoFocus
-                      />
-                    ) : (
-                      <button
-                        onClick={() => {
-                          setEditingIndex(index);
-                          setEditingName(dept.name);
-                        }}
-                        className="text-left hover:text-accent-400 transition-colors"
-                      >
-                        {dept.name || <span className="text-surface-500 italic">Unnamed</span>}
-                      </button>
-                    )}
-                  </td>
-                  <td className="py-3 px-4 text-center">
-                    <input
-                      type="number"
-                      min="0"
-                      max="100"
-                      step={HOUR_INPUT_STEP}
-                      value={dept.targetHours || ''}
-                      onChange={(e) => updateDepartment(index, { targetHours: parseFloat(e.target.value) || 0 })}
-                      onBlur={(e) => {
-                        if (e.target.value === '') {
-                          updateDepartment(index, { targetHours: 0 });
+                    <Input
+                      type="text"
+                      value={isEditing ? editingName : dept.name}
+                      readOnly={!isEditing}
+                      onFocus={() => beginEditingDepartment(index, dept.name)}
+                      onClick={() => beginEditingDepartment(index, dept.name)}
+                      onChange={(e) => {
+                        if (isEditing) {
+                          setEditingName(e.target.value);
                         }
                       }}
-                      className={`input py-1 text-center w-24 mx-auto ${hasError ? 'input-error' : ''}`}
+                      onBlur={() => {
+                        if (isEditing) {
+                          commitDepartmentName(index);
+                        }
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          commitDepartmentName(index);
+                        }
+                        if (e.key === 'Escape') {
+                          setEditingIndex(null);
+                          setEditingName('');
+                        }
+                      }}
+                      className={[
+                        inlineDepartmentNameClassName,
+                        isEditing
+                          ? 'border-input bg-background text-foreground'
+                          : 'border-transparent bg-transparent text-surface-300 shadow-none hover:border-border/70 hover:text-surface-100',
+                        !isEditing ? 'cursor-text placeholder:text-surface-500' : '',
+                      ].join(' ')}
+                      placeholder={isEditing ? 'Department name' : 'Unnamed'}
                     />
                   </td>
                   <td className="py-3 px-4 text-center">
-                    <input
-                      type="number"
+                    <HourInput
                       min="0"
                       max="100"
-                      step={HOUR_INPUT_STEP}
-                      value={dept.maxHours || ''}
-                      onChange={(e) => updateDepartment(index, { maxHours: parseFloat(e.target.value) || 0 })}
-                      onBlur={(e) => {
-                        if (e.target.value === '') {
-                          updateDepartment(index, { maxHours: 0 });
-                        }
-                      }}
-                      className={`input py-1 text-center w-24 mx-auto ${hasError ? 'input-error' : ''}`}
+                      value={dept.targetHours || 0}
+                      onValueChange={(value) => updateDepartment(index, { targetHours: value })}
+                      className={`py-1 text-center w-24 mx-auto ${hasError ? 'input-error' : ''}`}
                     />
                   </td>
                   <td className="py-3 px-4 text-center">
-                    <button
-                      onClick={async () => {
-                        if (window.confirm(`Delete ${dept.name || 'this department'}?`)) {
-                          removeDepartment(index);
-                          // Auto-save after deletion
-                          try {
-                            await saveDepartments();
-                            if (useStaffStore.getState().dirty) {
-                              await saveStaff();
-                            }
-                            showToast('Department deleted', 'info');
-                          } catch (err) {
-                            console.error('Failed to save after delete:', err);
-                            showToast('Failed to save changes', 'error');
-                          }
-                        }
+                    <HourInput
+                      min="0"
+                      max="100"
+                      value={dept.maxHours || 0}
+                      onValueChange={(value) => updateDepartment(index, { maxHours: value })}
+                      className={`py-1 text-center w-24 mx-auto ${hasError ? 'input-error' : ''}`}
+                    />
+                  </td>
+                  <td className="py-3 px-4 text-center">
+                    <Button
+                      onClick={() => {
+                        setDepartmentToDelete({
+                          index,
+                          name: dept.name || 'this department',
+                        });
                       }}
-                      className="btn-ghost text-danger-400 hover:text-danger-300 p-1 mx-auto"
+                      variant="ghost"
+                      size="icon-sm"
+                      className="mx-auto text-destructive hover:bg-destructive/10 hover:text-destructive"
                       aria-label={`Delete ${dept.name}`}
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                      </svg>
-                    </button>
+                      <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+                    </Button>
                   </td>
                 </tr>
               );
@@ -370,11 +374,11 @@ export function DepartmentsTab() {
               <td className="py-3 px-4 font-medium text-surface-300">
                 Total
               </td>
-              <td className="py-3 px-4 text-center font-medium text-accent-400">
-                {totals.target}h
+              <td className="py-3 px-4 text-center font-medium text-surface-200">
+                {formatHoursLabel(totals.target)}
               </td>
               <td className="py-3 px-4 text-center font-medium text-surface-300">
-                {totals.max}h
+                {formatHoursLabel(totals.max)}
               </td>
               <td></td>
             </tr>
@@ -384,19 +388,25 @@ export function DepartmentsTab() {
 
       {/* Validation Messages */}
       {departments.some(d => d.targetHours > d.maxHours) && (
-        <div className="bg-danger-500/10 border border-danger-500/30 rounded-lg p-4 flex items-start gap-3">
-          <svg className="w-5 h-5 text-danger-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div>
-            <p className="font-medium text-danger-400">Validation Error</p>
-            <p className="text-sm text-danger-300 mt-1">
-              Some departments have target hours exceeding max hours. Please fix before generating a schedule.
-            </p>
-          </div>
-        </div>
+        <NoticePanel
+          variant="error"
+          title="Validation error"
+          description="Some departments have target hours exceeding max hours. Fix those values before generating a schedule."
+        />
       )}
+      <ConfirmDialog
+        open={departmentToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setDepartmentToDelete(null);
+          }
+        }}
+        title="Delete department?"
+        description={`Remove ${departmentToDelete?.name ?? 'this department'} from the schedule setup.`}
+        confirmLabel="Delete Department"
+        confirmVariant="destructive"
+        onConfirm={confirmDeleteDepartment}
+      />
     </div>
   );
 }

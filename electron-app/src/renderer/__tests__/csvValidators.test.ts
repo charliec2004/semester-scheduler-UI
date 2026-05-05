@@ -13,7 +13,12 @@ import {
   departmentsToCsv,
   AVAILABILITY_COLUMNS,
 } from '../utils/csvValidators';
-import { createDefaultTravelBuffers, LEGACY_AVAILABILITY_COLUMNS } from '../../shared/constants';
+import {
+  UNAVAILABILITY_BLOCKS_JSON_COLUMN,
+  createEmptyUnavailabilityBlocks,
+  createFullWorkDayAvailability,
+  LEGACY_AVAILABILITY_COLUMNS,
+} from '../../shared/constants';
 
 describe('Staff CSV Validation', () => {
   const validStaffCsv = `name,roles,target_hours,max_hours,year,${AVAILABILITY_COLUMNS.join(',')}
@@ -69,8 +74,8 @@ Alice,marketing,10,15,2,${AVAILABILITY_COLUMNS.map(() => '1').join(',')}`;
     expect(staff[0].targetHours).toBe(10);
     expect(staff[0].maxHours).toBe(15);
     expect(staff[0].year).toBe(2);
-    expect(staff[0].travelBuffers.Mon.beforeNextCommitment).toBe(false);
-    expect(staff[0].travelBuffers.Mon.afterPreviousCommitment).toBe(false);
+    expect(staff[0].unavailabilityBlocks.Mon).toHaveLength(0);
+    expect(staff[0].availability['Mon_08:00']).toBe(true);
   });
 
   it('accepts legacy 30-minute availability grids and expands them', () => {
@@ -93,7 +98,26 @@ Alice,front_desk,10,15,2,${LEGACY_AVAILABILITY_COLUMNS.map((col) => col.endsWith
 Alice,front_desk,10,15,2,1`;
     const validation = validateStaffCsv(partialCsv);
     expect(validation.valid).toBe(false);
-    expect(validation.errors.some(e => e.message.includes('full 10-minute grid'))).toBe(true);
+    expect(validation.errors.some(e => e.message.includes('Missing schedule data'))).toBe(true);
+  });
+
+  it('parses unavailability_blocks JSON and derives availability', () => {
+    const blocks = {
+      Mon: [{ startTime: '10:00', endTime: '12:00', bufferBeforeStart: false, bufferAfterEnd: true }],
+      Tue: [],
+      Wed: [],
+      Thu: [],
+      Fri: [],
+    };
+    const escaped = JSON.stringify(blocks).replace(/"/g, '""');
+    const csv = `name,roles,target_hours,max_hours,year,unavailability_blocks
+Alice,front_desk,10,15,2,"${escaped}"`;
+    const staff = parseStaffCsv(csv);
+    expect(staff[0].unavailabilityBlocks.Mon).toHaveLength(1);
+    expect(staff[0].availability['Mon_10:00']).toBe(false);
+    expect(staff[0].availability['Mon_11:50']).toBe(false);
+    expect(staff[0].availability['Mon_12:00']).toBe(false);
+    expect(staff[0].availability['Mon_12:10']).toBe(true);
   });
 });
 
@@ -152,22 +176,26 @@ Marketing,12.25,15`;
 
 describe('CSV Export', () => {
   it('exports staff to CSV format', () => {
-    const staff = [{
-      name: 'Test',
-      roles: ['front_desk', 'marketing'],
-      targetHours: 10,
-      maxHours: 15,
-      year: 2,
-      availability: Object.fromEntries(AVAILABILITY_COLUMNS.map(col => [col, true])),
-      travelBuffers: createDefaultTravelBuffers(),
-    }];
-    
+    const unavailabilityBlocks = createEmptyUnavailabilityBlocks();
+    const staff = [
+      {
+        name: 'Test',
+        roles: ['front_desk', 'marketing'],
+        targetHours: 10,
+        maxHours: 15,
+        year: 2,
+        unavailabilityBlocks,
+        availability: createFullWorkDayAvailability(),
+      },
+    ];
+
     const csv = staffToCsv(staff);
     expect(csv).toContain('name');
     expect(csv).toContain('Test');
     expect(csv).toContain('front_desk;marketing');
     expect(csv).toContain('10');
     expect(csv).toContain('15');
+    expect(csv).toContain(UNAVAILABILITY_BLOCKS_JSON_COLUMN);
   });
 
   it('exports departments to CSV format', () => {
@@ -175,7 +203,7 @@ describe('CSV Export', () => {
       { name: 'Marketing', targetHours: 20, maxHours: 30 },
       { name: 'Events', targetHours: 15, maxHours: 25 },
     ];
-    
+
     const csv = departmentsToCsv(depts);
     expect(csv).toContain('department');
     expect(csv).toContain('Marketing');

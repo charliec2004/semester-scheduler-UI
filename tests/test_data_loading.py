@@ -4,6 +4,8 @@ Tests for CSV data loading and validation.
 Simple tests that verify data loading functions work correctly.
 """
 
+import json
+
 import pandas as pd
 
 from scheduler.config import DAY_NAMES, LEGACY_TIME_SLOT_STARTS, TIME_SLOT_STARTS
@@ -120,6 +122,64 @@ def test_load_staff_data_accepts_legacy_30_minute_availability_grid(tmp_path):
     assert 1 not in unavailable_slots
     assert 2 not in unavailable_slots
     assert 3 in unavailable_slots
+
+
+def test_load_staff_data_from_availability_blocks_json(tmp_path):
+    blocks = {
+        "Mon": [{"startTime": "08:00", "endTime": "10:00", "travelBefore": False, "travelAfter": True}],
+        "Tue": [],
+        "Wed": [],
+        "Thu": [],
+        "Fri": [],
+    }
+    row = {
+        "name": "Alice",
+        "roles": "front_desk",
+        "target_hours": 10,
+        "max_hours": 15,
+        "year": 2,
+        "availability_blocks": json.dumps(blocks),
+    }
+    csv_path = tmp_path / "blocks-only.csv"
+    pd.DataFrame([row]).to_csv(csv_path, index=False)
+
+    staff_data = load_staff_data(csv_path)
+    unavailable_slots = set(staff_data.unavailable["Alice"]["Mon"])
+    # Last slot of 08:00–10:00 window is 09:50 (index 11); travelAfter trims it.
+    assert 11 in unavailable_slots
+
+
+def test_load_staff_data_from_unavailability_blocks_json(tmp_path):
+    blocks = {
+        "Mon": [
+            {
+                "startTime": "10:00",
+                "endTime": "12:00",
+                "bufferBeforeStart": False,
+                "bufferAfterEnd": True,
+            }
+        ],
+        "Tue": [],
+        "Wed": [],
+        "Thu": [],
+        "Fri": [],
+    }
+    row = {
+        "name": "Alice",
+        "roles": "front_desk",
+        "target_hours": 10,
+        "max_hours": 15,
+        "year": 2,
+        "unavailability_blocks": json.dumps(blocks),
+    }
+    csv_path = tmp_path / "unavail-blocks.csv"
+    pd.DataFrame([row]).to_csv(csv_path, index=False)
+
+    staff_data = load_staff_data(csv_path)
+    unavailable_slots = set(staff_data.unavailable["Alice"]["Mon"])
+    assert TIME_SLOT_STARTS.index("10:00") in unavailable_slots
+    assert TIME_SLOT_STARTS.index("12:00") in unavailable_slots
+    assert TIME_SLOT_STARTS.index("12:10") not in unavailable_slots
 
 
 def test_load_staff_data_applies_travel_buffer_flags(tmp_path):
