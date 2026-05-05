@@ -123,6 +123,41 @@
   }
 
   /**
+   * Copy text to clipboard with fallback support
+   * @param {string} text - Text to copy
+   */
+  async function copyTextToClipboard(text) {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      const textarea = document.createElement('textarea');
+      textarea.value = text;
+      document.body.appendChild(textarea);
+      textarea.select();
+      document.execCommand('copy');
+      document.body.removeChild(textarea);
+    }
+  }
+
+  /**
+   * Bind inline command copy buttons
+   */
+  function bindCommandCopyButtons() {
+    document.querySelectorAll('.note-copy-btn[data-copy-text]').forEach((button) => {
+      if (button.dataset.bound === 'true') return;
+      button.dataset.bound = 'true';
+
+      button.addEventListener('click', async () => {
+        const text = button.dataset.copyText || '';
+        if (!text) return;
+
+        await copyTextToClipboard(text);
+        showToast('Command copied to clipboard!');
+      });
+    });
+  }
+
+  /**
    * Fetch and display release information
    */
   async function fetchRelease() {
@@ -175,19 +210,8 @@
             const copyBtn = document.getElementById('copy-checksums');
             if (copyBtn) {
               copyBtn.addEventListener('click', async () => {
-                try {
-                  await navigator.clipboard.writeText(checksumsText.trim());
-                  showToast('Checksums copied to clipboard!');
-                } catch (err) {
-                  // Fallback for older browsers
-                  const textarea = document.createElement('textarea');
-                  textarea.value = checksumsText.trim();
-                  document.body.appendChild(textarea);
-                  textarea.select();
-                  document.execCommand('copy');
-                  document.body.removeChild(textarea);
-                  showToast('Checksums copied to clipboard!');
-                }
+                await copyTextToClipboard(checksumsText.trim());
+                showToast('Checksums copied to clipboard!');
               });
             }
           }
@@ -247,6 +271,7 @@
 
   function init() {
     document.body.classList.add('loading');
+    bindCommandCopyButtons();
     highlightUserPlatform();
     fetchRelease();
   }

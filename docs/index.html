@@ -23,7 +23,6 @@
           </div>
           <div class="hero-copy-block">
             <h1>Semester Scheduler</h1>
-            <p class="tagline">Optimized weekly scheduling for student employees</p>
           </div>
         </div>
         <span class="hero-kicker">Desktop Downloads</span>
@@ -57,11 +56,20 @@
             </a>
           </div>
           <div class="platform-note">
-            <strong>⚠️ Required: Remove Quarantine Flag</strong>
-            <p>macOS blocks unsigned apps downloaded from the internet. After installing, open <strong>Terminal</strong> and run:</p>
-            <code class="terminal-cmd">xattr -cr /Applications/Scheduler.app</code>
-            <p>Then open the app normally from Applications.</p>
+            <strong class="note-title">Required: Remove Quarantine Flag</strong>
+            <p class="note-body">macOS blocks unsigned apps downloaded from the internet.</p>
+            <p class="note-label">Run in Terminal</p>
+            <div class="terminal-cmd">
+              <span class="terminal-cmd-text">xattr -cr /Applications/Scheduler.app</span>
+              <button class="note-copy-btn" type="button" data-copy-text="xattr -cr /Applications/Scheduler.app" aria-label="Copy macOS command">
+                <svg class="note-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+                  <path d="M5 15V6a2 2 0 0 1 2-2h9"></path>
+                </svg>
+              </button>
             </div>
+            <p class="note-body">Then open the app normally from Applications.</p>
+          </div>
         </article>
 
         <!-- Windows -->
@@ -80,10 +88,13 @@
             </a>
           </div>
           <div class="platform-note">
-            <strong>⚠️ Windows SmartScreen Warning</strong>
-            <p>Windows may warn about unsigned apps. If your browser blocks the download, click <strong>"Keep"</strong> or <strong>"Keep anyway"</strong>.</p>
-            <p>When running the installer, if SmartScreen says "Windows protected your PC":</p>
-            <p>Click <strong>"More info"</strong> → <strong>"Run anyway"</strong></p>
+            <strong class="note-title">Windows SmartScreen Warning</strong>
+            <p class="note-body">If your browser blocks the download, click <strong>Keep</strong> or <strong>Keep anyway</strong>.</p>
+            <div class="note-steps" aria-label="Windows SmartScreen steps">
+              <span class="note-step">More info</span>
+              <span class="note-arrow">→</span>
+              <span class="note-step">Run anyway</span>
+            </div>
           </div>
         </article>
 
@@ -106,9 +117,19 @@
               <span class="btn-size" id="linux-deb-size"></span>
             </a>
           </div>
-          <p class="platform-note">
-            For AppImage: <code>chmod +x Scheduler-*.AppImage</code> then run it.
-          </p>
+          <div class="platform-note">
+            <strong class="note-title">AppImage Quick Start</strong>
+            <p class="note-body">Make the file executable, then run it.</p>
+            <div class="terminal-cmd">
+              <span class="terminal-cmd-text">chmod +x Scheduler-*.AppImage</span>
+              <button class="note-copy-btn" type="button" data-copy-text="chmod +x Scheduler-*.AppImage" aria-label="Copy Linux command">
+                <svg class="note-copy-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true">
+                  <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+                  <path d="M5 15V6a2 2 0 0 1 2-2h9"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
         </article>
 
       </section>

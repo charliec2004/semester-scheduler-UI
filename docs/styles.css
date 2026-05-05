@@ -49,9 +49,7 @@ html {
 body {
   min-height: 100vh;
   font-family: var(--font-sans);
-  background:
-    radial-gradient(circle at top center, rgba(255, 255, 255, 0.045), transparent 36%),
-    linear-gradient(180deg, #0a0a0a 0%, var(--bg) 24%);
+  background: var(--bg);
   color: var(--text);
   line-height: 1.5;
 }
@@ -85,11 +83,8 @@ body {
 }
 
 .hero {
-  border: 1px solid var(--border);
-  border-radius: 24px;
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.035), rgba(255, 255, 255, 0.015));
-  box-shadow: var(--shadow);
-  padding: 24px 24px 22px;
+  padding: 10px 0 18px;
+  border-bottom: 1px solid var(--border);
 }
 
 .hero-top {
@@ -115,7 +110,7 @@ body {
   justify-content: center;
   border-radius: 12px;
   border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--bg-elevated);
   color: var(--text-secondary);
 }
 
@@ -129,16 +124,11 @@ body {
 }
 
 h1 {
-  font-size: clamp(2rem, 4vw, 2.9rem);
-  line-height: 1.02;
+  font-size: clamp(2rem, 3.4vw, 2.45rem);
+  line-height: 1.04;
   letter-spacing: -0.045em;
   font-weight: 650;
-  margin-bottom: 0.35rem;
-}
-
-.tagline {
-  color: var(--text-secondary);
-  font-size: 0.98rem;
+  margin: 0;
 }
 
 .hero-kicker {
@@ -149,7 +139,7 @@ h1 {
   border-radius: 999px;
   border: 1px solid var(--border);
   color: var(--text-secondary);
-  background: rgba(255, 255, 255, 0.035);
+  background: var(--bg-elevated);
   font-size: 0.76rem;
   font-weight: 600;
   letter-spacing: 0.08em;
@@ -158,8 +148,8 @@ h1 {
 }
 
 .hero-description {
-  margin-top: 18px;
-  max-width: 760px;
+  margin-top: 16px;
+  max-width: 1180px;
   color: var(--text-muted);
   font-size: 0.98rem;
 }
@@ -167,7 +157,7 @@ h1 {
 .page-content {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 22px;
 }
 
 .version-info {
@@ -198,7 +188,7 @@ h1 {
 .platforms {
   display: grid;
   grid-template-columns: 1fr;
-  gap: 16px;
+  gap: 0;
 }
 
 @media (min-width: 860px) {
@@ -212,17 +202,31 @@ h1 {
   flex-direction: column;
   gap: 12px;
   min-height: 100%;
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.03), rgba(255, 255, 255, 0.015));
-  transition: border-color var(--transition), background-color var(--transition), transform var(--transition);
+  padding: 20px 18px 18px;
+  border: 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
+  transition: border-color var(--transition), background-color var(--transition), color var(--transition);
+}
+
+.platform-card:first-child {
+  border-top: 0;
+}
+
+@media (min-width: 860px) {
+  .platform-card {
+    border-top: 0;
+    border-left: 1px solid var(--border);
+    padding: 20px 18px 22px;
+  }
+
+  .platform-card:first-child {
+    border-left: 0;
+  }
 }
 
 .platform-card:hover {
-  border-color: var(--border-strong);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.038), rgba(255, 255, 255, 0.02));
-  transform: translateY(-1px);
+  background: rgba(255, 255, 255, 0.015);
 }
 
 .platform-header {
@@ -259,7 +263,7 @@ h1 {
 .btn {
   display: inline-flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   justify-content: center;
   gap: 2px;
   width: 100%;
@@ -270,13 +274,14 @@ h1 {
   background: var(--bg-panel-soft);
   color: var(--text);
   text-decoration: none;
-  transition: background-color var(--transition), border-color var(--transition), color var(--transition), transform var(--transition), opacity var(--transition);
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition), opacity var(--transition);
   cursor: pointer;
   font-family: inherit;
+  text-align: center;
 }
 
 .btn:hover:not(.disabled) {
-  transform: translateY(-1px);
+  transform: none;
 }
 
 .btn:focus-visible {
@@ -334,25 +339,59 @@ h1 {
 }
 
 .platform-note {
-  margin-top: auto;
   padding: 12px 13px;
   border-radius: 12px;
   border: 1px solid rgba(255, 255, 255, 0.08);
-  background: rgba(255, 255, 255, 0.025);
+  background: var(--bg-elevated);
   color: var(--text-muted);
   font-size: 0.78rem;
+  display: grid;
+  gap: 8px;
 }
 
-.platform-note strong {
+.note-title {
   display: block;
-  margin-bottom: 0.45rem;
   color: var(--warning);
   font-size: 0.78rem;
   font-weight: 600;
 }
 
-.platform-note p + p {
-  margin-top: 0.35rem;
+.note-body {
+  color: var(--text-muted);
+  line-height: 1.55;
+}
+
+.note-label {
+  color: var(--text-secondary);
+  font-size: 0.74rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+}
+
+.note-steps {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.note-step {
+  display: inline-flex;
+  align-items: center;
+  min-height: 30px;
+  padding: 0 10px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: var(--bg-panel-soft);
+  color: var(--text-secondary);
+  font-size: 0.76rem;
+  font-weight: 600;
+}
+
+.note-arrow {
+  color: var(--text-faint);
+  font-size: 0.82rem;
 }
 
 .platform-note code {
@@ -367,22 +406,81 @@ h1 {
   font-size: 0.72rem;
 }
 
-.platform-note code.terminal-cmd {
-  display: block;
-  margin: 0.45rem 0;
-  padding: 0.55rem 0.65rem;
+.terminal-cmd {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  min-height: 48px;
+  padding: 0 0.5rem 0 0.65rem;
   border-color: rgba(75, 141, 96, 0.32);
   background: rgba(0, 0, 0, 0.32);
   color: #8bd2a2;
+  border: 1px solid rgba(75, 141, 96, 0.32);
+  border-radius: 12px;
+}
+
+.terminal-cmd-text {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: #8bd2a2;
+  font-family: var(--font-mono);
+  font-size: 0.72rem;
+  line-height: 1.2;
   user-select: all;
   overflow-x: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.note-copy-btn {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  padding: 0;
+  border-radius: 8px;
+  border: 0;
+  background: transparent;
+  color: var(--text-secondary);
+  font: inherit;
+  cursor: pointer;
+  transition: background-color var(--transition), border-color var(--transition), color var(--transition);
+}
+
+.note-copy-btn:hover {
+  background: rgba(255, 255, 255, 0.035);
+  color: var(--text);
+}
+
+.note-copy-btn:focus-visible {
+  outline: 1px solid rgba(255, 255, 255, 0.44);
+  outline-offset: 2px;
+}
+
+.note-copy-icon {
+  width: 13px;
+  height: 13px;
+}
+
+@media (max-width: 640px) {
+  .note-copy-btn {
+    align-self: flex-start;
+  }
 }
 
 .checksums {
-  padding: 18px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), rgba(255, 255, 255, 0.015));
+  padding: 18px 0 0;
+  border-top: 1px solid var(--border);
+  background: transparent;
 }
 
 .checksums h2 {
@@ -408,10 +506,9 @@ h1 {
 }
 
 .error-state {
-  padding: 18px;
-  border: 1px solid rgba(213, 72, 65, 0.26);
-  border-radius: var(--radius-lg);
-  background: rgba(213, 72, 65, 0.06);
+  padding: 14px 0 0;
+  border-top: 1px solid rgba(213, 72, 65, 0.26);
+  background: transparent;
   color: var(--text-secondary);
 }
 
@@ -427,7 +524,6 @@ h1 {
 footer {
   margin-top: auto;
   padding-top: 18px;
-  border-top: 1px solid var(--border);
   display: flex;
   flex-direction: column;
   gap: 6px;
@@ -510,8 +606,7 @@ footer a:hover {
   }
 
   .hero {
-    padding: 18px 18px 16px;
-    border-radius: 20px;
+    padding: 4px 0 14px;
   }
 
   .hero-top {
@@ -531,7 +626,7 @@ footer a:hover {
 
   .platform-card,
   .checksums {
-    padding: 15px;
+    padding-top: 15px;
   }
 
   .btn {
