@@ -4,8 +4,12 @@
  */
 
 import { useRef, useEffect, useState, useMemo } from 'react';
+import { AlertTriangle, Ban, CheckCircle2, Download, Plus, Square, Trash2, XCircle } from 'lucide-react';
 import { useSolverStore, useHistoryStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
+import { Button } from '../ui/button';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { NoticePanel } from '../ui/notice-panel';
 import type { HistoryEntry } from '../../../main/ipc-types';
 
 // Rotating status messages shown during optimization
@@ -160,6 +164,7 @@ export function ResultsTab() {
   const logContainerRef = useRef<HTMLDivElement>(null);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [statusMessageIndex, setStatusMessageIndex] = useState(0);
+  const [entryToDelete, setEntryToDelete] = useState<HistoryEntry | null>(null);
 
   // Rotate status messages every 4-5 seconds while running
   useEffect(() => {
@@ -237,14 +242,20 @@ export function ResultsTab() {
   };
 
   const handleDeleteEntry = async (entry: HistoryEntry) => {
-    if (window.confirm('Delete this generation and its files?')) {
-      try {
-        await deleteEntry(entry.id);
-        showToast('Generation deleted', 'info');
-      } catch (err) {
-        console.error('Failed to delete entry:', err);
-        showToast('Failed to delete entry', 'error');
-      }
+    setEntryToDelete(entry);
+  };
+
+  const confirmDeleteEntry = async () => {
+    if (!entryToDelete) return;
+
+    try {
+      await deleteEntry(entryToDelete.id);
+      showToast('Generation deleted', 'info');
+    } catch (err) {
+      console.error('Failed to delete entry:', err);
+      showToast('Failed to delete entry', 'error');
+    } finally {
+      setEntryToDelete(null);
     }
   };
 
@@ -321,23 +332,15 @@ export function ResultsTab() {
         </div>
         <div className="flex gap-3">
           {running ? (
-            <button onClick={handleCancel} className="btn-danger">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
-              </svg>
+            <Button onClick={handleCancel} variant="destructive">
+              <Square className="h-4 w-4" strokeWidth={1.8} />
               Cancel
-            </button>
+            </Button>
           ) : (
-            <button onClick={handleNewRun} className="btn-secondary">
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M12 4v16m8-8H4" />
-              </svg>
+            <Button onClick={handleNewRun} variant="secondary">
+              <Plus className="h-4 w-4" strokeWidth={1.8} />
               New Generation
-            </button>
+            </Button>
           )}
         </div>
       </div>
@@ -352,7 +355,7 @@ export function ResultsTab() {
             >
               {currentStatusMessage}
             </span>
-            <span className="text-sm text-accent-400">
+            <span className="text-sm text-surface-300">
               {progress ? `~${Math.round(progress.percent)}%` : 'Starting...'}
             </span>
           </div>
@@ -374,88 +377,72 @@ export function ResultsTab() {
 
       {/* Result Status */}
       {result && (
-        <div className={`card ${
-          result.success 
-            ? 'bg-accent-500/10 border-accent-500/30' 
-            : result.errorType === 'cancelled'
-              ? 'bg-surface-800/70 border-surface-600'
-            : result.errorType === 'no_solution'
-              ? 'bg-yellow-500/10 border-yellow-500/30'
-              : 'bg-danger-500/10 border-danger-500/30'
-        }`}>
-          <div className="flex items-start gap-4">
-            {result.success ? (
-              <div className="w-12 h-12 bg-accent-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-              </div>
-            ) : result.errorType === 'cancelled' ? (
-              <div className="w-12 h-12 bg-surface-700 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-surface-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                    d="M10 9v6m4-6v6m-9 4h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
-                </svg>
-              </div>
-            ) : result.errorType === 'no_solution' ? (
-              <div className="w-12 h-12 bg-yellow-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-yellow-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
-              </div>
-            ) : (
-              <div className="w-12 h-12 bg-danger-500/20 rounded-full flex items-center justify-center flex-shrink-0">
-                <svg className="w-6 h-6 text-danger-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </div>
-            )}
-            <div className="flex-1">
+        <div className="card bg-surface-900/70">
+          <NoticePanel
+            variant={
+              result.success
+                ? 'success'
+                : result.errorType === 'cancelled'
+                  ? 'neutral'
+                  : result.errorType === 'no_solution'
+                    ? 'warning'
+                    : 'error'
+            }
+            title={
+              result.success 
+                ? 'Schedule generated successfully' 
+                : result.errorType === 'cancelled'
+                  ? 'Generation cancelled'
+                : result.errorType === 'no_solution'
+                  ? 'No solution found'
+                  : 'Generation failed'
+            }
+            description={
+              result.success
+                ? `Completed in ${formatElapsed(result.elapsed)}. Download your schedule from the history below.`
+                : result.errorType === 'cancelled'
+                  ? 'The current run was stopped before completion. You can adjust inputs and start a new generation anytime.'
+                : result.errorType === 'no_solution'
+                  ? 'The current requirements cannot all be satisfied together. See suggestions below.'
+                  : result.error || 'Something went wrong. Check the logs below for details.'
+            }
+            icon={
+              result.success ? <CheckCircle2 className="h-4 w-4 text-surface-200" strokeWidth={1.9} /> :
+              result.errorType === 'cancelled' ? <Ban className="h-4 w-4 text-surface-300" strokeWidth={1.9} /> :
+              result.errorType === 'no_solution' ? <AlertTriangle className="h-4 w-4 text-warning-300" strokeWidth={1.9} /> :
+              <XCircle className="h-4 w-4 text-danger-300" strokeWidth={1.9} />
+            }
+          >
+            <div className="space-y-3">
               <h3 className={`font-semibold ${
                 result.success 
-                  ? 'text-accent-400' 
+                  ? 'text-surface-100' 
                   : result.errorType === 'cancelled'
                     ? 'text-surface-200'
                   : result.errorType === 'no_solution'
-                    ? 'text-yellow-400'
-                    : 'text-danger-400'
+                    ? 'text-warning-200'
+                    : 'text-danger-200'
               }`}>
-                {result.success 
-                  ? 'Schedule Generated Successfully' 
-                  : result.errorType === 'cancelled'
-                    ? 'Generation Cancelled'
-                  : result.errorType === 'no_solution'
-                    ? 'No Solution Found'
-                    : 'Generation Failed'}
+                {result.success ? 'Solver summary' : result.errorType === 'no_solution' ? 'Possible causes' : result.errorType === 'cancelled' ? 'Run status' : 'Error details'}
               </h3>
-              <p className="text-sm text-surface-400 mt-1">
-                {result.success
-                  ? `Completed in ${formatElapsed(result.elapsed)}. Download your schedule from the history below.`
-                  : result.errorType === 'cancelled'
-                    ? 'The current run was stopped before completion. You can adjust inputs and start a new generation anytime.'
-                  : result.errorType === 'no_solution'
-                    ? 'The current requirements cannot all be satisfied together. See suggestions below.'
-                    : result.error || 'Something went wrong. Check the logs below for details.'}
-              </p>
-
               {/* Solver Stats - shown on success */}
               {result.success && solverStats.constraints && (
-                <div className="mt-4 pt-4 border-t border-accent-500/20">
+                <div className="border-t border-border/70 pt-3">
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
-                      <div className="text-2xl font-bold text-accent-400">
+                      <div className="text-2xl font-semibold text-surface-100">
                         {solverStats.constraints?.toLocaleString()}
                       </div>
                       <div className="text-xs text-surface-400">constraints solved</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-accent-400">
+                      <div className="text-2xl font-semibold text-surface-100">
                         {solverStats.totalVariables?.toLocaleString()}
                       </div>
                       <div className="text-xs text-surface-400">variables optimized</div>
                     </div>
                     <div>
-                      <div className="text-2xl font-bold text-accent-400">
+                      <div className="text-2xl font-semibold text-surface-100">
                         {solverStats.assignmentVariables?.toLocaleString()}
                       </div>
                       <div className="text-xs text-surface-400">possible assignments</div>
@@ -469,15 +456,15 @@ export function ResultsTab() {
 
               {/* Detected Issues - shown for both no_solution and errors */}
               {!result.success && result.errorType !== 'cancelled' && (
-                <div className="mt-3 space-y-1">
-                  <p className={`text-sm font-medium ${result.errorType === 'no_solution' ? 'text-yellow-400' : 'text-danger-400'}`}>
+                <div className="space-y-1">
+                  <p className={`text-sm font-medium ${result.errorType === 'no_solution' ? 'text-warning-200' : 'text-danger-200'}`}>
                     {result.errorType === 'no_solution' ? 'Possible Causes:' : 'Error Details:'}
                   </p>
                   <ul className="text-sm text-surface-300 space-y-1.5">
                     {/* Employee not found errors */}
                     {diagnostics.hasEmployeeNotFound && (
                       <li className="flex items-start gap-2">
-                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span className={result.errorType === 'no_solution' ? 'text-warning-300' : 'text-danger-300'}>•</span>
                         <span>
                           <strong>Employee not found:</strong> &quot;{diagnostics.notFoundName || 'unknown'}&quot; doesn&apos;t exist in the Staff tab.
                           Double-check the spelling matches exactly.
@@ -487,7 +474,7 @@ export function ResultsTab() {
                     {/* Department not found errors */}
                     {diagnostics.hasDepartmentNotFound && (
                       <li className="flex items-start gap-2">
-                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span className={result.errorType === 'no_solution' ? 'text-warning-300' : 'text-danger-300'}>•</span>
                         <span>
                           <strong>Department not found:</strong> A department name in your flags doesn&apos;t match any department in the Departments tab.
                         </span>
@@ -496,7 +483,7 @@ export function ResultsTab() {
                     {/* Not qualified errors */}
                     {diagnostics.hasNotQualified && (
                       <li className="flex items-start gap-2">
-                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span className={result.errorType === 'no_solution' ? 'text-warning-300' : 'text-danger-300'}>•</span>
                         <span>
                           <strong>Not qualified:</strong> {diagnostics.notQualifiedDetails
                             ? `${diagnostics.notQualifiedDetails}. Add this role to their qualifications in the Staff tab.`
@@ -507,7 +494,7 @@ export function ResultsTab() {
                     {/* Training pair overlap issues */}
                     {diagnostics.hasTrainingNoOverlap && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
+                        <span className="text-warning-300">•</span>
                         <span>
                           <strong>Training pair conflict:</strong> The two employees have no overlapping availability, so they can never work together.
                           Adjust their availability in the Staff tab or remove this training pair.
@@ -517,7 +504,7 @@ export function ResultsTab() {
                     {/* Invalid employee (nan) */}
                     {diagnostics.hasInvalidEmployee && (
                       <li className="flex items-start gap-2">
-                        <span className={result.errorType === 'no_solution' ? 'text-yellow-500' : 'text-danger-500'}>•</span>
+                        <span className={result.errorType === 'no_solution' ? 'text-warning-300' : 'text-danger-300'}>•</span>
                         <span>
                           <strong>Empty employee row:</strong> There&apos;s a blank or invalid row in your staff data.
                           Go to the Staff tab and remove any empty rows.
@@ -527,7 +514,7 @@ export function ResultsTab() {
                     {/* Timeset/availability conflict - show all conflicts */}
                     {diagnostics.hasTimesetConflict && diagnostics.timesetConflicts.length > 0 && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
+                        <span className="text-warning-300">•</span>
                         <span>
                           <strong>Forced assignment conflicts:</strong>
                           <ul className="mt-1 ml-4 space-y-0.5">
@@ -540,7 +527,7 @@ export function ResultsTab() {
                     )}
                     {diagnostics.hasTimesetConflict && diagnostics.timesetConflicts.length === 0 && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
+                        <span className="text-warning-300">•</span>
                         <span>
                           <strong>Forced assignment conflict:</strong> {diagnostics.availabilityDetails
                             ? `${diagnostics.availabilityDetails}. The employee is marked unavailable at the time you're trying to assign them.`
@@ -551,7 +538,7 @@ export function ResultsTab() {
                     {/* Availability conflict without timeset */}
                     {diagnostics.hasAvailabilityConflict && !diagnostics.hasTimesetConflict && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
+                        <span className="text-warning-300">•</span>
                         <span>
                           <strong>Availability conflict:</strong> {diagnostics.availabilityDetails
                             ? `${diagnostics.availabilityDetails}. Remove the flag or update their availability.`
@@ -562,7 +549,7 @@ export function ResultsTab() {
                     {/* Limited availability employees */}
                     {diagnostics.hasLimitedAvailability && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
+                        <span className="text-warning-300">•</span>
                         <span>
                           <strong>Limited availability:</strong> Some employees have very restricted schedules:
                           <ul className="mt-1 ml-4 space-y-0.5">
@@ -579,7 +566,7 @@ export function ResultsTab() {
                     {/* Front desk coverage gap */}
                     {diagnostics.hasFrontDeskGap && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
+                        <span className="text-warning-300">•</span>
                         <span>
                           <strong>Front desk gap:</strong> {diagnostics.frontDeskGapDetails
                             ? `No one is available to cover front desk at: ${diagnostics.frontDeskGapDetails}`
@@ -599,7 +586,7 @@ export function ResultsTab() {
                       !diagnostics.hasDepartmentNotFound &&
                       !diagnostics.hasAvailabilityConflict && (
                       <li className="flex items-start gap-2">
-                        <span className="text-yellow-500">•</span>
+                        <span className="text-warning-300">•</span>
                         <span>
                           <strong>Too many constraints:</strong> The combination of employee availability, target hours, and department requirements
                           can&apos;t all be satisfied. Try reducing target hours, relaxing availability, or removing some flags.
@@ -615,7 +602,7 @@ export function ResultsTab() {
                 </div>
               )}
             </div>
-          </div>
+          </NoticePanel>
         </div>
       )}
 
@@ -639,7 +626,7 @@ export function ResultsTab() {
               <span className="text-xs text-surface-500">({logs.length} lines)</span>
             </div>
             {running && (
-              <span className="text-xs text-accent-400 animate-pulse">Live</span>
+              <span className="text-xs text-surface-300 animate-pulse">Live</span>
             )}
           </button>
           
@@ -676,49 +663,49 @@ export function ResultsTab() {
           <ul className="space-y-2 text-sm text-surface-400">
               {diagnostics.hasInvalidEmployee && (
                 <li className="flex items-start gap-2">
-                  <span className="text-yellow-400">1.</span>
+                  <span className="text-warning-300">1.</span>
                   <span><strong className="text-surface-200">Remove invalid employees</strong> - Go to Staff tab and delete any empty or &quot;nan&quot; entries</span>
                 </li>
               )}
               {diagnostics.hasTrainingNoOverlap && (
                 <li className="flex items-start gap-2">
-                  <span className="text-yellow-400">{diagnostics.hasInvalidEmployee ? '2.' : '1.'}</span>
+                  <span className="text-warning-300">{diagnostics.hasInvalidEmployee ? '2.' : '1.'}</span>
                   <span><strong className="text-surface-200">Remove training pair</strong> - The paired employees have no overlapping availability</span>
                 </li>
               )}
               <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
+                <span className="text-warning-300">•</span>
                 <span><strong className="text-surface-200">Check &quot;Assign Employee to Role/Time&quot;</strong> - Ensure forced assignments don&apos;t conflict with availability</span>
               </li>
               <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
+                <span className="text-warning-300">•</span>
                 <span><strong className="text-surface-200">Verify front desk coverage</strong> - At least one qualified employee must be available each time slot</span>
               </li>
             <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
+                <span className="text-warning-300">•</span>
                 <span><strong className="text-surface-200">Reduce hour requirements</strong> - Department targets may exceed available employee hours</span>
             </li>
             <li className="flex items-start gap-2">
-                <span className="text-yellow-400">•</span>
+                <span className="text-warning-300">•</span>
                 <span><strong className="text-surface-200">Disable 2-hour minimum blocks</strong> - In Settings, turn off &quot;Enforce 2-hour minimum department blocks&quot;</span>
               </li>
             </ul>
           ) : (
             <ul className="space-y-2 text-sm text-surface-400">
               <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
+                <span className="text-danger-300">•</span>
                 <span>Check that your CSV files are properly formatted</span>
             </li>
             <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
+                <span className="text-danger-300">•</span>
                 <span>Ensure Python is installed and accessible</span>
             </li>
             <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
+                <span className="text-danger-300">•</span>
                 <span>Check the logs above for specific error messages</span>
             </li>
             <li className="flex items-start gap-2">
-                <span className="text-danger-400">•</span>
+                <span className="text-danger-300">•</span>
                 <span>Try restarting the application</span>
             </li>
           </ul>
@@ -738,7 +725,7 @@ export function ResultsTab() {
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-accent-600/20 rounded-full flex items-center justify-center text-accent-400 font-semibold text-sm">
+                    <div className="flex h-8 w-8 items-center justify-center rounded-md border border-border bg-surface-900 text-sm font-semibold text-surface-300">
                       {index + 1}
                     </div>
                     <div>
@@ -750,42 +737,36 @@ export function ResultsTab() {
                       </div>
                     </div>
                   </div>
-                  <button
+                  <Button
                     onClick={() => handleDeleteEntry(entry)}
-                    className="btn-ghost text-danger-400 hover:text-danger-300 p-1.5"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-danger-300 hover:bg-danger-700/10 hover:text-danger-200"
                     aria-label="Delete generation"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                    <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+                  </Button>
                 </div>
 
                 <div className="flex gap-2">
                   {entry.hasXlsx && (
-                    <button
+                    <Button
                       onClick={() => handleDownload(entry.id, 'xlsx')}
-                      className="btn-primary text-sm py-1.5 flex-1"
+                      className="flex-1"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
+                      <Download className="h-4 w-4" strokeWidth={1.8} />
                       Download Schedule
-                    </button>
+                    </Button>
                   )}
                   {entry.hasFormattedXlsx && (
-                    <button
+                    <Button
                       onClick={() => handleDownload(entry.id, 'xlsxFormatted')}
-                      className="btn-secondary text-sm py-1.5 flex-1"
+                      variant="secondary"
+                      className="flex-1"
                     >
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                          d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                      </svg>
+                      <Download className="h-4 w-4" strokeWidth={1.8} />
                       Download Formatted
-                    </button>
+                    </Button>
                   )}
                 </div>
               </div>
@@ -793,6 +774,19 @@ export function ResultsTab() {
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={entryToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEntryToDelete(null);
+          }
+        }}
+        title="Delete generation?"
+        description="This removes the saved solver run and deletes its generated files."
+        confirmLabel="Delete Generation"
+        confirmVariant="destructive"
+        onConfirm={confirmDeleteEntry}
+      />
     </div>
   );
 }

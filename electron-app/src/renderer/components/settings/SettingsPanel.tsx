@@ -4,9 +4,56 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { AlertTriangle, Bug, CheckCircle2, Download, HelpCircle, RefreshCw, Trash2, X } from 'lucide-react';
 import { useSettingsStore, useUIStore, useStaffStore, useDepartmentStore, useFlagsStore } from '../../store';
 import type { AppSettings } from '../../../main/ipc-types';
 import { DEFAULT_MAX_SLOTS, DEFAULT_MIN_SLOTS, SLOT_MINUTES, TIME_SLOT_STARTS } from '../../../shared/constants';
+import { Checkbox } from '../ui/checkbox';
+import { Button } from '../ui/button';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { HourInput } from '../ui/hour-input';
+import { NoticePanel } from '../ui/notice-panel';
+
+function SettingsBooleanRow({
+  id,
+  checked,
+  onCheckedChange,
+  label,
+  description,
+  tooltip,
+}: {
+  id: string;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  label: string;
+  description?: string;
+  tooltip?: string;
+}) {
+  return (
+    <label
+      htmlFor={id}
+      className="flex cursor-pointer items-start gap-2.5 rounded-md border border-border/70 bg-surface-900/40 px-3 py-2.5 transition-colors hover:border-surface-600"
+    >
+      <Checkbox
+        id={id}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+        className="mt-0.5"
+      />
+      <span className="min-w-0 flex-1">
+        <span className="flex items-center text-[13px] font-medium text-surface-200">
+          {label}
+          {tooltip && <Tooltip text={tooltip} />}
+        </span>
+        {description && (
+          <span className="mt-0.5 block text-[12px] leading-5 text-surface-400">
+            {description}
+          </span>
+        )}
+      </span>
+    </label>
+  );
+}
 
 // Tooltip component with ? icon - uses fixed positioning to avoid clipping
 function Tooltip({ text }: { text: string }) {
@@ -39,14 +86,14 @@ function Tooltip({ text }: { text: string }) {
         onMouseLeave={() => setShow(false)}
         onFocus={handleMouseEnter}
         onBlur={() => setShow(false)}
-        className="w-4 h-4 rounded-full bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-300 flex items-center justify-center text-xs font-medium transition-colors"
+        className="flex h-4 w-4 items-center justify-center rounded-full bg-transparent text-surface-400 transition-colors hover:text-surface-300"
         aria-label="More information"
       >
-        ?
+        <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} />
       </button>
       {show && (
         <div 
-          className="fixed z-[100] px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left"
+          className="fixed z-[100] w-64 rounded-lg border border-surface-700 bg-surface-800 px-3 py-2 text-left text-xs text-surface-200 shadow-lg"
           style={{ top: coords.top, left: coords.left }}
         >
           {text}
@@ -72,6 +119,7 @@ export function SettingsPanel() {
   const [saving, setSaving] = useState(false);
   const [appVersion, setAppVersion] = useState<string>('');
   const [updateStatus, setUpdateStatus] = useState<UpdateStatus>({ state: 'idle' });
+  const [pendingConfirmAction, setPendingConfirmAction] = useState<'reset' | 'clear-data' | null>(null);
   const isMac = navigator.platform.toLowerCase().includes('mac');
 
   // Fetch app version from Electron (reads from package.json)
@@ -135,8 +183,17 @@ export function SettingsPanel() {
   };
 
   const handleReset = async () => {
-    const confirmed = window.confirm('Reset all settings to defaults?');
-    if (confirmed) {
+    setPendingConfirmAction('reset');
+  };
+
+  const handleClearAllData = async () => {
+    setPendingConfirmAction('clear-data');
+  };
+
+  const handleConfirmAction = async () => {
+    if (!pendingConfirmAction) return;
+
+    if (pendingConfirmAction === 'reset') {
       try {
         const newSettings = await resetSettings();
         setLocalSettings(newSettings);
@@ -145,32 +202,29 @@ export function SettingsPanel() {
       } catch (err) {
         console.error('Failed to reset settings:', err);
         showToast('Failed to reset settings', 'error');
+      } finally {
+        setPendingConfirmAction(null);
       }
+      return;
     }
-  };
 
-  const handleClearAllData = async () => {
-    const confirmed = window.confirm(
-      'This will clear all staff, departments, and presets. History will be preserved. Are you sure?'
-    );
-    if (confirmed) {
-      try {
-        const result = await window.electronAPI.data.clearAll();
-        if (result.success) {
-          // Clear the in-memory stores
-          useStaffStore.getState().clearStaff();
-          useDepartmentStore.getState().clearDepartments();
-          useFlagsStore.getState().clearPresets();
-          useFlagsStore.getState().reset();
-          showToast('All data cleared', 'success');
-          handleClose();
-        } else {
-          showToast('Failed to clear data', 'error');
-        }
-      } catch (err) {
-        console.error('Failed to clear data:', err);
+    try {
+      const result = await window.electronAPI.data.clearAll();
+      if (result.success) {
+        useStaffStore.getState().clearStaff();
+        useDepartmentStore.getState().clearDepartments();
+        useFlagsStore.getState().clearPresets();
+        useFlagsStore.getState().reset();
+        showToast('All data cleared', 'success');
+        handleClose();
+      } else {
         showToast('Failed to clear data', 'error');
       }
+    } catch (err) {
+      console.error('Failed to clear data:', err);
+      showToast('Failed to clear data', 'error');
+    } finally {
+      setPendingConfirmAction(null);
     }
   };
 
@@ -250,40 +304,40 @@ export function SettingsPanel() {
   if (!localSettings) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
-      <div 
-        className="absolute inset-0 bg-surface-950/80 backdrop-blur-sm"
-        onClick={handleClose}
-        aria-hidden="true"
-      />
+    <>
+      <div className="fixed inset-0 z-50 flex justify-end">
+        {/* Backdrop */}
+        <div 
+          className="absolute inset-0 bg-surface-950/80 backdrop-blur-sm"
+          onClick={handleClose}
+          aria-hidden="true"
+        />
 
-      {/* Panel */}
-      <div 
-        className="relative w-full max-w-md bg-surface-900 border-l border-surface-700 overflow-y-auto animate-slide-in-right"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="settings-title"
-      >
+        {/* Panel */}
+        <div 
+          className="relative w-full max-w-md overflow-y-auto border-l border-surface-700 bg-surface-900 animate-slide-in-right"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="settings-title"
+        >
         {/* Header */}
-        <div className="sticky top-0 z-[60] bg-surface-900 border-b border-surface-700 px-6 py-4 flex items-center justify-between">
-          <h2 id="settings-title" className="text-lg font-display font-semibold">Settings</h2>
-          <button 
+        <div className="sticky top-0 z-[60] flex items-center justify-between border-b border-surface-700 bg-surface-900/95 px-5 py-3 backdrop-blur">
+          <h2 id="settings-title" className="text-base font-display font-semibold">Settings</h2>
+          <Button 
             onClick={handleClose}
-            className="btn-ghost p-2"
+            variant="ghost"
+            size="icon-sm"
             aria-label="Close settings"
           >
-            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+            <X className="h-4 w-4" strokeWidth={1.8} />
+          </Button>
         </div>
 
         {/* Content */}
-        <div className="p-6 space-y-8">
+        <div className="space-y-7 p-5">
           {/* Solver Settings */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Solver Configuration
             </h3>
             <div className="space-y-4">
@@ -329,7 +383,7 @@ export function SettingsPanel() {
 
           {/* Objective Weights */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Objective Weights
               <Tooltip text="These weights control how the solver prioritizes different objectives. Higher values mean stronger priority. Adjust carefully—extreme values can lead to imbalanced schedules." />
             </h3>
@@ -451,7 +505,7 @@ export function SettingsPanel() {
 
           {/* Thresholds */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Thresholds
               <Tooltip text="These values define acceptable ranges. Setting them too tight may make scheduling impossible; too loose may produce poor results." />
             </h3>
@@ -461,15 +515,12 @@ export function SettingsPanel() {
                   Department Hour Wiggle Room
                   <Tooltip text="Departments can be staffed within +/- this many hours of their target. Provides flexibility when perfect staffing isn't possible." />
                 </label>
-                <input
+                <HourInput
                   id="departmentHourThreshold"
-                  type="number"
                   min="0"
                   max="10"
-                  value={getNumberValue(localSettings.departmentHourThreshold)}
-                  onChange={(e) => handleNumberChange('departmentHourThreshold', e.target.value)}
-                  onBlur={() => handleNumberBlur('departmentHourThreshold', 4)}
-                  className="input"
+                  value={localSettings.departmentHourThreshold}
+                  onValueChange={(value) => updateSetting('departmentHourThreshold', value)}
                 />
                 <p className="text-xs text-surface-500 mt-1">
                   Allowable +/- hours from department targets
@@ -481,15 +532,12 @@ export function SettingsPanel() {
                   Employee Hour Band
                   <Tooltip text="Hard constraint: employees must be scheduled within +/- this many hours of their target. Prevents over- or under-scheduling individuals." />
                 </label>
-                <input
+                <HourInput
                   id="targetHardDeltaHours"
-                  type="number"
                   min="1"
                   max="10"
-                  value={getNumberValue(localSettings.targetHardDeltaHours)}
-                  onChange={(e) => handleNumberChange('targetHardDeltaHours', e.target.value)}
-                  onBlur={() => handleNumberBlur('targetHardDeltaHours', 5)}
-                  className="input"
+                  value={localSettings.targetHardDeltaHours}
+                  onValueChange={(value) => updateSetting('targetHardDeltaHours', value)}
                 />
                 <p className="text-xs text-surface-500 mt-1">
                   Keep employees within +/- hours of their target
@@ -500,11 +548,11 @@ export function SettingsPanel() {
 
           {/* UI Preferences */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Accessibility
               <Tooltip text="Visual preferences to improve readability and usability for different needs." />
             </h3>
-            <div className="space-y-4">
+            <div className="space-y-3">
               <div>
                 <label className="label" htmlFor="fontSize">Font Size</label>
                 <select
@@ -519,68 +567,57 @@ export function SettingsPanel() {
                 </select>
               </div>
 
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="highContrast"
-                  checked={localSettings.highContrast}
-                  onChange={(e) => updateSetting('highContrast', e.target.checked)}
-                  className="checkbox-dark"
-                />
-                <label htmlFor="highContrast" className="text-surface-200">
-                  High contrast mode
-                </label>
-              </div>
+              <SettingsBooleanRow
+                id="highContrast"
+                checked={localSettings.highContrast}
+                onCheckedChange={(checked) => updateSetting('highContrast', checked)}
+                label="High contrast mode"
+                description="Boosts separation and focus visibility across both themes."
+              />
             </div>
           </section>
 
           {/* Experimental Features */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Experimental Features
               <Tooltip text="These features are experimental and may change in future versions." />
             </h3>
-            <div className="space-y-4">
-              <div className="flex items-center gap-3">
-                <input
-                  type="checkbox"
-                  id="enforceMinDeptBlock"
-                  checked={localSettings.enforceMinDeptBlock}
-                  onChange={(e) => updateSetting('enforceMinDeptBlock', e.target.checked)}
-                  className="checkbox-dark flex-shrink-0"
-                />
-                <label htmlFor="enforceMinDeptBlock" className="text-surface-200">
-                  Enforce 2-hour minimum department blocks
-                </label>
-                <Tooltip text="When enabled, non-Front-Desk department assignments must be at least 2 hours. Prevents awkward 1-hour fragments within shifts. Favored employees are partially exempt but cannot split a 2-hour shift across two departments." />
-              </div>
+            <div className="space-y-3">
+              <SettingsBooleanRow
+                id="enforceMinDeptBlock"
+                checked={localSettings.enforceMinDeptBlock}
+                onCheckedChange={(checked) => updateSetting('enforceMinDeptBlock', checked)}
+                label="Enforce 2-hour minimum department blocks"
+                description="Prevent awkward 1-hour fragments inside non-front-desk department work."
+                tooltip="When enabled, non-Front-Desk department assignments must be at least 2 hours. Prevents awkward 1-hour fragments within shifts. Favored employees are partially exempt but cannot split a 2-hour shift across two departments."
+              />
             </div>
           </section>
 
           {/* Data Management */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Data Management
             </h3>
             <div className="space-y-3">
-              <p className="text-sm text-surface-400">
+              <p className="text-[13px] leading-5 text-surface-400">
                 Clear all saved staff, departments, and presets. History will be preserved.
               </p>
-              <button
+              <Button
                 onClick={handleClearAllData}
-                className="btn-ghost text-red-400 hover:text-red-300 hover:bg-red-900/20 w-full border border-red-900/50"
+                variant="destructive"
+                className="w-full justify-center"
               >
-                <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                </svg>
+                <Trash2 className="mr-2 h-4 w-4" strokeWidth={1.8} />
                 Clear All Data
-              </button>
+              </Button>
             </div>
           </section>
 
           {/* Updates */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Updates
             </h3>
             <div className="space-y-3">
@@ -593,12 +630,12 @@ export function SettingsPanel() {
                   </div>
                   <div className="h-1.5 bg-surface-700 rounded-full overflow-hidden">
                     <div 
-                      className="h-full bg-accent-500 transition-all duration-300"
+                      className="h-full bg-foreground transition-all duration-300"
                       style={{ width: `${updateStatus.percent}%` }}
                     />
                   </div>
                   {isMac && (
-                    <p className="text-xs text-surface-500 mt-2">
+                    <p className="mt-2 text-xs text-surface-500">
                       Once complete, the installer will open automatically.
                     </p>
                   )}
@@ -606,88 +643,87 @@ export function SettingsPanel() {
               )}
               
               {updateStatus.state === 'available' && (
-                <div className="p-3 bg-accent-900/20 border border-accent-700/50 rounded-lg">
-                  <p className="text-sm text-accent-300 font-medium mb-2">
+                <div className="rounded-lg border border-border bg-surface-800/70 p-3">
+                  <p className="mb-2 flex items-center gap-2 text-sm font-medium text-surface-100">
+                    <Download className="h-4 w-4 text-surface-300" strokeWidth={1.8} />
                     Version {updateStatus.version} available!
                   </p>
                   {isMac ? (
-                    <div className="text-xs mb-3 space-y-2">
+                    <div className="mb-3 space-y-2 text-xs">
                       <p className="text-surface-400">
                         This will download the installer to your Downloads folder and open it. 
                         Drag the app to Applications to replace the old version.
                       </p>
-                      <p className="text-red-400 font-medium">
-                        ⚠️ Important: After installing, open Terminal and run:
+                      <p className="flex items-center gap-1.5 font-medium text-warning-300">
+                        <AlertTriangle className="h-3.5 w-3.5" strokeWidth={1.8} />
+                        After installing, open Terminal and run:
                       </p>
-                      <code className="block bg-surface-950 text-surface-300 px-2 py-1 rounded text-xs font-mono">
+                      <code className="block rounded bg-surface-950 px-2 py-1 text-xs font-mono text-surface-300">
                         xattr -cr /Applications/Scheduler.app
                       </code>
                     </div>
                   ) : (
-                    <p className="text-xs text-surface-400 mb-3">
+                    <p className="mb-3 text-xs text-surface-400">
                       The update will download in the background. Once complete, click &quot;Restart and Install&quot; 
                       to automatically update and relaunch the app.
                     </p>
                   )}
-                  <button
+                  <Button
                     onClick={handleDownloadUpdate}
-                    className="btn-primary w-full text-sm"
+                    className="w-full"
                   >
+                    <Download className="mr-2 h-4 w-4" strokeWidth={1.8} />
                     Download Update
-                  </button>
+                  </Button>
                 </div>
               )}
               
               {updateStatus.state === 'downloaded' && (
-                <div className="p-3 bg-green-900/20 border border-green-700/50 rounded-lg">
-                  <p className="text-sm text-green-300 font-medium mb-2">
+                <div className="rounded-lg border border-border bg-surface-800/70 p-3">
+                  <p className="mb-2 flex items-center gap-2 text-sm font-medium text-surface-100">
+                    <CheckCircle2 className="h-4 w-4 text-surface-300" strokeWidth={1.8} />
                     Version {updateStatus.version} ready to install
                   </p>
-                  <p className="text-xs text-surface-400 mb-3">
+                  <p className="mb-3 text-xs text-surface-400">
                     The app will close and relaunch automatically with the new version.
                   </p>
-                  <button
+                  <Button
                     onClick={handleInstallUpdate}
-                    className="btn-primary w-full text-sm bg-green-600 hover:bg-green-500"
+                    className="w-full"
                   >
+                    <CheckCircle2 className="mr-2 h-4 w-4" strokeWidth={1.8} />
                     Restart and Install
-                  </button>
+                  </Button>
                 </div>
               )}
               
               {updateStatus.state === 'error' && (
-                <div className="p-3 bg-red-900/20 border border-red-700/50 rounded-lg">
-                  <p className="text-sm text-red-400">
-                    {updateStatus.message}
-                  </p>
-                </div>
+                <NoticePanel
+                  variant="error"
+                  title="Update check failed"
+                  description={updateStatus.message}
+                />
               )}
               
               {(updateStatus.state === 'idle' || updateStatus.state === 'not-available' || updateStatus.state === 'checking') && (
-                <button
+                <Button
                   onClick={handleCheckForUpdates}
                   disabled={updateStatus.state === 'checking'}
-                  className={`btn-ghost w-full border border-surface-700 ${
-                    updateStatus.state === 'checking' ? 'opacity-50 cursor-not-allowed' : ''
-                  }`}
+                  variant="outline"
+                  className="w-full"
                 >
                   {updateStatus.state === 'checking' ? (
                     <>
-                      <svg className="w-4 h-4 mr-2 animate-spin" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
+                      <RefreshCw className="mr-2 h-4 w-4 animate-spin" strokeWidth={1.8} />
                       Checking...
                     </>
                   ) : (
                     <>
-                      <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                      </svg>
+                      <RefreshCw className="mr-2 h-4 w-4" strokeWidth={1.8} />
                       Check for Updates
                     </>
                   )}
-                </button>
+                </Button>
               )}
               
               {updateStatus.state === 'not-available' && (
@@ -700,27 +736,26 @@ export function SettingsPanel() {
 
           {/* Feedback */}
           <section>
-            <h3 className="text-sm font-semibold text-surface-300 uppercase tracking-wider mb-4">
+            <h3 className="mb-3 text-xs font-semibold uppercase tracking-[0.12em] text-surface-300">
               Feedback
             </h3>
-            <a
-              href="https://github.com/charliec2004/semester-scheduler-UI/issues"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="btn-ghost w-full border border-surface-700 text-surface-300 hover:text-surface-100"
-            >
-              <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-              </svg>
-              Report a Bug
-            </a>
-            <p className="text-xs text-surface-500 mt-2 text-center">
+            <Button asChild variant="outline" className="w-full justify-center text-surface-300 hover:text-surface-100">
+              <a
+                href="https://github.com/charliec2004/semester-scheduler-UI/issues"
+                target="_blank"
+                rel="noopener noreferrer"
+              >
+                <Bug className="mr-2 h-4 w-4" strokeWidth={1.8} />
+                Report a Bug
+              </a>
+            </Button>
+            <p className="mt-2 text-center text-xs text-surface-500">
               View or report issues on GitHub
             </p>
           </section>
 
           {/* Version Info */}
-          <div className="pt-4 mt-4 border-t border-surface-800">
+          <div className="mt-3 border-t border-surface-800 pt-4">
             <p className="text-xs text-surface-500 text-center">
               Semester Scheduler v{appVersion}
             </p>
@@ -728,22 +763,42 @@ export function SettingsPanel() {
         </div>
 
         {/* Footer */}
-        <div className="sticky bottom-0 bg-surface-900 border-t border-surface-700 px-6 py-4 flex gap-3">
-          <button
+        <div className="sticky bottom-0 flex gap-2.5 border-t border-surface-700 bg-surface-900/95 px-5 py-3 backdrop-blur">
+          <Button
             onClick={handleReset}
-            className="btn-ghost flex-1"
+            variant="ghost"
+            className="flex-1"
           >
             Reset to Defaults
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={handleSave}
             disabled={saving}
-            className="btn-primary flex-1"
+            variant="default"
+            className="flex-1"
           >
             {saving ? 'Saving...' : 'Save Changes'}
-          </button>
+          </Button>
+        </div>
         </div>
       </div>
-    </div>
+      <ConfirmDialog
+        open={pendingConfirmAction !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setPendingConfirmAction(null);
+          }
+        }}
+        title={pendingConfirmAction === 'reset' ? 'Reset settings to defaults?' : 'Clear all scheduler data?'}
+        description={
+          pendingConfirmAction === 'reset'
+            ? 'This will replace your current solver and appearance settings with the app defaults.'
+            : 'This clears all staff, departments, and saved presets. Solver history will be preserved.'
+        }
+        confirmLabel={pendingConfirmAction === 'reset' ? 'Reset Settings' : 'Clear Data'}
+        confirmVariant={pendingConfirmAction === 'reset' ? 'default' : 'destructive'}
+        onConfirm={handleConfirmAction}
+      />
+    </>
   );
 }

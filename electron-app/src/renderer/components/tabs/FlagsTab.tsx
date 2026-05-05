@@ -4,6 +4,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { AlertTriangle, HelpCircle, LoaderCircle, X } from 'lucide-react';
 import { 
   useFlagsStore, 
   useStaffStore, 
@@ -13,9 +14,16 @@ import {
   useUIStore,
   createConfigSnapshot,
 } from '../../store';
-import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, ShiftTimePreference, EqualityConstraint, StaffMember } from '../../../main/ipc-types';
+import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, ShiftTimePreference, EqualityConstraint, StaffMember, Department } from '../../../main/ipc-types';
 import { staffToCsv, departmentsToCsv } from '../../utils/csvValidators';
 import { DAY_NAMES, DAY_END_MINUTES, TIME_SLOT_STARTS } from '../../../shared/constants';
+import { Badge } from '../ui/badge';
+import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
+import { DialogShell } from '../ui/dialog-shell';
+import { Input } from '../ui/input';
+import { NoticePanel } from '../ui/notice-panel';
+import { formatHoursValue } from '../../utils/hours';
 
 // Simple UUID generator for browser compatibility
 function generateId(): string {
@@ -37,6 +45,162 @@ function minutesToTimeLabel(totalMinutes: number): string {
 
 function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
+}
+
+export function getFlagsRunBlockingIssues(staff: StaffMember[], departments: Department[]): string[] {
+  const issues: string[] = [];
+
+  if (staff.length === 0) {
+    issues.push('Import or create staff data.');
+  }
+  if (departments.length === 0) {
+    issues.push('Import or create department data.');
+  }
+
+  const blankStaffCount = staff.filter(member => !member.name.trim()).length;
+  if (blankStaffCount > 0) {
+    issues.push(blankStaffCount === 1 ? 'One employee is missing a name.' : `${blankStaffCount} employees are missing names.`);
+  }
+
+  const duplicateStaffNames = Array.from(
+    staff.reduce((duplicates, member) => {
+      const normalized = normalizeLabel(member.name);
+      if (!normalized) {
+        return duplicates;
+      }
+      duplicates.set(normalized, (duplicates.get(normalized) ?? 0) + 1);
+      return duplicates;
+    }, new Map<string, number>())
+      .entries(),
+  )
+    .filter(([, count]) => count > 1)
+    .map(([name]) => name);
+  if (duplicateStaffNames.length > 0) {
+    issues.push(
+      `Duplicate employee names: ${duplicateStaffNames.slice(0, 3).join(', ')}${duplicateStaffNames.length > 3 ? '...' : ''}.`,
+    );
+  }
+
+  const staffWithNoRoles = staff.filter(member => member.roles.length === 0);
+  if (staffWithNoRoles.length > 0) {
+    issues.push(
+      staffWithNoRoles.length === 1
+        ? `${staffWithNoRoles[0].name || 'An employee'} has no qualifications.`
+        : `${staffWithNoRoles.length} employees have no qualifications.`,
+    );
+  }
+
+  const invalidStaffHoursCount = staff.filter(member => member.targetHours > member.maxHours).length;
+  if (invalidStaffHoursCount > 0) {
+    issues.push(
+      invalidStaffHoursCount === 1
+        ? 'One employee has target hours above max hours.'
+        : `${invalidStaffHoursCount} employees have target hours above max hours.`,
+    );
+  }
+
+  const blankDepartmentCount = departments.filter(department => !department.name.trim()).length;
+  if (blankDepartmentCount > 0) {
+    issues.push(
+      blankDepartmentCount === 1
+        ? 'One department is missing a name.'
+        : `${blankDepartmentCount} departments are missing names.`,
+    );
+  }
+
+  const duplicateDepartments = Array.from(
+    departments.reduce((duplicates, department) => {
+      const normalized = normalizeLabel(department.name);
+      if (!normalized) {
+        return duplicates;
+      }
+      duplicates.set(normalized, (duplicates.get(normalized) ?? 0) + 1);
+      return duplicates;
+    }, new Map<string, number>())
+      .entries(),
+  )
+    .filter(([, count]) => count > 1)
+    .map(([name]) => name);
+  if (duplicateDepartments.length > 0) {
+    issues.push(
+      `Duplicate departments: ${duplicateDepartments.slice(0, 3).join(', ')}${duplicateDepartments.length > 3 ? '...' : ''}.`,
+    );
+  }
+
+  const invalidDepartmentHoursCount = departments.filter(department => department.targetHours > department.maxHours).length;
+  if (invalidDepartmentHoursCount > 0) {
+    issues.push(
+      invalidDepartmentHoursCount === 1
+        ? 'One department has target hours above max hours.'
+        : `${invalidDepartmentHoursCount} departments have target hours above max hours.`,
+    );
+  }
+
+  return issues;
+}
+
+export function FlagsSetupBanner() {
+  const { activeTab, setActiveTab } = useUIStore();
+  const { staff } = useStaffStore();
+  const { departments } = useDepartmentStore();
+
+  const runBlockingIssues = useMemo(() => getFlagsRunBlockingIssues(staff, departments), [departments, staff]);
+  const canRun = runBlockingIssues.length === 0;
+
+  const staffNames = staff.map(member => normalizeLabel(member.name)).filter(Boolean);
+  const departmentLabels = departments.map(department => normalizeLabel(department.name)).filter(Boolean);
+  const hasStaffSetupIssues =
+    staff.length === 0 ||
+    staff.some(member => !member.name.trim()) ||
+    staff.some(member => member.roles.length === 0) ||
+    staff.some(member => member.targetHours > member.maxHours) ||
+    new Set(staffNames).size !== staffNames.length;
+  const hasDepartmentSetupIssues =
+    departments.length === 0 ||
+    departments.some(department => !department.name.trim()) ||
+    departments.some(department => department.targetHours > department.maxHours) ||
+    new Set(departmentLabels).size !== departmentLabels.length;
+
+  if (activeTab !== 'flags' || canRun) {
+    return null;
+  }
+
+  return (
+    <div className="warning-banner">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 px-5 py-2.5 text-[13px]">
+        <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2} />
+        <span className="font-semibold">Cannot run solver:</span>
+        <span className="text-inherit/95">{runBlockingIssues.join(' ')}</span>
+        {(staff.length === 0 || departments.length === 0) && (
+          <button
+            type="button"
+            className="warning-banner-link ml-auto underline underline-offset-4"
+            onClick={() => setActiveTab('import')}
+          >
+            Open Import
+          </button>
+        )}
+        {hasStaffSetupIssues && (
+          <button
+            type="button"
+            className="warning-banner-link underline underline-offset-4"
+            onClick={() => setActiveTab('staff')}
+          >
+            Review Staff
+          </button>
+        )}
+        {hasDepartmentSetupIssues && (
+          <button
+            type="button"
+            className="warning-banner-link underline underline-offset-4"
+            onClick={() => setActiveTab('departments')}
+          >
+            Review Departments
+          </button>
+        )}
+      </div>
+    </div>
+  );
 }
 
 // Convert 24-hour time to 12-hour format for display
@@ -79,10 +243,10 @@ function Tooltip({ text }: { text: React.ReactNode }) {
         onMouseLeave={() => setShow(false)}
         onFocus={handleMouseEnter}
         onBlur={() => setShow(false)}
-        className="w-4 h-4 rounded-full bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-300 flex items-center justify-center text-xs font-medium transition-colors"
+        className="flex h-4 w-4 items-center justify-center rounded-full bg-transparent text-surface-400 transition-colors hover:text-surface-300"
         aria-label="More information"
       >
-        ?
+        <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} />
       </button>
       {show && (
         <div 
@@ -123,98 +287,7 @@ export function FlagsTab() {
 
   const employeeNames = useMemo(() => staff.map(s => s.name).filter(Boolean), [staff]);
   const departmentNames = useMemo(() => departments.map(d => d.name).filter(Boolean), [departments]);
-  const staffWithNoRoles = useMemo(() => staff.filter(s => s.roles.length === 0), [staff]);
-  const runBlockingIssues = useMemo(() => {
-    const issues: string[] = [];
-
-    if (staff.length === 0) {
-      issues.push('Import or create staff data.');
-    }
-    if (departments.length === 0) {
-      issues.push('Import or create department data.');
-    }
-
-    const blankStaffCount = staff.filter(member => !member.name.trim()).length;
-    if (blankStaffCount > 0) {
-      issues.push(blankStaffCount === 1 ? 'One employee is missing a name.' : `${blankStaffCount} employees are missing names.`);
-    }
-
-    const duplicateStaffNames = Array.from(
-      staff.reduce((duplicates, member) => {
-        const normalized = normalizeLabel(member.name);
-        if (!normalized) {
-          return duplicates;
-        }
-        duplicates.set(normalized, (duplicates.get(normalized) ?? 0) + 1);
-        return duplicates;
-      }, new Map<string, number>())
-        .entries(),
-    )
-      .filter(([, count]) => count > 1)
-      .map(([name]) => name);
-    if (duplicateStaffNames.length > 0) {
-      issues.push(
-        `Duplicate employee names: ${duplicateStaffNames.slice(0, 3).join(', ')}${duplicateStaffNames.length > 3 ? '...' : ''}.`,
-      );
-    }
-
-    if (staffWithNoRoles.length > 0) {
-      issues.push(
-        staffWithNoRoles.length === 1
-          ? `${staffWithNoRoles[0].name || 'An employee'} has no qualifications.`
-          : `${staffWithNoRoles.length} employees have no qualifications.`,
-      );
-    }
-
-    const invalidStaffHoursCount = staff.filter(member => member.targetHours > member.maxHours).length;
-    if (invalidStaffHoursCount > 0) {
-      issues.push(
-        invalidStaffHoursCount === 1
-          ? 'One employee has target hours above max hours.'
-          : `${invalidStaffHoursCount} employees have target hours above max hours.`,
-      );
-    }
-
-    const blankDepartmentCount = departments.filter(department => !department.name.trim()).length;
-    if (blankDepartmentCount > 0) {
-      issues.push(
-        blankDepartmentCount === 1
-          ? 'One department is missing a name.'
-          : `${blankDepartmentCount} departments are missing names.`,
-      );
-    }
-
-    const duplicateDepartments = Array.from(
-      departments.reduce((duplicates, department) => {
-        const normalized = normalizeLabel(department.name);
-        if (!normalized) {
-          return duplicates;
-        }
-        duplicates.set(normalized, (duplicates.get(normalized) ?? 0) + 1);
-        return duplicates;
-      }, new Map<string, number>())
-        .entries(),
-    )
-      .filter(([, count]) => count > 1)
-      .map(([name]) => name);
-    if (duplicateDepartments.length > 0) {
-      issues.push(
-        `Duplicate departments: ${duplicateDepartments.slice(0, 3).join(', ')}${duplicateDepartments.length > 3 ? '...' : ''}.`,
-      );
-    }
-
-    const invalidDepartmentHoursCount = departments.filter(department => department.targetHours > department.maxHours).length;
-    if (invalidDepartmentHoursCount > 0) {
-      issues.push(
-        invalidDepartmentHoursCount === 1
-          ? 'One department has target hours above max hours.'
-          : `${invalidDepartmentHoursCount} departments have target hours above max hours.`,
-      );
-    }
-
-    return issues;
-  }, [departments, staff, staffWithNoRoles]);
-
+  const runBlockingIssues = useMemo(() => getFlagsRunBlockingIssues(staff, departments), [departments, staff]);
   const canRun = runBlockingIssues.length === 0;
 
   const handleAddFavored = () => {
@@ -340,23 +413,23 @@ export function FlagsTab() {
           </p>
         </div>
         <div className="flex gap-3">
-          <button 
+          <Button
+            type="button"
             onClick={() => setShowPresetDialog(true)} 
-            className="btn-secondary"
+            variant="secondary"
+            size="sm"
           >
             Save as Preset
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
             onClick={handleRunSolver}
             disabled={!canRun || running}
-            className="btn-primary"
+            size="sm"
           >
             {running ? (
               <>
-                <svg className="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                </svg>
+                <LoaderCircle className="h-4 w-4 animate-spin" strokeWidth={1.8} />
                 Running...
               </>
             ) : (
@@ -370,27 +443,9 @@ export function FlagsTab() {
                 Generate Schedule
               </>
             )}
-          </button>
+          </Button>
         </div>
       </div>
-
-      {/* Warnings */}
-      {!canRun && (
-        <div className="bg-warning-500/10 border border-warning-500/30 rounded-lg p-4 flex items-start gap-3">
-          <svg className="w-5 h-5 text-warning-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-              d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          <div>
-            <p className="font-medium text-warning-400">Cannot Run Solver</p>
-            <ul className="mt-2 space-y-1 text-sm text-warning-300">
-              {runBlockingIssues.map((issue, index) => (
-                <li key={`${issue}-${index}`}>{issue}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
-      )}
 
       {/* Presets */}
       {presets.length > 0 && (
@@ -407,7 +462,7 @@ export function FlagsTab() {
                 </button>
                 <button
                   onClick={() => deletePreset(preset.id)}
-                  className="px-2 flex items-center text-surface-400 hover:text-danger-400 hover:bg-danger-500/20 transition-colors rounded-r-lg"
+                  className="px-2 flex items-center text-surface-400 hover:bg-surface-700/80 hover:text-surface-100 transition-colors rounded-r-lg"
                   aria-label={`Delete preset ${preset.name}`}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -472,19 +527,17 @@ export function FlagsTab() {
 
           <div className="flex flex-wrap gap-2">
             {Object.entries(favoredEmployees).map(([emp, mult]) => (
-              <span key={emp} className="badge-success flex items-center gap-1">
+              <Badge key={emp} variant="secondary" className="gap-1 px-2 py-0.5 text-[12px]">
                 {emp}
-                <span className="text-accent-300 opacity-75">({mult}x)</span>
-                <button 
+                <span className="text-surface-500">({mult}x)</span>
+                <button
                   onClick={() => removeFavoredEmployee(emp)}
-                  className="hover:text-danger-400"
+                  className="text-surface-500 transition-colors hover:text-surface-100"
                   aria-label={`Remove ${emp}`}
                 >
-                  <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                  </svg>
+                  <X className="h-3 w-3" strokeWidth={2} />
                 </button>
-              </span>
+              </Badge>
             ))}
             {Object.keys(favoredEmployees).length === 0 && (
               <span className="text-sm text-surface-500">No favored employees</span>
@@ -496,7 +549,7 @@ export function FlagsTab() {
         <div className="card">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Solver Time Limit
-            <Tooltip text={<>The maximum time the optimizer will spend searching for the best schedule. Longer times may find better solutions but take longer. <span className="text-accent-400 font-medium">4-6 minutes</span> is recommended for most schedules.</>} />
+            <Tooltip text={<>The maximum time the optimizer will spend searching for the best schedule. Longer times may find better solutions but take longer. <span className="font-medium text-surface-200">4-6 minutes</span> is recommended for most schedules.</>} />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
             Maximum time the optimizer will search for solutions
@@ -510,11 +563,11 @@ export function FlagsTab() {
               step="30"
               value={maxSolveSeconds}
               onChange={(e) => setMaxSolveSeconds(parseInt(e.target.value))}
-              className="w-full accent-accent-500"
+              className="w-full accent-foreground"
             />
             <div className="flex justify-between text-sm">
               <span className="text-surface-400">30 sec</span>
-              <span className="font-medium text-accent-400">{maxSolveSeconds} seconds</span>
+              <span className="font-medium text-surface-200">{maxSolveSeconds} seconds</span>
               <span className="text-surface-400">10 min</span>
             </div>
           </div>
@@ -541,11 +594,11 @@ export function FlagsTab() {
             {trainingPairs.map((pair, i) => (
               <div key={i} className="flex items-center justify-between bg-surface-800 rounded-lg px-3 py-2">
                 <span className="text-sm">
-                  <span className="text-accent-400">{pair.department}</span>: {pair.trainee1} + {pair.trainee2}
+                  <span className="text-surface-200">{pair.department}</span>: {pair.trainee1} + {pair.trainee2}
                 </span>
                 <button 
                   onClick={() => removeTrainingPair(i)}
-                  className="text-surface-400 hover:text-danger-400"
+                  className="text-surface-400 hover:text-surface-100"
                   aria-label="Remove training pair"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -559,14 +612,15 @@ export function FlagsTab() {
 
         {/* Favor Department for Front Desk */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
-            Favor Departments for Front Desk
-            <Tooltip text="When filling front desk shifts, prioritize employees from these departments. Use the strength multiplier to control priority when multiple departments are favored. Department members must be qualified for front desk." />
-          </h3>
-          <p className="text-sm text-surface-400 mb-4">
-            Prioritize members of these departments to cover front desk shifts.
-            At least one member must have front desk qualification.
-          </p>
+          <div className="mb-4 min-h-[7.5rem] space-y-2">
+            <h3 className="flex items-center font-semibold text-surface-200">
+              Favor Departments for Front Desk
+              <Tooltip text="When filling front desk shifts, prioritize employees from these departments. Use the strength multiplier to control priority when multiple departments are favored. Department members must be qualified for front desk." />
+            </h3>
+            <p className="max-w-[34rem] text-sm leading-7 text-surface-400">
+              Prioritize members of these departments to cover front desk shifts. At least one member must have front desk qualification.
+            </p>
+          </div>
           
           <div className="space-y-2">
             {departmentNames.map(dept => {
@@ -574,11 +628,10 @@ export function FlagsTab() {
               const mult = favoredFrontDeskDepts[dept] ?? 1.0;
               return (
                 <div key={dept} className="flex items-center gap-3 hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
-                <input
-                  type="checkbox"
+                <Checkbox
                     checked={isChecked}
-                  onChange={(e) => {
-                    if (e.target.checked) {
+                  onCheckedChange={(value) => {
+                    if (value === true) {
                       setFavoredFrontDeskDepts({ ...favoredFrontDeskDepts, [dept]: 1.0 });
                     } else {
                       const { [dept]: _removed, ...rest } = favoredFrontDeskDepts;
@@ -586,7 +639,6 @@ export function FlagsTab() {
                       setFavoredFrontDeskDepts(rest);
                     }
                   }}
-                    className="checkbox-dark"
                   />
                   <span className="text-sm text-surface-200 flex-1">{dept}</span>
                   {isChecked && (
@@ -619,13 +671,15 @@ export function FlagsTab() {
 
         {/* Department Hour Priority */}
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
-            Department Hour Priority
-            <Tooltip text="Increases the priority for these departments to meet their target hours. Use the strength multiplier to control how aggressively the solver targets these departments. Selected departments will get bonus points for focused work time." />
-          </h3>
-          <p className="text-sm text-surface-400 mb-4">
-            Boost focused hours and target adherence for specific departments
-          </p>
+          <div className="mb-4 min-h-[7.5rem] space-y-2">
+            <h3 className="flex items-center font-semibold text-surface-200">
+              Department Hour Priority
+              <Tooltip text="Increases the priority for these departments to meet their target hours. Use the strength multiplier to control how aggressively the solver targets these departments. Selected departments will get bonus points for focused work time." />
+            </h3>
+            <p className="max-w-[34rem] text-sm leading-7 text-surface-400">
+              Boost focused hours and target adherence for specific departments.
+            </p>
+          </div>
           
           <div className="space-y-2">
             {departmentNames.map(dept => {
@@ -633,11 +687,10 @@ export function FlagsTab() {
               const mult = favoredDepartments[dept] ?? 1.0;
               return (
                 <div key={dept} className="flex items-center gap-3 hover:bg-surface-800 rounded-lg px-2 py-1.5 -mx-2 transition-colors">
-                <input
-                  type="checkbox"
+                <Checkbox
                     checked={isChecked}
-                  onChange={(e) => {
-                    if (e.target.checked) {
+                  onCheckedChange={(value) => {
+                    if (value === true) {
                       setFavoredDepartments({ ...favoredDepartments, [dept]: 1.0 });
                     } else {
                       const { [dept]: _removed, ...rest } = favoredDepartments;
@@ -645,7 +698,6 @@ export function FlagsTab() {
                       setFavoredDepartments(rest);
                     }
                   }}
-                    className="checkbox-dark"
                   />
                   <span className="text-sm text-surface-200 flex-1">{dept}</span>
                   {isChecked && (
@@ -700,12 +752,12 @@ export function FlagsTab() {
                 <span className="text-sm">
                   <span className="font-medium text-surface-200">{fed.employee}</span>
                   <span className="text-surface-400"> → </span>
-                  <span className="text-accent-400">{fed.department}</span>
+                  <span className="text-surface-200">{fed.department}</span>
                   <span className="text-surface-500 ml-1">({fed.multiplier || 1}x)</span>
                 </span>
                 <button 
                   onClick={() => removeFavoredEmployeeDept(i)}
-                  className="text-surface-400 hover:text-danger-400 ml-2"
+                  className="ml-2 text-surface-400 hover:text-surface-100"
                   aria-label={`Remove ${fed.employee} → ${fed.department}`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -743,13 +795,13 @@ export function FlagsTab() {
                 <span className="text-sm">
                   <span className="font-medium text-surface-200">{ts.employee}</span>
                   <span className="text-surface-400"> → </span>
-                  <span className="text-accent-400">{ts.department === 'front_desk' ? 'Front Desk' : ts.department}</span>
+                  <span className="text-surface-200">{ts.department === 'front_desk' ? 'Front Desk' : ts.department}</span>
                   <span className="text-surface-400"> on </span>
                   <span>{ts.day} {to12Hour(ts.startTime)}-{to12Hour(ts.endTime)}</span>
                 </span>
                 <button 
                   onClick={() => removeTimeset(i)}
-                  className="text-surface-400 hover:text-danger-400 ml-2"
+                  className="ml-2 text-surface-400 hover:text-surface-100"
                   aria-label="Remove timeset"
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -781,7 +833,7 @@ export function FlagsTab() {
             {equalityConstraints.map((eq, i) => (
               <div key={i} className="flex items-center justify-between bg-surface-800 rounded-lg px-3 py-2">
                 <span className="text-sm">
-                  <span className="text-accent-400">{eq.department}</span>
+                  <span className="text-surface-200">{eq.department}</span>
                   <span className="text-surface-400">: </span>
                   <span className="font-medium text-surface-200">{eq.employee1}</span>
                   <span className="text-surface-400"> = </span>
@@ -789,7 +841,7 @@ export function FlagsTab() {
                 </span>
                 <button 
                   onClick={() => removeEqualityConstraint(i)}
-                  className="text-surface-400 hover:text-danger-400 ml-2"
+                  className="ml-2 text-surface-400 hover:text-surface-100"
                   aria-label={`Remove ${eq.employee1} = ${eq.employee2} equality`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -825,15 +877,15 @@ export function FlagsTab() {
                 <span className="text-sm">
                   <span className="font-medium text-surface-200">{pref.employee}</span>
                   <span className="text-surface-400"> on </span>
-                  <span className="text-accent-400">{pref.day}</span>
+                  <span className="text-surface-200">{pref.day}</span>
                   <span className="text-surface-400"> → </span>
-                  <span className={pref.preference === 'morning' ? 'text-warning-400' : 'text-blue-400'}>
+                  <Badge variant="secondary" className="px-1.5 py-0 text-[11px]">
                     {pref.preference === 'morning' ? 'Morning' : 'Afternoon'}
-                  </span>
+                  </Badge>
                 </span>
                 <button 
                   onClick={() => removeShiftTimePreference(i)}
-                  className="text-surface-400 hover:text-danger-400 ml-2"
+                  className="ml-2 text-surface-400 hover:text-surface-100"
                   aria-label={`Remove ${pref.employee} ${pref.day} preference`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -874,29 +926,6 @@ function PresetDialog({
   onSave: () => void;
   onClose: () => void;
 }) {
-  // Lock main content scroll when modal is open
-  useEffect(() => {
-    const mainContent = document.getElementById('main-content');
-    if (mainContent) {
-      mainContent.style.overflow = 'hidden';
-    }
-    return () => {
-      if (mainContent) {
-        mainContent.style.overflow = '';
-      }
-    };
-  }, []);
-
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
-
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && value.trim()) {
       onSave();
@@ -904,29 +933,39 @@ function PresetDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
-      <div className="absolute inset-0 bg-surface-950/80" onClick={onClose} />
-      <div className="relative bg-surface-900 border border-surface-700 rounded-xl p-6 w-full max-w-md">
-        <h3 className="text-lg font-semibold text-surface-200 mb-4">Save Preset</h3>
-        <input
+    <DialogShell
+      open
+      onClose={onClose}
+      title="Save preset"
+      description="Store the current flag configuration as a reusable preset."
+      widthClassName="max-w-sm"
+      footer={
+        <>
+          <Button type="button" variant="outline" size="sm" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button type="button" variant="default" size="sm" onClick={onSave} disabled={!value.trim()}>
+            Save Preset
+          </Button>
+        </>
+      }
+    >
+      <div className="space-y-2">
+        <label className="label" htmlFor="preset-name">
+          Preset Name
+        </label>
+        <Input
+          id="preset-name"
           type="text"
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder="Preset name..."
-          className="input mb-4"
+          className="input"
           autoFocus
         />
-        <div className="flex gap-3 justify-end">
-          <button onClick={onClose} className="btn-ghost">
-            Cancel
-          </button>
-          <button onClick={onSave} className="btn-primary" disabled={!value.trim()}>
-            Save
-          </button>
-        </div>
       </div>
-    </div>
+    </DialogShell>
   );
 }
 
@@ -1203,14 +1242,14 @@ function MultiplierTooltip() {
         onMouseLeave={() => setShow(false)}
         onFocus={() => setShow(true)}
         onBlur={() => setShow(false)}
-        className="w-4 h-4 rounded-full bg-surface-700 text-surface-400 hover:bg-surface-600 hover:text-surface-300 flex items-center justify-center text-xs font-medium transition-colors"
+        className="flex h-4 w-4 items-center justify-center rounded-full bg-transparent text-surface-400 transition-colors hover:text-surface-300"
         aria-label="Multiplier explanation"
       >
-        ?
+        <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} />
       </button>
       {show && (
         <div className="absolute z-50 bottom-full left-1/2 -translate-x-1/2 mb-2 px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-56 text-left">
-          <strong className="text-accent-400">Multiplier Strength:</strong>
+          <strong className="text-surface-100">Multiplier strength:</strong>
           <ul className="mt-1 space-y-0.5">
             <li><span className="text-surface-400">0.5x</span> - Weak preference</li>
             <li><span className="text-surface-400">1.0x</span> - Normal (default)</li>
@@ -1369,7 +1408,7 @@ function EqualityForm({
       const emp1Data = staff.find(s => s.name === employee1);
       const emp2Data = staff.find(s => s.name === employee2);
       if (emp1Data && emp2Data && emp1Data.targetHours !== emp2Data.targetHours) {
-        setValidationError(`Target hours mismatch: ${employee1} has ${emp1Data.targetHours}hrs, ${employee2} has ${emp2Data.targetHours}hrs`);
+        setValidationError(`Target hours mismatch: ${employee1} has ${formatHoursValue(emp1Data.targetHours)} hrs, ${employee2} has ${formatHoursValue(emp2Data.targetHours)} hrs`);
       } else {
         setValidationError('');
       }
@@ -1449,12 +1488,12 @@ function EqualityForm({
       
       {/* Validation error message */}
       {validationError && (
-        <div className="text-sm text-danger-400 flex items-center gap-1">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-          </svg>
-          {validationError}
-        </div>
+        <NoticePanel
+          variant="neutral"
+          className="py-2"
+          icon={<AlertTriangle className="h-4 w-4 text-surface-300" strokeWidth={1.8} />}
+          description={validationError}
+        />
       )}
     </div>
   );

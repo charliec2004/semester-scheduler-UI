@@ -4,8 +4,13 @@
  */
 
 import { useState, useEffect } from 'react';
+import { ArrowRight, Download, Trash2, Users, Building2 } from 'lucide-react';
 import { useStaffStore, useDepartmentStore, useUIStore, useHistoryStore } from '../../store';
 import { DropZone } from '../ui/DropZone';
+import { Button } from '../ui/button';
+import { ConfirmDialog } from '../ui/confirm-dialog';
+import { NoticePanel } from '../ui/notice-panel';
+import { QuickStartGuide } from '../ui/QuickStartGuide';
 import { validateStaffCsv, validateDepartmentCsv, parseStaffCsv, parseDepartmentCsv } from '../../utils/csvValidators';
 import type { HistoryEntry } from '../../../main/ipc-types';
 
@@ -29,6 +34,7 @@ export function ImportTab() {
   
   const [staffImporting, setStaffImporting] = useState(false);
   const [deptImporting, setDeptImporting] = useState(false);
+  const [configToDelete, setConfigToDelete] = useState<HistoryEntry | null>(null);
 
   useEffect(() => {
     loadHistory();
@@ -123,14 +129,20 @@ export function ImportTab() {
   };
 
   const handleDeleteConfig = async (entry: HistoryEntry) => {
-    if (window.confirm(`Delete this configuration and its output files?`)) {
-      try {
-        await deleteEntry(entry.id);
-        showToast('Configuration deleted', 'info');
-      } catch (err) {
-        console.error('Failed to delete config:', err);
-        showToast('Failed to delete configuration', 'error');
-      }
+    setConfigToDelete(entry);
+  };
+
+  const confirmDeleteConfig = async () => {
+    if (!configToDelete) return;
+
+    try {
+      await deleteEntry(configToDelete.id);
+      showToast('Configuration deleted', 'info');
+    } catch (err) {
+      console.error('Failed to delete config:', err);
+      showToast('Failed to delete configuration', 'error');
+    } finally {
+      setConfigToDelete(null);
     }
   };
 
@@ -142,6 +154,36 @@ export function ImportTab() {
       hour: 'numeric',
       minute: '2-digit',
     });
+  };
+
+  const renderIssues = (
+    items: Array<{ row?: number; column?: string; message: string }>,
+    kind: 'error' | 'warning',
+    label: string,
+  ) => {
+    if (items.length === 0) return null;
+
+    return (
+      <NoticePanel variant={kind} title={`${label} (${items.length})`}>
+        <ul className="max-h-32 space-y-1 overflow-auto">
+          {items.slice(0, 5).map((item, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <span className="text-surface-300">•</span>
+              <span>
+                {item.row && `Row ${item.row}: `}
+                {item.column && `[${item.column}] `}
+                {item.message}
+              </span>
+            </li>
+          ))}
+          {items.length > 5 && (
+            <li className="text-surface-400">
+              ...and {items.length - 5} more
+            </li>
+          )}
+        </ul>
+      </NoticePanel>
+    );
   };
 
   return (
@@ -167,7 +209,7 @@ export function ImportTab() {
                 className="flex items-center justify-between p-3 bg-surface-800 rounded-lg hover:bg-surface-700 transition-colors"
               >
                 <div className="flex items-center gap-4">
-                  <div className="w-8 h-8 bg-accent-600/20 rounded-full flex items-center justify-center text-accent-400 font-semibold text-sm">
+                  <div className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-surface-900 text-[12px] font-semibold text-surface-300">
                     {index + 1}
                   </div>
                   <div>
@@ -180,22 +222,22 @@ export function ImportTab() {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
+                  <Button
                     onClick={() => handleRestoreConfig(entry)}
-                    className="btn-secondary text-sm py-1.5"
+                    variant="secondary"
+                    size="sm"
                   >
                     Restore
-                  </button>
-                  <button
+                  </Button>
+                  <Button
                     onClick={() => handleDeleteConfig(entry)}
-                    className="btn-ghost text-danger-400 hover:text-danger-300 p-1.5"
+                    variant="ghost"
+                    size="icon-sm"
+                    className="text-danger-300 hover:bg-danger-700/10 hover:text-danger-200"
                     aria-label="Delete configuration"
                   >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                        d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
-                  </button>
+                    <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+                  </Button>
                 </div>
               </div>
             ))}
@@ -209,16 +251,14 @@ export function ImportTab() {
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-surface-200">Staff / Employees</h3>
-            <button
+            <Button
               onClick={() => handleDownloadSample('staff')}
-              className="btn-ghost text-sm"
+              variant="ghost"
+              size="sm"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
+              <Download className="h-4 w-4" strokeWidth={1.8} />
               Download Sample
-            </button>
+            </Button>
           </div>
 
           <DropZone
@@ -226,97 +266,51 @@ export function ImportTab() {
             label="Drop Staff CSV Here"
             description="Employee names, roles, availability, and hour targets"
             icon={
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <Users className="h-6 w-6" strokeWidth={1.8} />
             }
           />
 
           <div className="flex items-center justify-between text-sm">
-            <button
+            <Button
               onClick={() => handleOpenFilePicker('staff')}
-              className="btn-secondary"
+              variant="secondary"
+              size="sm"
               disabled={staffImporting}
             >
               {staffImporting ? 'Importing...' : 'Browse Files'}
-            </button>
+            </Button>
             
             {staff.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="badge-success">
+              <Button
+                onClick={() => setActiveTab('staff')}
+                variant="outline"
+                size="sm"
+                className="gap-2 px-3"
+              >
+                <span className="text-sm font-medium">
                   {staff.length} employees loaded
                 </span>
-                <button
-                  onClick={() => setActiveTab('staff')}
-                  className="text-accent-400 hover:text-accent-300"
-                >
-                  View →
-                </button>
-              </div>
+                <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+              </Button>
             )}
           </div>
 
-          {/* Validation Errors */}
-          {staffValidationErrors.length > 0 && (
-            <div className="bg-danger-500/10 border border-danger-500/30 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-danger-400 mb-2">
-                Validation Errors ({staffValidationErrors.length})
-              </h4>
-              <ul className="space-y-1 text-sm text-danger-300 max-h-32 overflow-auto">
-                {staffValidationErrors.slice(0, 5).map((err, i) => (
-                  <li key={i}>
-                    {err.row && `Row ${err.row}: `}
-                    {err.column && `[${err.column}] `}
-                    {err.message}
-                  </li>
-                ))}
-                {staffValidationErrors.length > 5 && (
-                  <li className="text-surface-400">
-                    ...and {staffValidationErrors.length - 5} more
-                  </li>
-                )}
-              </ul>
-            </div>
-          )}
-
-          {staffValidationWarnings.length > 0 && (
-            <div className="bg-warning-500/10 border border-warning-500/30 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-warning-400 mb-2">
-                Warnings ({staffValidationWarnings.length})
-              </h4>
-              <ul className="space-y-1 text-sm text-warning-200 max-h-32 overflow-auto">
-                {staffValidationWarnings.slice(0, 5).map((warning, i) => (
-                  <li key={i}>
-                    {warning.row && `Row ${warning.row}: `}
-                    {warning.column && `[${warning.column}] `}
-                    {warning.message}
-                  </li>
-                ))}
-                {staffValidationWarnings.length > 5 && (
-                  <li className="text-surface-400">
-                    ...and {staffValidationWarnings.length - 5} more
-                  </li>
-                )}
-              </ul>
-            </div>
-          )}
+          {renderIssues(staffValidationErrors, 'error', 'Validation errors')}
+          {renderIssues(staffValidationWarnings, 'warning', 'Warnings')}
         </div>
 
         {/* Department Import */}
         <div className="card space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="font-semibold text-surface-200">Departments</h3>
-            <button
+            <Button
               onClick={() => handleDownloadSample('dept')}
-              className="btn-ghost text-sm"
+              variant="ghost"
+              size="sm"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-              </svg>
+              <Download className="h-4 w-4" strokeWidth={1.8} />
               Download Sample
-            </button>
+            </Button>
           </div>
 
           <DropZone
@@ -324,117 +318,54 @@ export function ImportTab() {
             label="Drop Department CSV Here"
             description="Department names with target and max hour budgets"
             icon={
-              <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                  d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4" />
-              </svg>
+              <Building2 className="h-6 w-6" strokeWidth={1.8} />
             }
           />
 
           <div className="flex items-center justify-between text-sm">
-            <button
+            <Button
               onClick={() => handleOpenFilePicker('dept')}
-              className="btn-secondary"
+              variant="secondary"
+              size="sm"
               disabled={deptImporting}
             >
               {deptImporting ? 'Importing...' : 'Browse Files'}
-            </button>
+            </Button>
             
             {departments.length > 0 && (
-              <div className="flex items-center gap-2">
-                <span className="badge-success">
+              <Button
+                onClick={() => setActiveTab('departments')}
+                variant="outline"
+                size="sm"
+                className="gap-2 px-3"
+              >
+                <span className="text-sm font-medium">
                   {departments.length} departments loaded
                 </span>
-                <button
-                  onClick={() => setActiveTab('departments')}
-                  className="text-accent-400 hover:text-accent-300"
-                >
-                  View →
-                </button>
-              </div>
+                <ArrowRight className="h-4 w-4" strokeWidth={1.8} />
+              </Button>
             )}
           </div>
 
-          {/* Validation Errors */}
-          {deptValidationErrors.length > 0 && (
-            <div className="bg-danger-500/10 border border-danger-500/30 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-danger-400 mb-2">
-                Validation Errors ({deptValidationErrors.length})
-              </h4>
-              <ul className="space-y-1 text-sm text-danger-300 max-h-32 overflow-auto">
-                {deptValidationErrors.slice(0, 5).map((err, i) => (
-                  <li key={i}>
-                    {err.row && `Row ${err.row}: `}
-                    {err.column && `[${err.column}] `}
-                    {err.message}
-                  </li>
-                ))}
-                {deptValidationErrors.length > 5 && (
-                  <li className="text-surface-400">
-                    ...and {deptValidationErrors.length - 5} more
-                  </li>
-                )}
-              </ul>
-            </div>
-          )}
-
-          {deptValidationWarnings.length > 0 && (
-            <div className="bg-warning-500/10 border border-warning-500/30 rounded-lg p-4">
-              <h4 className="text-sm font-medium text-warning-400 mb-2">
-                Warnings ({deptValidationWarnings.length})
-              </h4>
-              <ul className="space-y-1 text-sm text-warning-200 max-h-32 overflow-auto">
-                {deptValidationWarnings.slice(0, 5).map((warning, i) => (
-                  <li key={i}>
-                    {warning.row && `Row ${warning.row}: `}
-                    {warning.column && `[${warning.column}] `}
-                    {warning.message}
-                  </li>
-                ))}
-                {deptValidationWarnings.length > 5 && (
-                  <li className="text-surface-400">
-                    ...and {deptValidationWarnings.length - 5} more
-                  </li>
-                )}
-              </ul>
-            </div>
-          )}
+          {renderIssues(deptValidationErrors, 'error', 'Validation errors')}
+          {renderIssues(deptValidationWarnings, 'warning', 'Warnings')}
         </div>
       </div>
 
-      {/* Quick Start Guide */}
-      <div className="card bg-surface-800/50">
-        <h3 className="font-semibold text-surface-200 mb-4">Quick Start Guide</h3>
-        <div className="grid md:grid-cols-3 gap-6 text-sm">
-          <div className="space-y-2">
-            <div className="w-8 h-8 bg-accent-600/20 rounded-lg flex items-center justify-center text-accent-400 font-semibold">
-              1
-            </div>
-            <h4 className="font-medium text-surface-200">Import or Create Data</h4>
-            <p className="text-surface-400">
-              Upload your CSV files or use the Departments and Staff tabs to create data from scratch.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <div className="w-8 h-8 bg-accent-600/20 rounded-lg flex items-center justify-center text-accent-400 font-semibold">
-              2
-            </div>
-            <h4 className="font-medium text-surface-200">Configure Flags</h4>
-            <p className="text-surface-400">
-              Set preferences like favored employees, training pairs, and department priorities.
-            </p>
-          </div>
-          <div className="space-y-2">
-            <div className="w-8 h-8 bg-accent-600/20 rounded-lg flex items-center justify-center text-accent-400 font-semibold">
-              3
-            </div>
-            <h4 className="font-medium text-surface-200">Generate Schedule</h4>
-            <p className="text-surface-400">
-              Run the optimizer and export your completed schedule as Excel.
-            </p>
-          </div>
-        </div>
-      </div>
+      <QuickStartGuide />
+      <ConfirmDialog
+        open={configToDelete !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setConfigToDelete(null);
+          }
+        }}
+        title="Delete saved configuration?"
+        description="This removes the saved configuration and its output files from history."
+        confirmLabel="Delete Configuration"
+        confirmVariant="destructive"
+        onConfirm={confirmDeleteConfig}
+      />
     </div>
   );
 }

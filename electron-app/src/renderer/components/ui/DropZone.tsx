@@ -4,6 +4,8 @@
  */
 
 import { useState, useRef, useCallback } from 'react';
+import { Upload } from 'lucide-react';
+import { cn } from '../../lib/utils';
 
 interface DropZoneProps {
   onFileDrop: (content: string, path: string) => void;
@@ -73,10 +75,7 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
   };
 
   const defaultIcon = (
-    <svg className="w-8 h-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-        d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-    </svg>
+    <Upload className="h-6 w-6" strokeWidth={1.8} />
   );
 
   return (
@@ -88,7 +87,7 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={`drop-zone cursor-pointer ${isDragging ? 'drop-zone-active' : ''}`}
+      className={cn('drop-zone cursor-pointer', isDragging && 'drop-zone-active')}
       aria-label={`${label}. Click or drag and drop a file.`}
     >
       <input
@@ -100,18 +99,18 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
         aria-hidden="true"
       />
       
-      <div className={`text-surface-400 ${isDragging ? 'text-accent-400' : ''}`}>
+      <div className={cn('text-surface-400', isDragging && 'text-foreground')}>
         {icon || defaultIcon}
       </div>
       
       <div className="text-center">
-        <p className="text-surface-200 font-medium">{label}</p>
+        <p className="text-sm font-medium text-surface-200">{label}</p>
         {description && (
-          <p className="text-sm text-surface-400 mt-1">{description}</p>
+          <p className="mt-1 text-[13px] text-surface-400">{description}</p>
         )}
       </div>
       
-      <p className="text-xs text-surface-500">
+      <p className="text-[11px] text-surface-500">
         Drag & drop or click to browse
       </p>
     </div>

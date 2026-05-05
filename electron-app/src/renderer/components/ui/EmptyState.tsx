@@ -3,6 +3,8 @@
  * Displays friendly placeholder when no data is present
  */
 
+import { Button } from './button';
+
 interface EmptyStateProps {
   icon: JSX.Element;
   title: string;
@@ -15,16 +17,16 @@ interface EmptyStateProps {
 
 export function EmptyState({ icon, title, description, action }: EmptyStateProps) {
   return (
-    <div className="flex flex-col items-center justify-center py-16 px-8 text-center">
-      <div className="w-16 h-16 bg-surface-800 rounded-full flex items-center justify-center mb-6 text-surface-400">
+    <div className="flex flex-col items-center justify-center px-8 py-16 text-center">
+      <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-lg border border-border bg-card text-surface-400">
         {icon}
       </div>
-      <h3 className="text-lg font-medium text-surface-200 mb-2">{title}</h3>
-      <p className="text-surface-400 max-w-md mb-6">{description}</p>
+      <h3 className="mb-2 text-base font-semibold text-surface-200">{title}</h3>
+      <p className="mb-5 max-w-2xl text-[13px] text-surface-400 sm:whitespace-nowrap">{description}</p>
       {action && (
-        <button onClick={action.onClick} className="btn-primary">
+        <Button onClick={action.onClick} size="sm">
           {action.label}
-        </button>
+        </Button>
       )}
     </div>
   );
