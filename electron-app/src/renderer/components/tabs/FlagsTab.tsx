@@ -15,7 +15,7 @@ import {
 } from '../../store';
 import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, ShiftTimePreference, EqualityConstraint, StaffMember } from '../../../main/ipc-types';
 import { staffToCsv, departmentsToCsv } from '../../utils/csvValidators';
-import { DAY_NAMES, DAY_END_MINUTES, SLOT_MINUTES, TIME_SLOT_STARTS } from '../../../shared/constants';
+import { DAY_NAMES, DAY_END_MINUTES, TIME_SLOT_STARTS } from '../../../shared/constants';
 
 // Simple UUID generator for browser compatibility
 function generateId(): string {
@@ -33,6 +33,10 @@ function minutesToTimeLabel(totalMinutes: number): string {
   const hours = Math.floor(totalMinutes / 60);
   const minutes = totalMinutes % 60;
   return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+}
+
+function normalizeLabel(value: string): string {
+  return value.trim().toLowerCase();
 }
 
 // Convert 24-hour time to 12-hour format for display
@@ -120,8 +124,98 @@ export function FlagsTab() {
   const employeeNames = useMemo(() => staff.map(s => s.name).filter(Boolean), [staff]);
   const departmentNames = useMemo(() => departments.map(d => d.name).filter(Boolean), [departments]);
   const staffWithNoRoles = useMemo(() => staff.filter(s => s.roles.length === 0), [staff]);
+  const runBlockingIssues = useMemo(() => {
+    const issues: string[] = [];
 
-  const canRun = staff.length > 0 && departments.length > 0 && staffWithNoRoles.length === 0;
+    if (staff.length === 0) {
+      issues.push('Import or create staff data.');
+    }
+    if (departments.length === 0) {
+      issues.push('Import or create department data.');
+    }
+
+    const blankStaffCount = staff.filter(member => !member.name.trim()).length;
+    if (blankStaffCount > 0) {
+      issues.push(blankStaffCount === 1 ? 'One employee is missing a name.' : `${blankStaffCount} employees are missing names.`);
+    }
+
+    const duplicateStaffNames = Array.from(
+      staff.reduce((duplicates, member) => {
+        const normalized = normalizeLabel(member.name);
+        if (!normalized) {
+          return duplicates;
+        }
+        duplicates.set(normalized, (duplicates.get(normalized) ?? 0) + 1);
+        return duplicates;
+      }, new Map<string, number>())
+        .entries(),
+    )
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name);
+    if (duplicateStaffNames.length > 0) {
+      issues.push(
+        `Duplicate employee names: ${duplicateStaffNames.slice(0, 3).join(', ')}${duplicateStaffNames.length > 3 ? '...' : ''}.`,
+      );
+    }
+
+    if (staffWithNoRoles.length > 0) {
+      issues.push(
+        staffWithNoRoles.length === 1
+          ? `${staffWithNoRoles[0].name || 'An employee'} has no qualifications.`
+          : `${staffWithNoRoles.length} employees have no qualifications.`,
+      );
+    }
+
+    const invalidStaffHoursCount = staff.filter(member => member.targetHours > member.maxHours).length;
+    if (invalidStaffHoursCount > 0) {
+      issues.push(
+        invalidStaffHoursCount === 1
+          ? 'One employee has target hours above max hours.'
+          : `${invalidStaffHoursCount} employees have target hours above max hours.`,
+      );
+    }
+
+    const blankDepartmentCount = departments.filter(department => !department.name.trim()).length;
+    if (blankDepartmentCount > 0) {
+      issues.push(
+        blankDepartmentCount === 1
+          ? 'One department is missing a name.'
+          : `${blankDepartmentCount} departments are missing names.`,
+      );
+    }
+
+    const duplicateDepartments = Array.from(
+      departments.reduce((duplicates, department) => {
+        const normalized = normalizeLabel(department.name);
+        if (!normalized) {
+          return duplicates;
+        }
+        duplicates.set(normalized, (duplicates.get(normalized) ?? 0) + 1);
+        return duplicates;
+      }, new Map<string, number>())
+        .entries(),
+    )
+      .filter(([, count]) => count > 1)
+      .map(([name]) => name);
+    if (duplicateDepartments.length > 0) {
+      issues.push(
+        `Duplicate departments: ${duplicateDepartments.slice(0, 3).join(', ')}${duplicateDepartments.length > 3 ? '...' : ''}.`,
+      );
+    }
+
+    const invalidDepartmentHoursCount = departments.filter(department => department.targetHours > department.maxHours).length;
+    if (invalidDepartmentHoursCount > 0) {
+      issues.push(
+        invalidDepartmentHoursCount === 1
+          ? 'One department has target hours above max hours.'
+          : `${invalidDepartmentHoursCount} departments have target hours above max hours.`,
+      );
+    }
+
+    return issues;
+  }, [departments, staff, staffWithNoRoles]);
+
+  const canRun = runBlockingIssues.length === 0;
 
   const handleAddFavored = () => {
     if (newFavored && !(newFavored in favoredEmployees)) {
@@ -289,19 +383,11 @@ export function FlagsTab() {
           </svg>
           <div>
             <p className="font-medium text-warning-400">Cannot Run Solver</p>
-            <p className="text-sm text-warning-300 mt-1">
-              {staff.length === 0 && 'Import or create staff data. '}
-              {departments.length === 0 && 'Import or create department data. '}
-              {staffWithNoRoles.length > 0 && (
-                <>
-                  {staffWithNoRoles.length === 1
-                    ? `${staffWithNoRoles[0].name || 'An employee'} has no qualifications. `
-                    : `${staffWithNoRoles.length} employees have no qualifications: ${staffWithNoRoles.slice(0, 3).map(s => s.name || 'Unnamed').join(', ')}${staffWithNoRoles.length > 3 ? '...' : ''}. `
-                  }
-                  Assign roles in the Staff tab.
-                </>
-              )}
-            </p>
+            <ul className="mt-2 space-y-1 text-sm text-warning-300">
+              {runBlockingIssues.map((issue, index) => (
+                <li key={`${issue}-${index}`}>{issue}</li>
+              ))}
+            </ul>
           </div>
         </div>
       )}

@@ -20,27 +20,77 @@ import type {
   ConfigSnapshot,
 } from '../../main/ipc-types';
 import {
-  createDefaultTravelBuffers,
-  DAY_NAMES,
-  normalizeAvailabilityMap,
+  migrateStaffAvailabilityShape,
+  type DayName,
+  type DayTravelBuffer,
+  type LegacyAvailabilityBlock,
 } from '../../shared/constants';
 
+type LegacyStaffMember = StaffMember & {
+  travelBuffers?: Record<DayName, DayTravelBuffer> | null;
+  availabilityBlocks?: Record<DayName, LegacyAvailabilityBlock[]> | null;
+};
 
-function normalizeStaffMember(member: StaffMember): StaffMember {
-  const defaultTravelBuffers = createDefaultTravelBuffers();
+function normalizeDepartmentName(name: string): string {
+  return name.trim().toLowerCase().replace(/[\s_]+/g, '_');
+}
+
+function normalizeStaffMember(member: LegacyStaffMember): StaffMember {
+  const { travelBuffers: _legacyTravel, availability: _a, unavailabilityBlocks: _ub, availabilityBlocks: _ab, ...rest } =
+    member;
+  void _legacyTravel;
+  void _a;
+  void _ub;
+  void _ab;
+  const { unavailabilityBlocks, availability } = migrateStaffAvailabilityShape(member);
   return {
-    ...member,
-    availability: normalizeAvailabilityMap(member.availability),
-    travelBuffers: Object.fromEntries(
-      DAY_NAMES.map(day => [
-        day,
-        {
-          beforeNextCommitment: member.travelBuffers?.[day]?.beforeNextCommitment ?? defaultTravelBuffers[day].beforeNextCommitment,
-          afterPreviousCommitment: member.travelBuffers?.[day]?.afterPreviousCommitment ?? defaultTravelBuffers[day].afterPreviousCommitment,
-        },
-      ]),
-    ) as StaffMember['travelBuffers'],
+    ...(rest as Omit<StaffMember, 'availability' | 'unavailabilityBlocks'>),
+    unavailabilityBlocks,
+    availability,
   };
+}
+
+function dedupeBy<T>(items: T[], keyFor: (item: T) => string): T[] {
+  const seen = new Set<string>();
+  return items.filter((item) => {
+    const key = keyFor(item);
+    if (seen.has(key)) {
+      return false;
+    }
+    seen.add(key);
+    return true;
+  });
+}
+
+function renameDepartmentMultiplierMap(
+  source: Record<string, number>,
+  oldName: string,
+  newName: string,
+): Record<string, number> {
+  const oldNormalized = normalizeDepartmentName(oldName);
+  const next: Record<string, number> = {};
+  for (const [name, value] of Object.entries(source)) {
+    const key = normalizeDepartmentName(name) === oldNormalized ? newName : name;
+    next[key] = value;
+  }
+  return next;
+}
+
+function removeDepartmentMultiplierMap(
+  source: Record<string, number>,
+  departmentName: string,
+): Record<string, number> {
+  const normalized = normalizeDepartmentName(departmentName);
+  return Object.fromEntries(
+    Object.entries(source).filter(([name]) => normalizeDepartmentName(name) !== normalized),
+  );
+}
+
+function persistUpdatedPresets(presets: FlagPreset[]): void {
+  if (typeof window === 'undefined' || !window.electronAPI?.presets) {
+    return;
+  }
+  void Promise.all(presets.map((preset) => window.electronAPI.presets.save(preset)));
 }
 
 // ---------------------------------------------------------------------------
@@ -91,6 +141,7 @@ interface StaffState {
   updateStaffMember: (index: number, member: Partial<StaffMember>) => void;
   addStaffMember: (member: StaffMember) => void;
   removeStaffMember: (index: number) => void;
+  renameRoleAcrossStaff: (oldRole: string, newRole: string) => void;
   removeRoleFromAllStaff: (role: string) => void;
   setErrors: (errors: ValidationError[], warnings: ValidationError[]) => void;
   setDirty: (dirty: boolean) => void;
@@ -120,6 +171,20 @@ export const useStaffStore = create<StaffState>((set, get) => ({
 
   removeStaffMember: (index) => {
     const staff = get().staff.filter((_, i) => i !== index);
+    set({ staff, dirty: true });
+  },
+
+  renameRoleAcrossStaff: (oldRole, newRole) => {
+    if (!oldRole || !newRole || oldRole === newRole) {
+      return;
+    }
+    const staff = get().staff.map(member => ({
+      ...member,
+      roles: dedupeBy(
+        member.roles.map(role => (role === oldRole ? newRole : role)),
+        role => role,
+      ),
+    }));
     set({ staff, dirty: true });
   },
 
@@ -181,8 +246,23 @@ export const useDepartmentStore = create<DepartmentState>((set, get) => ({
   
   updateDepartment: (index, dept) => {
     const departments = [...get().departments];
-    departments[index] = { ...departments[index], ...dept };
+    const previous = departments[index];
+    const next = { ...previous, ...dept };
+    departments[index] = next;
     set({ departments, dirty: true });
+
+    if (previous && dept.name !== undefined && previous.name !== next.name) {
+      const previousName = previous.name.trim();
+      const nextName = next.name.trim();
+      if (previousName && nextName) {
+        const previousRole = normalizeDepartmentName(previousName);
+        const nextRole = normalizeDepartmentName(nextName);
+        if (previousRole !== nextRole) {
+          useStaffStore.getState().renameRoleAcrossStaff(previousRole, nextRole);
+        }
+        useFlagsStore.getState().renameDepartmentReferences(previousName, nextName);
+      }
+    }
   },
 
   addDepartment: (dept) => {
@@ -195,8 +275,9 @@ export const useDepartmentStore = create<DepartmentState>((set, get) => ({
     set({ departments, dirty: true });
     // Also remove this department's role from all staff members
     if (deptToRemove) {
-      const normalizedRole = deptToRemove.name.toLowerCase().replace(/\s+/g, '_');
+      const normalizedRole = normalizeDepartmentName(deptToRemove.name);
       useStaffStore.getState().removeRoleFromAllStaff(normalizedRole);
+      useFlagsStore.getState().removeDepartmentReferences(deptToRemove.name);
     }
   },
 
@@ -274,6 +355,8 @@ interface FlagsState {
   deletePreset: (presetId: string) => Promise<void>;
   applyPreset: (preset: FlagPreset) => void;
   clearPresets: () => void;
+  renameDepartmentReferences: (oldName: string, newName: string) => void;
+  removeDepartmentReferences: (departmentName: string) => void;
   
   reset: () => void;
 }
@@ -394,6 +477,145 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
 
   clearPresets: () => set({ presets: [] }),
 
+  renameDepartmentReferences: (oldName, newName) => {
+    const oldNormalized = normalizeDepartmentName(oldName);
+    const newNormalized = normalizeDepartmentName(newName);
+    let nextPresets: FlagPreset[] = [];
+    set((state) => {
+      nextPresets = state.presets.map((preset) => ({
+        ...preset,
+        favoredDepartments: renameDepartmentMultiplierMap(preset.favoredDepartments, oldName, newName),
+        favoredFrontDeskDepts: renameDepartmentMultiplierMap(preset.favoredFrontDeskDepts, oldName, newName),
+        trainingPairs: dedupeBy(
+          preset.trainingPairs.map(pair => ({
+            ...pair,
+            department: normalizeDepartmentName(pair.department) === oldNormalized ? newName : pair.department,
+          })),
+          pair => `${normalizeDepartmentName(pair.department)}|${[pair.trainee1, pair.trainee2].sort().join('|')}`,
+        ),
+        favoredEmployeeDepts: dedupeBy(
+          (preset.favoredEmployeeDepts || []).map(pref => ({
+            ...pref,
+            department:
+              normalizeDepartmentName(pref.department) === oldNormalized ? newName : pref.department,
+          })),
+          pref => `${pref.employee.toLowerCase()}|${normalizeDepartmentName(pref.department)}`,
+        ),
+        timesets: dedupeBy(
+          preset.timesets.map(timeset => ({
+            ...timeset,
+            department:
+              normalizeDepartmentName(timeset.department) === oldNormalized ? newNormalized : timeset.department,
+          })),
+          timeset =>
+            [
+              timeset.employee.toLowerCase(),
+              timeset.day.toLowerCase(),
+              normalizeDepartmentName(timeset.department),
+              timeset.startTime,
+              timeset.endTime,
+            ].join('|'),
+        ),
+        equalityConstraints: dedupeBy(
+          (preset.equalityConstraints || []).map(constraint => ({
+            ...constraint,
+            department:
+              normalizeDepartmentName(constraint.department) === oldNormalized ? newName : constraint.department,
+          })),
+          constraint =>
+            `${normalizeDepartmentName(constraint.department)}|${[constraint.employee1, constraint.employee2].sort().join('|')}`,
+        ),
+      }));
+      return {
+        favoredDepartments: renameDepartmentMultiplierMap(state.favoredDepartments, oldName, newName),
+        favoredFrontDeskDepts: renameDepartmentMultiplierMap(state.favoredFrontDeskDepts, oldName, newName),
+        trainingPairs: dedupeBy(
+          state.trainingPairs.map(pair => ({
+            ...pair,
+            department: normalizeDepartmentName(pair.department) === oldNormalized ? newName : pair.department,
+          })),
+          pair => `${normalizeDepartmentName(pair.department)}|${[pair.trainee1, pair.trainee2].sort().join('|')}`,
+        ),
+        favoredEmployeeDepts: dedupeBy(
+          state.favoredEmployeeDepts.map(pref => ({
+            ...pref,
+            department:
+              normalizeDepartmentName(pref.department) === oldNormalized ? newName : pref.department,
+          })),
+          pref => `${pref.employee.toLowerCase()}|${normalizeDepartmentName(pref.department)}`,
+        ),
+        timesets: dedupeBy(
+          state.timesets.map(timeset => ({
+            ...timeset,
+            department:
+              normalizeDepartmentName(timeset.department) === oldNormalized ? newNormalized : timeset.department,
+          })),
+          timeset =>
+            [
+              timeset.employee.toLowerCase(),
+              timeset.day.toLowerCase(),
+              normalizeDepartmentName(timeset.department),
+              timeset.startTime,
+              timeset.endTime,
+            ].join('|'),
+        ),
+        equalityConstraints: dedupeBy(
+          state.equalityConstraints.map(constraint => ({
+            ...constraint,
+            department:
+              normalizeDepartmentName(constraint.department) === oldNormalized ? newName : constraint.department,
+          })),
+          constraint =>
+            `${normalizeDepartmentName(constraint.department)}|${[constraint.employee1, constraint.employee2].sort().join('|')}`,
+        ),
+        presets: nextPresets,
+      };
+    });
+    persistUpdatedPresets(nextPresets);
+  },
+
+  removeDepartmentReferences: (departmentName) => {
+    const normalized = normalizeDepartmentName(departmentName);
+    let nextPresets: FlagPreset[] = [];
+    set((state) => {
+      nextPresets = state.presets.map((preset) => ({
+        ...preset,
+        favoredDepartments: removeDepartmentMultiplierMap(preset.favoredDepartments, departmentName),
+        favoredFrontDeskDepts: removeDepartmentMultiplierMap(preset.favoredFrontDeskDepts, departmentName),
+        trainingPairs: preset.trainingPairs.filter(
+          pair => normalizeDepartmentName(pair.department) !== normalized,
+        ),
+        favoredEmployeeDepts: (preset.favoredEmployeeDepts || []).filter(
+          pref => normalizeDepartmentName(pref.department) !== normalized,
+        ),
+        timesets: preset.timesets.filter(
+          timeset => normalizeDepartmentName(timeset.department) !== normalized,
+        ),
+        equalityConstraints: (preset.equalityConstraints || []).filter(
+          constraint => normalizeDepartmentName(constraint.department) !== normalized,
+        ),
+      }));
+      return {
+        favoredDepartments: removeDepartmentMultiplierMap(state.favoredDepartments, departmentName),
+        favoredFrontDeskDepts: removeDepartmentMultiplierMap(state.favoredFrontDeskDepts, departmentName),
+        trainingPairs: state.trainingPairs.filter(
+          pair => normalizeDepartmentName(pair.department) !== normalized,
+        ),
+        favoredEmployeeDepts: state.favoredEmployeeDepts.filter(
+          pref => normalizeDepartmentName(pref.department) !== normalized,
+        ),
+        timesets: state.timesets.filter(
+          timeset => normalizeDepartmentName(timeset.department) !== normalized,
+        ),
+        equalityConstraints: state.equalityConstraints.filter(
+          constraint => normalizeDepartmentName(constraint.department) !== normalized,
+        ),
+        presets: nextPresets,
+      };
+    });
+    persistUpdatedPresets(nextPresets);
+  },
+
   reset: () => set({
     favoredEmployees: {},
     trainingPairs: [],
@@ -469,7 +691,7 @@ interface SolverState {
     success: boolean;
     outputs?: { xlsx?: string; xlsxFormatted?: string };
     error?: string;
-    errorType?: 'error' | 'no_solution';  // 'no_solution' = yellow warning, 'error' = red error
+    errorType?: 'error' | 'no_solution' | 'cancelled';
     elapsed: number;
   } | null;
   
@@ -513,6 +735,8 @@ interface UIState {
   hideToast: () => void;
 }
 
+let toastDismissTimer: ReturnType<typeof setTimeout> | null = null;
+
 export const useUIStore = create<UIState>((set) => ({
   activeTab: 'import',
   showSettings: false,
@@ -521,10 +745,22 @@ export const useUIStore = create<UIState>((set) => ({
   setActiveTab: (tab) => set({ activeTab: tab }),
   setShowSettings: (show) => set({ showSettings: show }),
   showToast: (message, type) => {
+    if (toastDismissTimer) {
+      clearTimeout(toastDismissTimer);
+    }
     set({ toast: { message, type } });
-    setTimeout(() => set({ toast: null }), 4000);
+    toastDismissTimer = setTimeout(() => {
+      toastDismissTimer = null;
+      set({ toast: null });
+    }, 4000);
   },
-  hideToast: () => set({ toast: null }),
+  hideToast: () => {
+    if (toastDismissTimer) {
+      clearTimeout(toastDismissTimer);
+      toastDismissTimer = null;
+    }
+    set({ toast: null });
+  },
 }));
 
 // ---------------------------------------------------------------------------

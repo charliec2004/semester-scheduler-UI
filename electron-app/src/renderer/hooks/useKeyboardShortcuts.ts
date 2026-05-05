@@ -4,11 +4,10 @@
  */
 
 import { useEffect } from 'react';
-import { useUIStore, useSolverStore } from '../store';
+import { useUIStore } from '../store';
 
 export function useKeyboardShortcuts() {
   const { setActiveTab, setShowSettings } = useUIStore();
-  const { running } = useSolverStore();
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -27,11 +26,11 @@ export function useKeyboardShortcuts() {
             break;
           case '2':
             e.preventDefault();
-            setActiveTab('staff');
+            setActiveTab('departments');
             break;
           case '3':
             e.preventDefault();
-            setActiveTab('departments');
+            setActiveTab('staff');
             break;
           case '4':
             e.preventDefault();
@@ -56,7 +55,7 @@ export function useKeyboardShortcuts() {
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [setActiveTab, setShowSettings, running]);
+  }, [setActiveTab, setShowSettings]);
 }
 
 /**

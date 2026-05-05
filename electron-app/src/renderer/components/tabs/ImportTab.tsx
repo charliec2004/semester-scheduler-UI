@@ -10,8 +10,20 @@ import { validateStaffCsv, validateDepartmentCsv, parseStaffCsv, parseDepartment
 import type { HistoryEntry } from '../../../main/ipc-types';
 
 export function ImportTab() {
-  const { setStaff, setErrors: setStaffErrors, staff, errors: staffValidationErrors } = useStaffStore();
-  const { setDepartments, setErrors: setDeptErrors, departments, errors: deptValidationErrors } = useDepartmentStore();
+  const {
+    setStaff,
+    setErrors: setStaffErrors,
+    staff,
+    errors: staffValidationErrors,
+    warnings: staffValidationWarnings,
+  } = useStaffStore();
+  const {
+    setDepartments,
+    setErrors: setDeptErrors,
+    departments,
+    errors: deptValidationErrors,
+    warnings: deptValidationWarnings,
+  } = useDepartmentStore();
   const { history, loadHistory, restoreConfig, deleteEntry } = useHistoryStore();
   const { showToast, setActiveTab } = useUIStore();
   
@@ -31,7 +43,12 @@ export function ImportTab() {
       if (validation.valid) {
         const parsedStaff = parseStaffCsv(content);
         setStaff(parsedStaff, filename);
-        showToast(`Imported ${parsedStaff.length} employees`, 'success');
+        showToast(
+          validation.warnings.length > 0
+            ? `Imported ${parsedStaff.length} employees with ${validation.warnings.length} warning(s)`
+            : `Imported ${parsedStaff.length} employees`,
+          'success',
+        );
       } else {
         showToast(`Validation failed: ${validation.errors.length} error(s)`, 'error');
       }
@@ -50,7 +67,12 @@ export function ImportTab() {
       if (validation.valid) {
         const parsedDepts = parseDepartmentCsv(content);
         setDepartments(parsedDepts, filename);
-        showToast(`Imported ${parsedDepts.length} departments`, 'success');
+        showToast(
+          validation.warnings.length > 0
+            ? `Imported ${parsedDepts.length} departments with ${validation.warnings.length} warning(s)`
+            : `Imported ${parsedDepts.length} departments`,
+          'success',
+        );
       } else {
         showToast(`Validation failed: ${validation.errors.length} error(s)`, 'error');
       }
@@ -257,6 +279,28 @@ export function ImportTab() {
               </ul>
             </div>
           )}
+
+          {staffValidationWarnings.length > 0 && (
+            <div className="bg-warning-500/10 border border-warning-500/30 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-warning-400 mb-2">
+                Warnings ({staffValidationWarnings.length})
+              </h4>
+              <ul className="space-y-1 text-sm text-warning-200 max-h-32 overflow-auto">
+                {staffValidationWarnings.slice(0, 5).map((warning, i) => (
+                  <li key={i}>
+                    {warning.row && `Row ${warning.row}: `}
+                    {warning.column && `[${warning.column}] `}
+                    {warning.message}
+                  </li>
+                ))}
+                {staffValidationWarnings.length > 5 && (
+                  <li className="text-surface-400">
+                    ...and {staffValidationWarnings.length - 5} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
 
         {/* Department Import */}
@@ -333,6 +377,28 @@ export function ImportTab() {
               </ul>
             </div>
           )}
+
+          {deptValidationWarnings.length > 0 && (
+            <div className="bg-warning-500/10 border border-warning-500/30 rounded-lg p-4">
+              <h4 className="text-sm font-medium text-warning-400 mb-2">
+                Warnings ({deptValidationWarnings.length})
+              </h4>
+              <ul className="space-y-1 text-sm text-warning-200 max-h-32 overflow-auto">
+                {deptValidationWarnings.slice(0, 5).map((warning, i) => (
+                  <li key={i}>
+                    {warning.row && `Row ${warning.row}: `}
+                    {warning.column && `[${warning.column}] `}
+                    {warning.message}
+                  </li>
+                ))}
+                {deptValidationWarnings.length > 5 && (
+                  <li className="text-surface-400">
+                    ...and {deptValidationWarnings.length - 5} more
+                  </li>
+                )}
+              </ul>
+            </div>
+          )}
         </div>
       </div>
 
@@ -346,7 +412,7 @@ export function ImportTab() {
             </div>
             <h4 className="font-medium text-surface-200">Import or Create Data</h4>
             <p className="text-surface-400">
-              Upload your CSV files or use the Staff and Departments tabs to create data from scratch.
+              Upload your CSV files or use the Departments and Staff tabs to create data from scratch.
             </p>
           </div>
           <div className="space-y-2">

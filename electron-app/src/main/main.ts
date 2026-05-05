@@ -70,6 +70,7 @@ let activeSolverProcess: ChildProcess | null = null;
 let currentRunId: string | null = null;
 let solverStartTime: number = 0;
 let solverMaxTime: number = 180;
+const canceledRunIds = new Set<string>();
 
 // Get the project root (parent of electron-app)
 function getProjectRoot(): string {
@@ -549,6 +550,7 @@ function registerIpcHandlers(): void {
     }
 
     const runId = uuidv4();
+    canceledRunIds.delete(runId);
     currentRunId = runId;
     solverStartTime = Date.now();
     solverMaxTime = config.maxSolveSeconds || 180;
@@ -603,8 +605,19 @@ function registerIpcHandlers(): void {
     activeSolverProcess.on('close', (code: number | null) => {
       clearInterval(progressInterval);
       const elapsed = (Date.now() - solverStartTime) / 1000;
+      const wasCanceled = canceledRunIds.has(runId);
+      canceledRunIds.delete(runId);
       
-      if (code === 0) {
+      if (wasCanceled) {
+        deleteHistoryFiles(runId);
+        mainWindow?.webContents.send('solver:done', {
+          runId,
+          success: false,
+          error: 'Schedule generation was cancelled.',
+          errorType: 'cancelled',
+          elapsed,
+        });
+      } else if (code === 0) {
         // Success - check for output files
         const outputs: { xlsx?: string; xlsxFormatted?: string } = {};
         if (fs.existsSync(outputPath)) {
@@ -658,6 +671,7 @@ function registerIpcHandlers(): void {
     activeSolverProcess.on('error', (err: Error) => {
       clearInterval(progressInterval);
       deleteHistoryFiles(runId);
+      canceledRunIds.delete(runId);
       
       mainWindow?.webContents.send('solver:error', {
         runId,
@@ -671,14 +685,13 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('solver:cancel', () => {
-    if (activeSolverProcess) {
+    if (activeSolverProcess && currentRunId) {
+      canceledRunIds.add(currentRunId);
       activeSolverProcess.kill('SIGTERM');
-      activeSolverProcess = null;
       const runId = currentRunId;
       if (runId) {
         deleteHistoryFiles(runId);
       }
-      currentRunId = null;
       return { canceled: true, runId };
     }
     return { canceled: false, runId: null };

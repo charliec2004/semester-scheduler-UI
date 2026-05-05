@@ -150,6 +150,7 @@ function parseLogDiagnostics(logs: Array<{ text: string; type: string }>): {
 
 export function ResultsTab() {
   const { running, progress, logs, result, reset } = useSolverStore();
+  const isCancelled = result?.errorType === 'cancelled';
 
   // Parse logs to detect specific issues and extract stats
   const diagnostics = useMemo(() => parseLogDiagnostics(logs), [logs]);
@@ -300,13 +301,21 @@ export function ResultsTab() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-2xl font-display font-semibold text-surface-100 mb-1">
-            {running ? 'Running Solver...' : result?.success ? 'Schedule Generated' : 'Results'}
+            {running
+              ? 'Running Solver...'
+              : result?.success
+                ? 'Schedule Generated'
+                : isCancelled
+                  ? 'Generation Cancelled'
+                  : 'Results'}
           </h2>
           <p className="text-surface-400">
             {running && progress 
               ? `Elapsed: ${formatElapsed(progress.elapsed)} • Remaining: ~${getTimeRemaining()}`
               : result 
-                ? `Completed in ${formatElapsed(result.elapsed)}`
+                ? isCancelled
+                  ? `Cancelled after ${formatElapsed(result.elapsed)}`
+                  : `Completed in ${formatElapsed(result.elapsed)}`
                 : 'View your generation history below'}
           </p>
         </div>
@@ -368,6 +377,8 @@ export function ResultsTab() {
         <div className={`card ${
           result.success 
             ? 'bg-accent-500/10 border-accent-500/30' 
+            : result.errorType === 'cancelled'
+              ? 'bg-surface-800/70 border-surface-600'
             : result.errorType === 'no_solution'
               ? 'bg-yellow-500/10 border-yellow-500/30'
               : 'bg-danger-500/10 border-danger-500/30'
@@ -377,6 +388,13 @@ export function ResultsTab() {
               <div className="w-12 h-12 bg-accent-500/20 rounded-full flex items-center justify-center flex-shrink-0">
                 <svg className="w-6 h-6 text-accent-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+            ) : result.errorType === 'cancelled' ? (
+              <div className="w-12 h-12 bg-surface-700 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-surface-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                    d="M10 9v6m4-6v6m-9 4h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" />
                 </svg>
               </div>
             ) : result.errorType === 'no_solution' ? (
@@ -396,12 +414,16 @@ export function ResultsTab() {
               <h3 className={`font-semibold ${
                 result.success 
                   ? 'text-accent-400' 
+                  : result.errorType === 'cancelled'
+                    ? 'text-surface-200'
                   : result.errorType === 'no_solution'
                     ? 'text-yellow-400'
                     : 'text-danger-400'
               }`}>
                 {result.success 
                   ? 'Schedule Generated Successfully' 
+                  : result.errorType === 'cancelled'
+                    ? 'Generation Cancelled'
                   : result.errorType === 'no_solution'
                     ? 'No Solution Found'
                     : 'Generation Failed'}
@@ -409,6 +431,8 @@ export function ResultsTab() {
               <p className="text-sm text-surface-400 mt-1">
                 {result.success
                   ? `Completed in ${formatElapsed(result.elapsed)}. Download your schedule from the history below.`
+                  : result.errorType === 'cancelled'
+                    ? 'The current run was stopped before completion. You can adjust inputs and start a new generation anytime.'
                   : result.errorType === 'no_solution'
                     ? 'The current requirements cannot all be satisfied together. See suggestions below.'
                     : result.error || 'Something went wrong. Check the logs below for details.'}
@@ -444,7 +468,7 @@ export function ResultsTab() {
               )}
 
               {/* Detected Issues - shown for both no_solution and errors */}
-              {!result.success && (
+              {!result.success && result.errorType !== 'cancelled' && (
                 <div className="mt-3 space-y-1">
                   <p className={`text-sm font-medium ${result.errorType === 'no_solution' ? 'text-yellow-400' : 'text-danger-400'}`}>
                     {result.errorType === 'no_solution' ? 'Possible Causes:' : 'Error Details:'}
@@ -642,7 +666,7 @@ export function ResultsTab() {
       )}
 
       {/* Troubleshooting - Contextual based on error type */}
-      {result && !result.success && (
+      {result && !result.success && result.errorType !== 'cancelled' && (
         <div className="card bg-surface-800/50">
           <h3 className="font-semibold text-surface-200 mb-3">
             {result.errorType === 'no_solution' ? 'How to Fix This' : 'Troubleshooting Tips'}

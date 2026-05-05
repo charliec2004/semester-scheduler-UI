@@ -4,7 +4,7 @@
  */
 
 import { useState } from 'react';
-import { useDepartmentStore, useUIStore } from '../../store';
+import { useDepartmentStore, useStaffStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import { departmentsToCsv } from '../../utils/csvValidators';
 import { SLOT_MINUTES } from '@shared/constants';
@@ -14,8 +14,10 @@ const HOUR_INPUT_STEP = SLOT_MINUTES / 60;
 
 export function DepartmentsTab() {
   const { departments, updateDepartment, addDepartment, removeDepartment, reorderDepartments, dirty, setDirty, saveDepartments } = useDepartmentStore();
+  const { dirty: staffDirty, saveStaff } = useStaffStore();
   const { showToast } = useUIStore();
   const [editingIndex, setEditingIndex] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState('');
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
   const [dragOverBottom, setDragOverBottom] = useState(false);
@@ -29,6 +31,13 @@ export function DepartmentsTab() {
     addDepartment(newDept);
     // Set editing index to the new department (will be at end of array)
     setEditingIndex(departments.length);
+    setEditingName('');
+  };
+
+  const commitDepartmentName = (index: number) => {
+    updateDepartment(index, { name: editingName });
+    setEditingIndex(null);
+    setEditingName('');
   };
 
   const handleExport = async () => {
@@ -150,6 +159,9 @@ export function DepartmentsTab() {
             onClick={async () => {
               try {
                 await saveDepartments();
+                if (staffDirty) {
+                  await saveStaff();
+                }
                 showToast('Department data saved', 'success');
               } catch (err) {
                 console.error('Failed to save departments:', err);
@@ -261,12 +273,16 @@ export function DepartmentsTab() {
                     {isEditing ? (
                       <input
                         type="text"
-                        value={dept.name}
-                        onChange={(e) => updateDepartment(index, { name: e.target.value })}
-                        onBlur={() => setEditingIndex(null)}
+                        value={editingName}
+                        onChange={(e) => setEditingName(e.target.value)}
+                        onBlur={() => commitDepartmentName(index)}
                         onKeyDown={(e) => {
                           if (e.key === 'Enter') {
+                            commitDepartmentName(index);
+                          }
+                          if (e.key === 'Escape') {
                             setEditingIndex(null);
+                            setEditingName('');
                           }
                         }}
                         className="input py-1"
@@ -275,7 +291,10 @@ export function DepartmentsTab() {
                       />
                     ) : (
                       <button
-                        onClick={() => setEditingIndex(index)}
+                        onClick={() => {
+                          setEditingIndex(index);
+                          setEditingName(dept.name);
+                        }}
                         className="text-left hover:text-accent-400 transition-colors"
                       >
                         {dept.name || <span className="text-surface-500 italic">Unnamed</span>}
@@ -322,6 +341,9 @@ export function DepartmentsTab() {
                           // Auto-save after deletion
                           try {
                             await saveDepartments();
+                            if (useStaffStore.getState().dirty) {
+                              await saveStaff();
+                            }
                             showToast('Department deleted', 'info');
                           } catch (err) {
                             console.error('Failed to save after delete:', err);

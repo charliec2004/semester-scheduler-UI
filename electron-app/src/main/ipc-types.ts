@@ -3,7 +3,7 @@
  * These types define the contract between Electron main and the React renderer.
  */
 
-import type { DayName, DayTravelBuffer } from '../shared/constants';
+import type { DayName, UnavailabilityBlock } from '../shared/constants';
 import { DEFAULT_MAX_SLOTS, DEFAULT_MIN_SLOTS } from '../shared/constants';
 
 // ---------------------------------------------------------------------------
@@ -86,8 +86,10 @@ export interface StaffMember {
   targetHours: number;
   maxHours: number;
   year: number;
-  availability: Record<string, boolean>; // e.g., "Mon_08:00" -> true
-  travelBuffers: Record<DayName, DayTravelBuffer>;
+  /** Periods the student cannot work (classes, etc.), with optional travel buffers at edges. */
+  unavailabilityBlocks: Record<DayName, UnavailabilityBlock[]>;
+  /** True = can work that slot; derived from unavailabilityBlocks for the solver/CSV. */
+  availability: Record<string, boolean>;
 }
 
 export interface Department {
@@ -175,7 +177,7 @@ export interface SolverResult {
     xlsxFormatted?: string;
   };
   error?: string;
-  errorType?: 'error' | 'no_solution';  // 'no_solution' = yellow warning (constraints too restrictive)
+  errorType?: 'error' | 'no_solution' | 'cancelled';
   elapsed: number;
 }
 
