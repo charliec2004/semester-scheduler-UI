@@ -72,6 +72,19 @@ let solverStartTime: number = 0;
 let solverMaxTime: number = 180;
 const canceledRunIds = new Set<string>();
 
+const WINDOW_THEME_COLORS = {
+  dark: {
+    background: '#0f172a',
+    titleBar: '#0f172a',
+    symbols: '#94a3b8',
+  },
+  light: {
+    background: '#f8fafc',
+    titleBar: '#f8fafc',
+    symbols: '#334155',
+  },
+} as const;
+
 // Get the project root (parent of electron-app)
 function getProjectRoot(): string {
   if (app.isPackaged) {
@@ -209,6 +222,9 @@ function createWindow(): void {
   const isMac = process.platform === 'darwin';
   const isWin = process.platform === 'win32';
   const isLinux = process.platform === 'linux';
+  const savedSettings = normalizeAppSettings(store.get('settings'));
+  const initialWindowTheme = savedSettings.theme === 'light' ? 'light' : 'dark';
+  const chromeColors = WINDOW_THEME_COLORS[initialWindowTheme];
   
   const windowOptions: Electron.BrowserWindowConstructorOptions = {
     width: 1400,
@@ -216,7 +232,7 @@ function createWindow(): void {
     minWidth: 1000,
     minHeight: 700,
     title: 'Semester Scheduler',
-    backgroundColor: '#0f172a',
+    backgroundColor: chromeColors.background,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -235,8 +251,8 @@ function createWindow(): void {
   if (isWin || isLinux) {
     windowOptions.titleBarStyle = 'hidden';
     windowOptions.titleBarOverlay = {
-      color: '#0f172a',
-      symbolColor: '#94a3b8',
+      color: chromeColors.titleBar,
+      symbolColor: chromeColors.symbols,
       height: 48,
     };
   }

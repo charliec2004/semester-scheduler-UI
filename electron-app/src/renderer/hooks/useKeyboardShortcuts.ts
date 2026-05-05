@@ -22,21 +22,25 @@ export function useKeyboardShortcuts() {
         switch (e.key) {
           case '1':
             e.preventDefault();
-            setActiveTab('import');
+            setActiveTab('welcome');
             break;
           case '2':
             e.preventDefault();
-            setActiveTab('departments');
+            setActiveTab('import');
             break;
           case '3':
             e.preventDefault();
-            setActiveTab('staff');
+            setActiveTab('departments');
             break;
           case '4':
             e.preventDefault();
-            setActiveTab('flags');
+            setActiveTab('staff');
             break;
           case '5':
+            e.preventDefault();
+            setActiveTab('flags');
+            break;
+          case '6':
             e.preventDefault();
             setActiveTab('results');
             break;

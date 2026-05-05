@@ -3,7 +3,8 @@
  * Provides tab navigation, layout structure, and coordinates all features.
  */
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { CalendarDays, Moon, Settings2, Sun } from 'lucide-react';
 import { useSettingsStore, useUIStore, useFlagsStore, useSolverStore, useHistoryStore, useStaffStore, useDepartmentStore } from './store';
 import { TabNavigation } from './components/layout/TabNavigation';
 import { Toast } from './components/ui/Toast';
@@ -11,13 +12,15 @@ import { SettingsPanel } from './components/settings/SettingsPanel';
 import { ImportTab } from './components/tabs/ImportTab';
 import { StaffEditorTab } from './components/tabs/StaffEditorTab';
 import { DepartmentsTab } from './components/tabs/DepartmentsTab';
-import { FlagsTab } from './components/tabs/FlagsTab';
+import { FlagsSetupBanner, FlagsTab } from './components/tabs/FlagsTab';
 import { ResultsTab } from './components/tabs/ResultsTab';
+import { WelcomeTab } from './components/tabs/WelcomeTab';
 import { KeyboardShortcutsHelp } from './components/ui/KeyboardShortcutsHelp';
+import { Button } from './components/ui/button';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
 
 function App() {
-  const { settings, loadSettings } = useSettingsStore();
+  const { settings, loadSettings, saveSettings } = useSettingsStore();
   const { activeTab, showSettings, toast } = useUIStore();
   const { loadPresets } = useFlagsStore();
   const { setProgress, addLog, setResult } = useSolverStore();
@@ -81,53 +84,128 @@ function App() {
       : 'font-size-medium';
 
   const contrastClass = settings?.highContrast ? 'high-contrast' : '';
+  const themePreference = settings?.theme ?? 'dark';
+  const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>('dark');
+
+  const applyResolvedTheme = (theme: 'dark' | 'light') => {
+    const root = document.documentElement;
+    root.classList.remove('light', 'dark');
+    root.classList.add(theme);
+    setResolvedTheme(theme);
+  };
+
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+
+    const applyTheme = () => {
+      const nextResolvedTheme =
+        themePreference === 'system'
+          ? mediaQuery.matches
+            ? 'dark'
+            : 'light'
+          : themePreference;
+
+      applyResolvedTheme(nextResolvedTheme);
+    };
+
+    applyTheme();
+
+    if (themePreference !== 'system') {
+      return undefined;
+    }
+
+    const handleChange = () => applyTheme();
+    mediaQuery.addEventListener('change', handleChange);
+    return () => mediaQuery.removeEventListener('change', handleChange);
+  }, [themePreference]);
+
+  const handleToggleTheme = async () => {
+    if (!settings) return;
+
+    const root = document.documentElement;
+    root.classList.add('theme-transition');
+    await new Promise<void>((resolve) => {
+      window.requestAnimationFrame(() => {
+        void root.offsetWidth;
+        resolve();
+      });
+    });
+    const nextTheme = resolvedTheme === 'dark' ? 'light' : 'dark';
+    applyResolvedTheme(nextTheme);
+    window.setTimeout(() => {
+      root.classList.remove('theme-transition');
+    }, 220);
+    await saveSettings({ ...settings, theme: nextTheme });
+  };
 
   // Detect platform for title bar styling
   const isMac = navigator.platform.toLowerCase().includes('mac');
 
   return (
-    <div className={`h-screen flex flex-col bg-surface-950 overflow-hidden ${fontSizeClass} ${contrastClass}`}>
+    <div className={`h-screen flex flex-col bg-background overflow-hidden ${fontSizeClass} ${contrastClass}`}>
       {/* Skip link for keyboard navigation */}
       <a href="#main-content" className="skip-link">
         Skip to main content
       </a>
 
       {/* Header with draggable title bar region - fixed at top */}
-      <header className="flex-shrink-0 bg-surface-900 border-b border-surface-700 titlebar-drag">
+      <header className="titlebar-drag flex-shrink-0 border-b border-border bg-surface-900/95 backdrop-blur">
         {/* macOS: pl-24 to clear traffic lights on left. Windows/Linux: pr-36 to clear window controls on right */}
-        <div className={`flex items-center justify-between ${isMac ? 'pl-24 pr-6' : 'pl-6 pr-36'} py-3 ${isMac ? 'pt-3' : ''}`}>
-          <div className="flex items-center gap-4 no-drag">
-            <div className="w-10 h-10 bg-accent-600 rounded-lg flex items-center justify-center">
-              <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} 
-                  d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-              </svg>
+        <div className={`flex items-center justify-between ${isMac ? 'pl-24 pr-5' : 'pl-5 pr-36'} py-2 ${isMac ? 'pt-3' : ''}`}>
+          <div className="no-drag flex min-w-0 items-center gap-3">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md border border-border bg-card text-surface-300">
+              <CalendarDays className="h-3.5 w-3.5" strokeWidth={1.9} />
             </div>
-            <div>
-              <h1 className="text-xl font-display font-semibold text-surface-100">
+            <div className="flex min-w-0 items-center gap-2">
+              <div className="shrink-0 text-[14px] font-semibold tracking-tight text-foreground">
                 Semester Scheduler
-              </h1>
-              <p className="text-sm text-surface-400">
+              </div>
+              <span className="hidden h-3.5 w-px bg-border md:block" aria-hidden="true" />
+              <p className="hidden truncate text-[12px] text-muted-foreground md:block">
                 Optimized weekly scheduling for student employees
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2 no-drag">
+          <div className="no-drag flex items-center gap-1.5">
+            <Button
+              onClick={handleToggleTheme}
+              variant="ghost"
+              size="icon-sm"
+              className="relative overflow-hidden"
+              aria-label={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              title={resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+            >
+              <Sun
+                className={`absolute h-4 w-4 transition-all duration-200 ease-out ${
+                  resolvedTheme === 'dark'
+                    ? 'rotate-0 scale-100 opacity-100'
+                    : '-rotate-90 scale-75 opacity-0'
+                }`}
+                strokeWidth={1.8}
+              />
+              <Moon
+                className={`absolute h-4 w-4 transition-all duration-200 ease-out ${
+                  resolvedTheme === 'dark'
+                    ? 'rotate-90 scale-75 opacity-0'
+                    : 'rotate-0 scale-100 opacity-100'
+                }`}
+                strokeWidth={1.8}
+              />
+              <span className="sr-only">
+                {resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
+              </span>
+            </Button>
             <KeyboardShortcutsHelp />
-            <button
+            <Button
               onClick={() => useUIStore.getState().setShowSettings(true)}
-              className="btn-ghost"
+              variant="ghost"
+              size="sm"
               aria-label="Open settings (Cmd+,)"
             >
-              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                  d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-              </svg>
+              <Settings2 className="h-4 w-4" strokeWidth={1.8} />
               <span className="sr-only md:not-sr-only">Settings</span>
-            </button>
+            </Button>
           </div>
         </div>
       </header>
@@ -135,14 +213,16 @@ function App() {
       {/* Tab Navigation - fixed below header */}
       <div className="flex-shrink-0">
         <TabNavigation />
+        <FlagsSetupBanner />
       </div>
 
       {/* Main Content - scrollable */}
       <main id="main-content" className="flex-1 overflow-y-auto scrollbar-gutter-stable" role="main">
-        <div className="container mx-auto px-6 py-8 max-w-7xl">
+        <div className="container mx-auto max-w-7xl px-5 py-6">
+          {activeTab === 'welcome' && <WelcomeTab />}
           {activeTab === 'import' && <ImportTab />}
-          {activeTab === 'staff' && <StaffEditorTab />}
           {activeTab === 'departments' && <DepartmentsTab />}
+          {activeTab === 'staff' && <StaffEditorTab />}
           {activeTab === 'flags' && <FlagsTab />}
           {activeTab === 'results' && <ResultsTab />}
         </div>

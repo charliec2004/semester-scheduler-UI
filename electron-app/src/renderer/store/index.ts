@@ -45,6 +45,12 @@ function normalizeStaffMember(member: LegacyStaffMember): StaffMember {
   const { unavailabilityBlocks, availability } = migrateStaffAvailabilityShape(member);
   return {
     ...(rest as Omit<StaffMember, 'availability' | 'unavailabilityBlocks'>),
+    roles: dedupeBy(
+      (rest.roles ?? [])
+        .map((role) => role.trim())
+        .filter(Boolean),
+      (role) => role,
+    ),
     unavailabilityBlocks,
     availability,
   };
@@ -722,7 +728,7 @@ export const useSolverStore = create<SolverState>((set, get) => ({
 // UI State Store
 // ---------------------------------------------------------------------------
 
-type TabId = 'import' | 'staff' | 'departments' | 'flags' | 'results' | 'settings';
+type TabId = 'welcome' | 'import' | 'staff' | 'departments' | 'flags' | 'results' | 'settings';
 
 interface UIState {
   activeTab: TabId;
@@ -738,7 +744,7 @@ interface UIState {
 let toastDismissTimer: ReturnType<typeof setTimeout> | null = null;
 
 export const useUIStore = create<UIState>((set) => ({
-  activeTab: 'import',
+  activeTab: 'welcome',
   showSettings: false,
   toast: null,
 

@@ -30,6 +30,7 @@ const mockElectronAPI = {
       targetHardDeltaHours: 5,
       highContrast: false,
       fontSize: 'medium',
+      theme: 'dark',
     }),
     save: vi.fn().mockResolvedValue({ success: true }),
     reset: vi.fn().mockResolvedValue({}),

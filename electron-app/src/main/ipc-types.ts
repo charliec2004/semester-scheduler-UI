@@ -31,6 +31,7 @@ export interface AppSettings {
   // UI preferences
   highContrast: boolean;
   fontSize: 'small' | 'medium' | 'large';
+  theme: 'system' | 'dark' | 'light';
   
   // Experimental
   enforceMinDeptBlock: boolean;
@@ -50,6 +51,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   targetHardDeltaHours: 5,
   highContrast: false,
   fontSize: 'medium',
+  theme: 'dark',
   enforceMinDeptBlock: true,
 };
 
