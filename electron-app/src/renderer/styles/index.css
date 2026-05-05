@@ -5,17 +5,183 @@
 /* Base styles */
 @layer base {
   :root {
-    --focus-ring: 0 0 0 2px theme('colors.accent.500');
+    --background: 0 0% 99%;
+    --foreground: 240 10% 4%;
+    --card: 0 0% 100%;
+    --card-foreground: 240 10% 4%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 240 10% 4%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 240 8% 6%;
+    --secondary: 240 5% 96%;
+    --secondary-foreground: 240 6% 10%;
+    --muted: 240 5% 96%;
+    --muted-foreground: 240 4% 42%;
+    --accent: 240 5% 95%;
+    --accent-foreground: 240 8% 8%;
+    --accent-50: 0 0% 99%;
+    --accent-100: 240 5% 96%;
+    --accent-200: 240 5% 90%;
+    --accent-300: 240 5% 84%;
+    --accent-400: 240 5% 66%;
+    --accent-500: 240 4% 44%;
+    --accent-600: 240 5% 34%;
+    --accent-700: 240 5% 24%;
+    --accent-800: 240 5% 16%;
+    --accent-900: 240 6% 10%;
+    --destructive: 0 67% 46%;
+    --destructive-foreground: 0 0% 98%;
+    --danger-300: 0 76% 68%;
+    --danger-400: 0 71% 59%;
+    --danger-500: 0 67% 51%;
+    --danger-600: 0 61% 44%;
+    --danger-700: 0 50% 33%;
+    --warning-300: 35 85% 40%;
+    --warning-400: 36 80% 45%;
+    --warning-500: 37 65% 50%;
+    --warning-600: 36 56% 42%;
+    --warning-700: 33 52% 30%;
+    --warning-banner: 40 81% 47%;
+    --warning-banner-foreground: 0 0% 100%;
+    --warning-banner-link: 0 0% 100%;
+    --border: 240 6% 88%;
+    --input: 240 6% 88%;
+    --ring: 0 0% 78%;
+    --surface-100: 240 10% 9%;
+    --surface-200: 240 9% 16%;
+    --surface-300: 240 7% 28%;
+    --surface-400: 240 6% 38%;
+    --surface-500: 240 5% 50%;
+    --surface-600: 240 6% 72%;
+    --surface-700: 240 6% 84%;
+    --surface-800: 240 6% 93%;
+    --surface-900: 240 5% 97%;
+    --surface-950: 0 0% 100%;
+    --action-primary: 141 41% 31%;
+    --action-primary-hover: 141 39% 36%;
+    --action-primary-border: 141 41% 46%;
+    --action-primary-foreground: 0 0% 100%;
+    --radius: 0.5rem;
+    --focus-ring: 0 0 0 1px hsl(var(--ring));
+  }
+
+  .dark {
+    --background: 0 0% 4%;
+    --foreground: 0 0% 96%;
+    --card: 0 0% 8%;
+    --card-foreground: 0 0% 96%;
+    --popover: 0 0% 8%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 0 0% 98%;
+    --primary-foreground: 0 0% 6%;
+    --secondary: 0 0% 12%;
+    --secondary-foreground: 0 0% 94%;
+    --muted: 0 0% 12%;
+    --muted-foreground: 0 0% 62%;
+    --accent: 0 0% 13%;
+    --accent-foreground: 0 0% 96%;
+    --accent-50: 0 0% 98%;
+    --accent-100: 0 0% 96%;
+    --accent-200: 0 0% 89%;
+    --accent-300: 0 0% 76%;
+    --accent-400: 0 0% 63%;
+    --accent-500: 0 0% 44%;
+    --accent-600: 0 0% 33%;
+    --accent-700: 0 0% 25%;
+    --accent-800: 0 0% 16%;
+    --accent-900: 0 0% 10%;
+    --destructive: 0 66% 48%;
+    --destructive-foreground: 0 0% 98%;
+    --danger-300: 0 79% 82%;
+    --danger-400: 0 73% 70%;
+    --danger-500: 0 66% 58%;
+    --danger-600: 0 59% 48%;
+    --danger-700: 0 48% 34%;
+    --warning-300: 39 83% 76%;
+    --warning-400: 38 76% 66%;
+    --warning-500: 37 54% 53%;
+    --warning-600: 34 50% 40%;
+    --warning-700: 32 50% 27%;
+    --warning-banner: 40 81% 47%;
+    --warning-banner-foreground: 0 0% 100%;
+    --warning-banner-link: 0 0% 100%;
+    --border: 0 0% 18%;
+    --input: 0 0% 18%;
+    --ring: 0 0% 82%;
+    --surface-100: 0 0% 96%;
+    --surface-200: 0 0% 88%;
+    --surface-300: 0 0% 72%;
+    --surface-400: 0 0% 62%;
+    --surface-500: 0 0% 46%;
+    --surface-600: 0 0% 32%;
+    --surface-700: 0 0% 18%;
+    --surface-800: 0 0% 10%;
+    --surface-900: 0 0% 7%;
+    --surface-950: 0 0% 3%;
+    --action-primary: 141 41% 31%;
+    --action-primary-hover: 141 39% 36%;
+    --action-primary-border: 141 41% 46%;
+    --action-primary-foreground: 0 0% 100%;
   }
 
   html {
     scroll-behavior: smooth;
+    color-scheme: light;
+  }
+
+  html.dark {
     color-scheme: dark;
   }
 
+  html.light {
+    color-scheme: light;
+  }
+
+  html.theme-transition,
+  html.theme-transition *,
+  html.theme-transition *::before,
+  html.theme-transition *::after {
+    transition-property: background-color, border-color, color, fill, stroke, box-shadow;
+    transition-duration: 180ms;
+    transition-timing-function: ease;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html.theme-transition,
+    html.theme-transition *,
+    html.theme-transition *::before,
+    html.theme-transition *::after {
+      transition-duration: 0ms;
+    }
+  }
+
+  svg {
+    color: inherit;
+    backface-visibility: hidden;
+    transform: translateZ(0);
+  }
+
+  html.theme-transition svg,
+  html.theme-transition svg * {
+    transition-property: color, fill, stroke, opacity, transform;
+    transition-duration: 220ms;
+    transition-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
+    will-change: color, fill, stroke, opacity, transform;
+  }
+
+  html.theme-transition .lucide,
+  html.theme-transition .lucide * {
+    stroke: currentColor;
+    fill: transparent;
+  }
+
   body {
-    @apply font-sans bg-surface-950;
+    @apply bg-background font-sans text-foreground antialiased;
     font-feature-settings: 'liga' 1, 'calt' 1;
+  }
+
+  * {
+    @apply border-border;
   }
 
   /* Custom title bar drag region */
@@ -42,27 +208,27 @@
 
   /* High contrast mode */
   .high-contrast {
-    --focus-ring: 0 0 0 3px theme('colors.warning.400');
+    --focus-ring: 0 0 0 2px hsl(var(--foreground));
   }
 
   .high-contrast .bg-surface-900 {
-    @apply bg-black;
+    background-color: hsl(var(--surface-950));
   }
 
   .high-contrast .text-surface-400 {
-    @apply text-surface-200;
+    color: hsl(var(--surface-300));
   }
 
   /* Focus styles for accessibility */
   *:focus-visible {
     outline: none;
     box-shadow: var(--focus-ring);
-    @apply ring-2 ring-accent-500 ring-offset-2 ring-offset-surface-900;
+    @apply ring-1 ring-ring ring-offset-0;
   }
 
   /* Skip link for keyboard navigation */
   .skip-link {
-    @apply absolute -top-10 left-4 z-50 bg-accent-500 text-surface-950 px-4 py-2 rounded-b-lg font-medium;
+    @apply absolute -top-10 left-4 z-50 rounded-b-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground;
     @apply focus:top-0 transition-all;
   }
 
@@ -85,93 +251,104 @@
 
   /* Selection */
   ::selection {
-    @apply bg-accent-500/30 text-surface-100;
+    @apply bg-primary/25 text-foreground;
   }
 
-  /* Number input spinners - hidden by default, show on hover/focus */
+  /* Number input spinners */
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+
   input[type="number"]::-webkit-inner-spin-button,
   input[type="number"]::-webkit-outer-spin-button {
-    -webkit-appearance: inner-spin-button;
-    appearance: auto;
-    opacity: 0;
-    cursor: pointer;
-    filter: invert(0.6);
-    transition: opacity 0.15s ease-in-out;
-  }
-
-  input[type="number"]:hover::-webkit-inner-spin-button,
-  input[type="number"]:hover::-webkit-outer-spin-button,
-  input[type="number"]:focus::-webkit-inner-spin-button,
-  input[type="number"]:focus::-webkit-outer-spin-button {
-    opacity: 1;
-  }
-
-  input[type="number"]::-webkit-inner-spin-button:hover,
-  input[type="number"]::-webkit-outer-spin-button:hover {
-    filter: invert(0.4);
+    -webkit-appearance: none;
+    margin: 0;
   }
 }
 
 /* Component utilities */
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 px-4 py-2 rounded-lg font-medium;
-    @apply transition-all duration-200 ease-out;
-    @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-accent-500 focus-visible:ring-offset-2 focus-visible:ring-offset-surface-900;
+    @apply inline-flex h-8 items-center justify-center gap-2 rounded-md px-3 py-1.5 text-[13px] font-medium;
+    @apply transition-colors duration-150 ease-out;
+    @apply focus:outline-none focus-visible:ring-1 focus-visible:ring-ring;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
   .btn-primary {
-    @apply btn bg-accent-600 text-white hover:bg-accent-500 active:bg-accent-700;
+    @apply btn;
+    border-color: hsl(var(--action-primary-border) / 0.55);
+    background-color: hsl(var(--action-primary));
+    color: hsl(var(--action-primary-foreground));
+  }
+
+  .btn-primary:hover {
+    background-color: hsl(var(--action-primary-hover));
+  }
+
+  .warning-banner {
+    background-color: hsl(var(--warning-banner));
+    color: hsl(var(--warning-banner-foreground));
+  }
+
+  .warning-banner-link {
+    color: hsl(var(--warning-banner-link) / 0.95);
+  }
+
+  .warning-banner-link:hover {
+    color: hsl(var(--warning-banner-link));
   }
 
   .btn-secondary {
-    @apply btn bg-surface-700 text-surface-100 hover:bg-surface-600 active:bg-surface-800;
+    @apply btn bg-secondary text-secondary-foreground hover:bg-secondary/80;
   }
 
   .btn-ghost {
-    @apply btn bg-transparent text-surface-300 hover:bg-surface-800 hover:text-surface-100;
-  }
-
-  .btn-danger {
-    @apply btn bg-danger-600 text-white hover:bg-danger-500 active:bg-danger-700;
+    @apply btn bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground;
   }
 
   .input {
-    @apply w-full px-3 py-2 bg-surface-800 border border-surface-600 rounded-lg;
-    @apply text-surface-100 placeholder-surface-500;
-    @apply transition-all duration-200;
-    @apply focus:outline-none focus:border-accent-500 focus:ring-1 focus:ring-accent-500;
+    @apply h-8 w-full rounded-md border border-input bg-background px-2.5 py-1.5;
+    @apply text-[13px] text-foreground placeholder:text-muted-foreground;
+    @apply transition-colors duration-150;
+    @apply focus:outline-none focus:border-ring;
     @apply disabled:opacity-50 disabled:cursor-not-allowed;
   }
 
+  select.input {
+    @apply appearance-none pr-9;
+    background-image: url("data:image/svg+xml,%3Csvg width='12' height='12' viewBox='0 0 12 12' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23A1A1AA' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    background-position: right 0.75rem center;
+    background-repeat: no-repeat;
+  }
+
   .input-error {
-    @apply border-danger-500 focus:border-danger-500 focus:ring-danger-500;
+    @apply border-foreground/40 focus:border-foreground/60 focus:ring-foreground/10;
   }
 
   .label {
-    @apply block text-sm font-medium text-surface-300 mb-1;
+    @apply mb-1 block text-[12px] font-medium uppercase tracking-[0.02em] text-muted-foreground;
   }
 
   .card {
-    @apply bg-surface-900 border border-surface-700 rounded-xl p-6;
-    @apply transition-all duration-200;
+    @apply rounded-lg border border-border bg-card p-5;
+    @apply transition-colors duration-150;
   }
 
   .card-hover {
-    @apply card hover:border-surface-600 hover:shadow-lg hover:shadow-surface-950/50;
+    @apply card hover:border-surface-600;
   }
 
   /* Tab navigation */
   .tab {
-    @apply px-4 py-3 text-sm font-medium text-surface-400;
+    @apply inline-flex h-10 items-center gap-1.5 px-3 text-[13px] font-medium text-muted-foreground;
     @apply border-b-2 border-transparent;
-    @apply hover:text-surface-200 hover:border-surface-600;
-    @apply transition-all duration-200;
+    @apply hover:text-foreground hover:border-border;
+    @apply transition-colors duration-150;
   }
 
   .tab-active {
-    @apply text-accent-400 border-accent-500;
+    @apply border-foreground text-foreground;
   }
 
   /* Tooltip */
@@ -187,23 +364,7 @@
 
   /* Badge */
   .badge {
-    @apply inline-flex items-center px-2 py-0.5 text-xs font-medium rounded-full;
-  }
-
-  .badge-success {
-    @apply badge bg-accent-500/20 text-accent-400;
-  }
-
-  .badge-warning {
-    @apply badge bg-warning-500/20 text-warning-400;
-  }
-
-  .badge-error {
-    @apply badge bg-danger-500/20 text-danger-400;
-  }
-
-  .badge-info {
-    @apply badge bg-surface-500/20 text-surface-300;
+    @apply inline-flex items-center rounded-md border px-2 py-0.5 text-[11px] font-medium;
   }
 
   /* Grid styles for availability matrix */
@@ -217,7 +378,7 @@
   }
 
   .availability-cell-available {
-    @apply bg-accent-600 text-white hover:bg-accent-500;
+    @apply bg-primary text-primary-foreground hover:bg-primary/90;
   }
 
   .availability-cell-unavailable {
@@ -226,13 +387,12 @@
 
   /* Drop zone */
   .drop-zone {
-    @apply border-2 border-dashed border-surface-600 rounded-xl p-8;
-    @apply flex flex-col items-center justify-center gap-4;
-    @apply transition-all duration-200;
+    @apply flex flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-border bg-card/60 p-6;
+    @apply transition-colors duration-150;
   }
 
   .drop-zone-active {
-    @apply border-accent-500 bg-accent-500/10;
+    @apply border-foreground/40 bg-accent/70;
   }
 
   /* Progress bar */
@@ -241,7 +401,7 @@
   }
 
   .progress-bar-fill {
-    @apply h-full bg-accent-500 transition-all duration-300 ease-out;
+    @apply h-full bg-foreground transition-all duration-300 ease-out;
   }
 
   /* Log viewer */
@@ -255,32 +415,7 @@
   }
 
   .log-stderr {
-    @apply text-danger-400;
-  }
-
-  /* Dark theme checkbox */
-  .checkbox-dark {
-    @apply w-4 h-4 rounded cursor-pointer;
-    @apply appearance-none;
-    @apply bg-surface-700 border border-surface-500;
-    @apply transition-all duration-200;
-    @apply focus:outline-none focus:ring-2 focus:ring-accent-500 focus:ring-offset-1 focus:ring-offset-surface-900;
-  }
-
-  .checkbox-dark:hover {
-    @apply bg-surface-600 border-surface-400;
-  }
-
-  .checkbox-dark:checked {
-    @apply bg-accent-600 border-accent-600;
-    background-image: url("data:image/svg+xml,%3csvg viewBox='0 0 16 16' fill='white' xmlns='http://www.w3.org/2000/svg'%3e%3cpath d='M12.207 4.793a1 1 0 010 1.414l-5 5a1 1 0 01-1.414 0l-2-2a1 1 0 011.414-1.414L6.5 9.086l4.293-4.293a1 1 0 011.414 0z'/%3e%3c/svg%3e");
-    background-size: 100% 100%;
-    background-position: center;
-    background-repeat: no-repeat;
-  }
-
-  .checkbox-dark:checked:hover {
-    @apply bg-accent-500 border-accent-500;
+    @apply text-surface-300;
   }
 }
 
@@ -307,6 +442,7 @@
   }
 }
 
+
 @keyframes statusFadeSlide {
   0% {
     opacity: 0;
@@ -323,11 +459,11 @@
   color: transparent;
   background: linear-gradient(
     90deg,
-    #a1a1aa 0%,
-    #a1a1aa 35%,
-    #22d3ee 50%,
-    #a1a1aa 65%,
-    #a1a1aa 100%
+    hsl(var(--surface-400)) 0%,
+    hsl(var(--surface-400)) 35%,
+    hsl(var(--surface-100)) 50%,
+    hsl(var(--surface-400)) 65%,
+    hsl(var(--surface-400)) 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
