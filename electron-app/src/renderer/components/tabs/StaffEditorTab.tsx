@@ -277,7 +277,7 @@ function isFullDayUnavailable(dayBlocks: UnavailabilityBlock[]): boolean {
 }
 
 export function StaffEditorTab() {
-  const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty, saveStaff } = useStaffStore();
+  const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, saveStaff } = useStaffStore();
   const { departments, frontDeskEnabled } = useDepartmentStore();
   const { settings } = useSettingsStore();
   const { showToast } = useUIStore();
