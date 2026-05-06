@@ -10,10 +10,13 @@ import { DEFAULT_MAX_SLOTS, DEFAULT_MIN_SLOTS } from '../../shared/constants';
 const mockElectronAPI = {
   files: {
     openCsv: vi.fn().mockResolvedValue({ canceled: true }),
+    openConfig: vi.fn().mockResolvedValue({ canceled: true }),
+    saveCsvToTemp: vi.fn().mockResolvedValue({ path: '/tmp/staff.csv' }),
     saveCsv: vi.fn().mockResolvedValue({ canceled: true }),
+    saveConfig: vi.fn().mockResolvedValue({ canceled: true }),
     downloadSample: vi.fn().mockResolvedValue({ canceled: true }),
     readFile: vi.fn().mockResolvedValue({ content: null, error: 'Not found' }),
-    saveOutput: vi.fn().mockResolvedValue({ canceled: true }),
+    saveOutputAs: vi.fn().mockResolvedValue({ canceled: true }),
     openInExplorer: vi.fn().mockResolvedValue(undefined),
   },
   settings: {
@@ -79,6 +82,37 @@ const mockElectronAPI = {
     save: vi.fn().mockResolvedValue({ success: true }),
     delete: vi.fn().mockResolvedValue({ success: true }),
   },
+  data: {
+    loadStaff: vi.fn().mockResolvedValue([]),
+    saveStaff: vi.fn().mockResolvedValue({ success: true }),
+    loadDepartments: vi.fn().mockResolvedValue({ departments: [], frontDeskEnabled: true }),
+    saveDepartments: vi.fn().mockResolvedValue({ success: true }),
+    clearAll: vi.fn().mockResolvedValue({ success: true }),
+  },
+  history: {
+    list: vi.fn().mockResolvedValue([]),
+    getConfig: vi.fn().mockResolvedValue({ config: null, error: 'Not found' }),
+    delete: vi.fn().mockResolvedValue({ success: true }),
+    updateName: vi.fn().mockResolvedValue({ success: true, entry: null }),
+    getOutputPath: vi.fn().mockResolvedValue({ path: null, exists: false }),
+  },
+  project: {
+    loadCurrent: vi.fn().mockResolvedValue({
+      staff: [],
+      departments: [],
+      frontDeskEnabled: true,
+      favoredEmployees: {},
+      trainingPairs: [],
+      favoredDepartments: {},
+      favoredFrontDeskDepts: {},
+      timesets: [],
+      favoredEmployeeDepts: [],
+      shiftTimePreferences: [],
+      equalityConstraints: [],
+      maxSolveSeconds: 300,
+    }),
+    saveCurrent: vi.fn().mockResolvedValue({ success: true }),
+  },
   solver: {
     run: vi.fn().mockResolvedValue({ runId: 'test-run', error: null }),
     cancel: vi.fn().mockResolvedValue({ canceled: true, runId: 'test-run' }),
@@ -94,6 +128,7 @@ const mockElectronAPI = {
       userData: '/tmp/userData',
       temp: '/tmp',
       logs: '/tmp/logs',
+      history: '/tmp/history',
     }),
   },
 };

@@ -230,7 +230,11 @@ def _resolve_availability_schema(column_map: Dict[str, str], path: Path) -> str:
     )
 
 
-def load_staff_data(path: Path, travel_buffer_slots: int = 1) -> StaffData:
+def load_staff_data(
+    path: Path,
+    travel_buffer_slots: int = 1,
+    front_desk_enabled: bool = True,
+) -> StaffData:
     if not path.exists():
         raise FileNotFoundError(f"Staff CSV not found: {path}")
 
@@ -271,6 +275,17 @@ def load_staff_data(path: Path, travel_buffer_slots: int = 1) -> StaffData:
         if not roles:
             raise ValueError(f"Employee '{name}' must have at least one role defined.")
         role_set = set(roles)
+        if not front_desk_enabled and FRONT_DESK_ROLE in role_set:
+            role_set = {role for role in role_set if role != FRONT_DESK_ROLE}
+            if not role_set:
+                raise ValueError(
+                    f"Employee '{name}' only has Front Desk qualification, but Front Desk is disabled. "
+                    "Add at least one department role or re-enable Front Desk."
+                )
+
+        if not role_set:
+            raise ValueError(f"Employee '{name}' must have at least one schedulable role defined.")
+
         all_roles.update(role_set)
         qual[name] = role_set
 
@@ -358,7 +373,7 @@ def load_staff_data(path: Path, travel_buffer_slots: int = 1) -> StaffData:
 
         employees.append(name)
 
-    if FRONT_DESK_ROLE not in all_roles:
+    if front_desk_enabled and FRONT_DESK_ROLE not in all_roles:
         raise ValueError(f"No employees qualified for required role '{FRONT_DESK_ROLE}'.")
 
     return StaffData(

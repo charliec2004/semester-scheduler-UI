@@ -26,21 +26,17 @@ export function useKeyboardShortcuts() {
             break;
           case '2':
             e.preventDefault();
-            setActiveTab('import');
+            setActiveTab('departments');
             break;
           case '3':
             e.preventDefault();
-            setActiveTab('departments');
+            setActiveTab('staff');
             break;
           case '4':
             e.preventDefault();
-            setActiveTab('staff');
-            break;
-          case '5':
-            e.preventDefault();
             setActiveTab('flags');
             break;
-          case '6':
+          case '5':
             e.preventDefault();
             setActiveTab('results');
             break;

@@ -10,11 +10,10 @@ import { DialogShell } from './dialog-shell';
 
 const shortcuts = [
   { keys: ['⌘', '1'], description: 'Go to Welcome tab' },
-  { keys: ['⌘', '2'], description: 'Go to Import tab' },
-  { keys: ['⌘', '3'], description: 'Go to Departments tab' },
-  { keys: ['⌘', '4'], description: 'Go to Staff tab' },
-  { keys: ['⌘', '5'], description: 'Go to Flags & Solve tab' },
-  { keys: ['⌘', '6'], description: 'Go to Results tab' },
+  { keys: ['⌘', '2'], description: 'Go to Departments tab' },
+  { keys: ['⌘', '3'], description: 'Go to Staff tab' },
+  { keys: ['⌘', '4'], description: 'Go to Flags & Solve tab' },
+  { keys: ['⌘', '5'], description: 'Go to Results tab' },
   { keys: ['⌘', ','], description: 'Open Settings' },
   { keys: ['Esc'], description: 'Close modal / settings' },
   { keys: ['Tab'], description: 'Navigate between elements' },

@@ -81,6 +81,7 @@ def solve_schedule(
     shift_time_preferences: List["ShiftTimePreference"] | None = None,
     equality_requests: List[EqualityRequest] | None = None,
     show_progress: bool = False,
+    front_desk_enabled: bool = True,
     enforce_min_dept_block: bool = True,
     # Settings overrides (from UI Settings panel)
     min_slots_override: int | None = None,
@@ -292,10 +293,20 @@ def solve_schedule(
         department_total=department_total_weight_override if department_total_weight_override is not None else OBJECTIVE_WEIGHTS.department_total,
     )
 
-    staff_data = load_staff_data(staff_csv, travel_buffer_slots=TRAVEL_BUFFER_SLOTS_LOCAL)
+    front_desk_enabled = bool(front_desk_enabled)
+    staff_data = load_staff_data(
+        staff_csv,
+        travel_buffer_slots=TRAVEL_BUFFER_SLOTS_LOCAL,
+        front_desk_enabled=front_desk_enabled,
+    )
     department_requirements = load_department_requirements(requirements_csv)
     department_hour_targets_raw = department_requirements.targets
     department_max_hours_raw = department_requirements.max_hours
+    if not front_desk_enabled and FRONT_DESK_ROLE in department_hour_targets_raw:
+        raise ValueError(
+            "Front Desk is disabled, so the department requirements CSV cannot include a Front Desk row.\n"
+            "  Fix: Remove the Front Desk row from the department CSV or re-enable Front Desk in the app."
+        )
     # Normalize favored employees: lowercase name -> multiplier
     favored_employees_normalized: dict[str, float] = {
         emp.strip().lower(): mult 
@@ -321,7 +332,10 @@ def solve_schedule(
     # ============================================================================
     
     employees: List[str] = staff_data.employees
-    qual: Dict[str, Set[str]] = staff_data.qual
+    qual: Dict[str, Set[str]] = {
+        employee: set(roles)
+        for employee, roles in staff_data.qual.items()
+    }
     weekly_hour_limits = {emp: float(hours) for emp, hours in staff_data.weekly_hour_limits.items()}
     target_weekly_hours = {emp: float(hours) for emp, hours in staff_data.target_weekly_hours.items()}
     employee_year = {emp: int(year) for emp, year in staff_data.employee_year.items()}
@@ -329,9 +343,16 @@ def solve_schedule(
     
     days = DAY_NAMES[:]
     roles = list(staff_data.roles)
-    if FRONT_DESK_ROLE not in roles:
-        raise ValueError(f"Role '{FRONT_DESK_ROLE}' is required but missing from staff data.")
-    roles = [FRONT_DESK_ROLE] + [role for role in roles if role != FRONT_DESK_ROLE]
+    if front_desk_enabled:
+        if FRONT_DESK_ROLE not in roles:
+            raise ValueError(f"Role '{FRONT_DESK_ROLE}' is required but missing from staff data.")
+        roles = [FRONT_DESK_ROLE] + [role for role in roles if role != FRONT_DESK_ROLE]
+    else:
+        roles = [role for role in roles if role != FRONT_DESK_ROLE]
+        qual = {
+            employee: {role for role in role_set if role != FRONT_DESK_ROLE}
+            for employee, role_set in qual.items()
+        }
     
     # Build department_roles in the order they appear in the departments CSV
     # This preserves user-defined ordering from the UI
@@ -375,7 +396,8 @@ def solve_schedule(
         role: " ".join(word.capitalize() for word in role.split("_"))
         for role in roles
     }
-    ROLE_DISPLAY_NAMES[FRONT_DESK_ROLE] = "Front Desk"
+    if front_desk_enabled:
+        ROLE_DISPLAY_NAMES[FRONT_DESK_ROLE] = "Front Desk"
     # Override with user's original names from CSV (preserves their capitalization)
     for normalized, original in department_requirements.display_names.items():
         if normalized in ROLE_DISPLAY_NAMES:
@@ -416,6 +438,11 @@ def solve_schedule(
         day = day_lookup_lower[day_key]
 
         dept_key = normalize_department_name(req.department)
+        if not front_desk_enabled and dept_key == FRONT_DESK_ROLE:
+            raise ValueError(
+                f"TIMESET ERROR: Front Desk is disabled, so timesets cannot target '{req.department}'.\n"
+                f"  Fix: Re-enable Front Desk in the Departments tab or choose a department role."
+            )
         if dept_key not in role_lookup_lower and dept_key != FRONT_DESK_ROLE:
             raise ValueError(
                 f"TIMESET ERROR: Department '{req.department}' not found.\n"
@@ -490,6 +517,8 @@ def solve_schedule(
         multiplier = mult if mult is not None else 1.0
         favored_departments_normalized[role_name] = FavoredDepartment(name=role_name, multiplier=multiplier)
     favored_fd_departments_normalized: Dict[str, FavoredFrontDeskDepartment] = {}
+    if not front_desk_enabled and favored_frontdesk_departments:
+        raise ValueError("--favor-frontdesk-dept cannot be used while Front Desk is disabled.")
     for key, mult in favored_frontdesk_departments.items():
         dept_key = normalize_department_name(key)
         if dept_key not in role_lookup_lower:
@@ -511,6 +540,10 @@ def solve_schedule(
         
         # Special case: front_desk is a role, not a department
         if dept_key == FRONT_DESK_ROLE:
+            if not front_desk_enabled:
+                raise ValueError(
+                    "--favor-employee-dept cannot target front_desk while Front Desk is disabled."
+                )
             role_name = FRONT_DESK_ROLE
         elif dept_key not in role_lookup_lower:
             raise ValueError(f"--favor-employee-dept role '{fed.department}' not found among roles.")
@@ -615,13 +648,14 @@ def solve_schedule(
 
     # Availability diagnostics (used if model is infeasible)
     front_desk_unavailable_slots: List[tuple[str, int]] = []
-    for d in days:
-        for t in T:
-            available_fd = [
-                e for e in employees if FRONT_DESK_ROLE in qual[e] and not (e in unavailable and d in unavailable[e] and t in unavailable[e][d])
-            ]
-            if not available_fd:
-                front_desk_unavailable_slots.append((d, t))
+    if front_desk_enabled:
+        for d in days:
+            for t in T:
+                available_fd = [
+                    e for e in employees if FRONT_DESK_ROLE in qual[e] and not (e in unavailable and d in unavailable[e] and t in unavailable[e][d])
+                ]
+                if not available_fd:
+                    front_desk_unavailable_slots.append((d, t))
 
     training_available_overlap: Dict[int, int] = {}
 
@@ -662,10 +696,11 @@ def solve_schedule(
         } for role in roles
     }
     
-    # front_desk coverage is CRITICAL - must be present at all times
-    for day in days:
-        for time_slot in T:
-            demand["front_desk"][day][time_slot] = 1
+    if front_desk_enabled:
+        # front_desk coverage is CRITICAL - must be present at all times
+        for day in days:
+            for time_slot in T:
+                demand[FRONT_DESK_ROLE][day][time_slot] = 1
     
     # Note: Department roles have no fixed demand - they're assigned flexibly
     # based on availability and the objective function
@@ -708,13 +743,17 @@ def solve_schedule(
     }
     
     # Boolean variables to track front desk assignment transitions (ensures contiguous front desk duty)
-    frontdesk_allowed_slots = {
-        (e, d, t)
-        for e in employees
-        for d in days
-        for t in T
-        if FRONT_DESK_ROLE in qual[e] or (e, d, t, FRONT_DESK_ROLE) in forced_assignments
-    }
+    frontdesk_allowed_slots = (
+        {
+            (e, d, t)
+            for e in employees
+            for d in days
+            for t in T
+            if FRONT_DESK_ROLE in qual[e] or (e, d, t, FRONT_DESK_ROLE) in forced_assignments
+        }
+        if front_desk_enabled
+        else set()
+    )
     frontdesk_employees = {e for (e, _, _) in frontdesk_allowed_slots}
     frontdesk_start = {
         (e, d, t): model.new_bool_var(f"frontdesk_start[{e},{d},{t}]")
@@ -949,75 +988,63 @@ def solve_schedule(
                     # No roles available for this employee at this slot - they can't work here
                     model.add(work[e, d, t] == 0)
                 
-                # Constraint 9.3: CRITICAL - Non-front desk roles need front desk supervision
-                # Any departmental assignment can ONLY happen when at least one front_desk is present
-                # This prevents scenarios where only departmental work is happening unsupervised
-                for r in department_roles:
-                    if (e, d, t, r) in assign:
-                        model.add(
-                            sum(assign.get((emp, d, t, "front_desk"), 0) for emp in employees) >= 1
-                        ).only_enforce_if(assign[(e, d, t, r)])
+                if front_desk_enabled:
+                    # Constraint 9.3: CRITICAL - Non-front desk roles need front desk supervision
+                    # Any departmental assignment can ONLY happen when at least one front_desk is present
+                    # This prevents scenarios where only departmental work is happening unsupervised
+                    for r in department_roles:
+                        if (e, d, t, r) in assign:
+                            model.add(
+                                sum(assign.get((emp, d, t, FRONT_DESK_ROLE), 0) for emp in employees) >= 1
+                            ).only_enforce_if(assign[(e, d, t, r)])
 
     # ============================================================================
     # STEP 9B: FRONT DESK ASSIGNMENT CONTIGUITY
     # ============================================================================
     # Prevent employees from toggling in and out of front desk duty within the same shift
 
-    for e in employees:
-        if all((e, d, t, FRONT_DESK_ROLE) not in assign for d in days for t in T):
-            continue
-        for d in days:
-            fd_starts = [frontdesk_start.get((e, d, t), 0) for t in T]
-            fd_ends = [frontdesk_end.get((e, d, t), 0) for t in T]
-            model.add(sum(fd_starts) <= 1)
-            model.add(sum(fd_ends) <= 1)
-            model.add(sum(fd_starts) == sum(fd_ends))
-            
-            assign_fd_0 = assign.get((e, d, 0, "front_desk"), 0)
-            model.add(assign_fd_0 == frontdesk_start.get((e, d, 0), 0))
-            
-            for t in T[1:]:
-                assign_curr = assign.get((e, d, t, "front_desk"), 0)
-                assign_prev = assign.get((e, d, t-1, "front_desk"), 0)
-                model.add(
-                    assign_curr - assign_prev == frontdesk_start.get((e, d, t), 0) - frontdesk_end.get((e, d, t-1), 0)
+    if front_desk_enabled:
+        for e in employees:
+            if all((e, d, t, FRONT_DESK_ROLE) not in assign for d in days for t in T):
+                continue
+            for d in days:
+                fd_starts = [frontdesk_start.get((e, d, t), 0) for t in T]
+                fd_ends = [frontdesk_end.get((e, d, t), 0) for t in T]
+                model.add(sum(fd_starts) <= 1)
+                model.add(sum(fd_ends) <= 1)
+                model.add(sum(fd_starts) == sum(fd_ends))
+                
+                assign_fd_0 = assign.get((e, d, 0, FRONT_DESK_ROLE), 0)
+                model.add(assign_fd_0 == frontdesk_start.get((e, d, 0), 0))
+                
+                for t in T[1:]:
+                    assign_curr = assign.get((e, d, t, FRONT_DESK_ROLE), 0)
+                    assign_prev = assign.get((e, d, t-1, FRONT_DESK_ROLE), 0)
+                    model.add(
+                        assign_curr - assign_prev == frontdesk_start.get((e, d, t), 0) - frontdesk_end.get((e, d, t-1), 0)
+                    )
+                
+                model.add(frontdesk_end.get((e, d, T[-1]), 0) == assign.get((e, d, T[-1], FRONT_DESK_ROLE), 0))
+                
+                total_front_desk_slots = sum(assign.get((e, d, t, FRONT_DESK_ROLE), 0) for t in T)
+                is_favored = e.lower() in favored_employees_normalized
+
+                has_forced_fd_assignment = any(
+                    r == FRONT_DESK_ROLE
+                    for (emp, day, slot, r) in forced_assignments
+                    if emp == e and day == d
                 )
-            
-            model.add(frontdesk_end.get((e, d, T[-1]), 0) == assign.get((e, d, T[-1], "front_desk"), 0))
-            
-            # HARD CONSTRAINT: Front desk assignments must respect the same minimum shift length
-            # rules as the employee's overall day.
-            total_front_desk_slots = sum(assign.get((e, d, t, "front_desk"), 0) for t in T)
-            is_favored = e.lower() in favored_employees_normalized
 
-            # Check if THIS employee has forced front desk assignment on this day (via timeset)
-            has_forced_fd_assignment = any(
-                r == FRONT_DESK_ROLE
-                for (emp, day, slot, r) in forced_assignments
-                if emp == e and day == d
-            )
+                day_has_any_forced_fd = any(
+                    r == FRONT_DESK_ROLE
+                    for (emp, day_check, slot, r) in forced_assignments
+                    if day_check == d
+                )
 
-            # Check if ANY employee has forced front desk assignment on this day
-            # This affects other employees because forced FD "blocks" adjacent slots
-            # E.g., if Natalya is forced to FD at 4pm-5pm, someone covering FD 2pm-4pm
-            # can't extend to 5pm (conflict), so they might need a shorter-than-minimum shift
-            day_has_any_forced_fd = any(
-                r == FRONT_DESK_ROLE
-                for (emp, day_check, slot, r) in forced_assignments
-                if day_check == d
-            )
-
-            # Explicitly forbid undersized front desk blocks.
-            # EXCEPTION 1: Employee with forced FD assignment is exempt
-            # EXCEPTION 2: ALL employees exempt on days with ANY forced FD assignment
-            #              (forced FD can block adjacent slots, making normal minimums impossible)
-            min_front_desk_slots = FAVORED_MIN_SLOTS_LOCAL if is_favored else MIN_FRONT_DESK_SLOTS
-            # EXCEPTION 1: Employee with forced FD assignment is exempt
-            # EXCEPTION 2: ALL employees exempt on days with ANY forced FD assignment
-            #              (forced FD can block adjacent slots, making normal minimums impossible)
-            if not has_forced_fd_assignment and not day_has_any_forced_fd:
-                for disallowed_slots in range(1, min_front_desk_slots):
-                    model.add(total_front_desk_slots != disallowed_slots)
+                min_front_desk_slots = FAVORED_MIN_SLOTS_LOCAL if is_favored else MIN_FRONT_DESK_SLOTS
+                if not has_forced_fd_assignment and not day_has_any_forced_fd:
+                    for disallowed_slots in range(1, min_front_desk_slots):
+                        model.add(total_front_desk_slots != disallowed_slots)
     
     
     # ============================================================================
@@ -1157,28 +1184,17 @@ def solve_schedule(
     # ============================================================================
     # Ensure minimum staffing levels are met for each role
     
-    # Create coverage tracking variables (soft constraints via objective)
     front_desk_coverage_score = 0
-    
-    for d in days:
-        for t in T:
-            # Create indicator: is front desk covered at this time?
-            has_front_desk = model.new_bool_var(f"has_front_desk[{d},{t}]")
-            num_front_desk = sum(assign.get((e, d, t, "front_desk"), 0) for e in employees)
-            
-            # Link indicator to actual coverage (at least 1 front desk)
-            model.add(num_front_desk >= 1).only_enforce_if(has_front_desk)
-            model.add(num_front_desk == 0).only_enforce_if(has_front_desk.Not())
-            
-            # VERY STRONG SOFT CONSTRAINT: Front desk should be covered at all times
-            # We use MASSIVE weight (10000) to make this extremely high priority
-            # This is NOT a hard constraint - if truly impossible, solver can still find a solution
-            # But practically, front desk will only be uncovered if NO front-desk-qualified 
-            # employee is available at that time slot
-            front_desk_coverage_score += FRONT_DESK_COVERAGE_WEIGHT_LOCAL * has_front_desk
-            
-            # HARD CONSTRAINT: At most 1 front desk at a time (no overstaffing at front desk)
-            model.add(num_front_desk <= 1)
+    if front_desk_enabled:
+        for d in days:
+            for t in T:
+                has_front_desk = model.new_bool_var(f"has_front_desk[{d},{t}]")
+                num_front_desk = sum(assign.get((e, d, t, FRONT_DESK_ROLE), 0) for e in employees)
+                
+                model.add(num_front_desk >= 1).only_enforce_if(has_front_desk)
+                model.add(num_front_desk == 0).only_enforce_if(has_front_desk.Not())
+                front_desk_coverage_score += FRONT_DESK_COVERAGE_WEIGHT_LOCAL * has_front_desk
+                model.add(num_front_desk <= 1)
             
             # NOTE: Department roles CAN have multiple people working at the same time
             # We removed the hard cap - instead we'll use soft constraints in the objective
@@ -1203,7 +1219,7 @@ def solve_schedule(
     front_desk_slots_by_employee = {
         e: sum(assign.get((e, d, t, FRONT_DESK_ROLE), 0) for d in days for t in T)
         for e in employees
-    }
+    } if front_desk_enabled else {e: 0 for e in employees}
     dual_front_desk_slots = {
         role: sum(
             front_desk_slots_by_employee[e]
@@ -1227,7 +1243,7 @@ def solve_schedule(
                 FAVORED_DEPARTMENT_FOCUSED_BONUS_LOCAL * focused_slots
                 - FAVORED_DEPARTMENT_DUAL_PENALTY_LOCAL * dual_slots
             )
-        if role in favored_fd_departments_normalized:
+        if front_desk_enabled and role in favored_fd_departments_normalized:
             mult = favored_fd_departments_normalized[role].multiplier
             # Bonus for each front desk slot filled by members of this department
             fd_slots = sum(assign.get((e, d, t, FRONT_DESK_ROLE), 0) for e in employees if role in qual[e] for d in days for t in T)
@@ -1360,7 +1376,7 @@ def solve_schedule(
         # When timesets are active, they consume coverage capacity and may make
         # it impossible for FD-qualified employees to meet their hour targets
         # while also providing required FD coverage. Relax the lower bound.
-        if forced_assignments and feasible_lower > 0:
+        if forced_assignments and feasible_lower > 0 and front_desk_enabled:
             # Count total forced department slots that need FD coverage
             total_forced_dept_slots = sum(
                 1 for (emp, day, slot, role) in forced_assignments
@@ -1469,17 +1485,13 @@ def solve_schedule(
     # Junior (3): -3 penalty = prefer to avoid
     # Senior (4): -4 penalty = prefer to avoid most
     underclassmen_preference_score = 0
-    
-    for e in employees:
-        year = employee_year.get(e, 2)  # Default to sophomore if not specified
-        
-        # For each front desk assignment, apply a penalty based on year
-        # Lower year (freshman) = smaller penalty = more preferred
-        for d in days:
-            for t in T:
-                if (e, d, t, "front_desk") in assign:
-                    # Subtract the year value: freshmen (1) are least penalized
-                    underclassmen_preference_score -= year * assign[(e, d, t, "front_desk")]
+    if front_desk_enabled:
+        for e in employees:
+            year = employee_year.get(e, 2)
+            for d in days:
+                for t in T:
+                    if (e, d, t, FRONT_DESK_ROLE) in assign:
+                        underclassmen_preference_score -= year * assign[(e, d, t, FRONT_DESK_ROLE)]
     
     # ============================================================================
     # DEPARTMENT SCARCITY PENALTY FOR FRONT DESK
@@ -1493,26 +1505,16 @@ def solve_schedule(
     # This takes precedence over seniority - spreading the wealth is the priority!
     
     department_scarcity_penalty = 0
-    
-    for e in employees:
-        # Find which non-front-desk departments this employee belongs to
-        employee_departments = [r for r in qual[e] if r != "front_desk" and r in department_roles]
-        
-        # Calculate scarcity: average inverse of department sizes for this employee's departments
-        # If employee is in multiple departments, use the SMALLEST department (most scarce)
-        if employee_departments:
-            # Get the smallest department size this employee belongs to
-            min_dept_size = min(department_sizes[dept] for dept in employee_departments)
-            
-            # Scarcity penalty: smaller department = higher penalty for using at front desk
-            scarcity_factor = DEPARTMENT_SCARCITY_BASE_WEIGHT_LOCAL / min_dept_size
-            
-            # Apply penalty for each front desk assignment
-            for d in days:
-                for t in T:
-                    if (e, d, t, "front_desk") in assign:
-                        # Penalize pulling scarce resources to front desk
-                        department_scarcity_penalty -= scarcity_factor * assign[(e, d, t, "front_desk")]
+    if front_desk_enabled:
+        for e in employees:
+            employee_departments = [r for r in qual[e] if r != FRONT_DESK_ROLE and r in department_roles]
+            if employee_departments:
+                min_dept_size = min(department_sizes[dept] for dept in employee_departments)
+                scarcity_factor = DEPARTMENT_SCARCITY_BASE_WEIGHT_LOCAL / min_dept_size
+                for d in days:
+                    for t in T:
+                        if (e, d, t, FRONT_DESK_ROLE) in assign:
+                            department_scarcity_penalty -= scarcity_factor * assign[(e, d, t, FRONT_DESK_ROLE)]
     
     # ============================================================================
     # COLLABORATIVE HOURS TRACKING
@@ -1968,7 +1970,7 @@ def solve_schedule(
             issues_found = True
 
         # Check for SPECIFIC conflicts - front desk coverage during timesets
-        if timeset_details:
+        if front_desk_enabled and timeset_details:
             print("CHECKING FRONT DESK COVERAGE DURING TIMESETS")
             # Get all employees qualified for front desk
             fd_qualified = [e for e in employees if FRONT_DESK_ROLE in qual[e]]
@@ -2037,7 +2039,7 @@ def solve_schedule(
                     issues_found = True
             print()
 
-        if front_desk_unavailable_slots:
+        if front_desk_enabled and front_desk_unavailable_slots:
             issues_found = True
             preview = ", ".join(f"{d} {SLOT_NAMES[t]}" for d, t in front_desk_unavailable_slots[:5])
             more = "" if len(front_desk_unavailable_slots) <= 5 else f" (+{len(front_desk_unavailable_slots)-5} more)"
@@ -2113,6 +2115,7 @@ def solve_schedule(
         department_hour_targets,
         department_max_hours,
         primary_department_for_employee,
+        front_desk_enabled,
     )
     export_schedule_to_excel(
         status,
@@ -2133,6 +2136,7 @@ def solve_schedule(
         department_max_hours,
         output_path,
         primary_department_for_employee,
+        front_desk_enabled,
     )
     export_formatted_schedule(
         status,
@@ -2149,6 +2153,7 @@ def solve_schedule(
         department_hour_targets,
         department_max_hours,
         primary_department_for_employee,
+        front_desk_enabled,
         output_path,
     )
     return status

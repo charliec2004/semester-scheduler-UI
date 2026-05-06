@@ -99,6 +99,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Show a simple progress timer toward the max solve time.",
     )
     parser.add_argument(
+        "--no-front-desk",
+        action="store_true",
+        help="Disable the built-in Front Desk role and all front-desk-specific constraints and reporting.",
+    )
+    parser.add_argument(
         "--timeset",
         action="append",
         nargs=5,
@@ -742,6 +747,7 @@ def main(argv: list[str] | None = None) -> None:
             shift_time_preferences=shift_time_preferences,
             equality_requests=equality_requests,
             show_progress=args.progress,
+            front_desk_enabled=not args.no_front_desk,
             enforce_min_dept_block=args.enforce_min_dept_block,
             # Settings overrides
             min_slots_override=args.min_slots,

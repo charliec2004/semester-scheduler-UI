@@ -174,6 +174,32 @@ export interface Department {
   maxHours: number;
 }
 
+export interface DepartmentData {
+  departments: Department[];
+  frontDeskEnabled: boolean;
+}
+
+export const DEFAULT_FRONT_DESK_ENABLED = true;
+
+export function normalizeDepartmentData(
+  stored?: Partial<DepartmentData> | Department[] | null,
+): DepartmentData {
+  if (Array.isArray(stored)) {
+    return {
+      departments: stored,
+      frontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
+    };
+  }
+
+  return {
+    departments: Array.isArray(stored?.departments) ? stored.departments : [],
+    frontDeskEnabled:
+      stored?.frontDeskEnabled === undefined
+        ? DEFAULT_FRONT_DESK_ENABLED
+        : stored.frontDeskEnabled !== false,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Solver Configuration
 // ---------------------------------------------------------------------------
@@ -213,6 +239,7 @@ export interface EqualityConstraint {
 export interface SolverRunConfig {
   staffPath: string;
   deptPath: string;
+  frontDeskEnabled?: boolean;
   maxSolveSeconds?: number;
   showProgress?: boolean;
   favoredEmployees?: Record<string, number>; // employee name -> multiplier
@@ -293,6 +320,7 @@ export interface SolverResult {
   error?: string;
   errorType?: 'error' | 'no_solution' | 'cancelled';
   elapsed: number;
+  frontDeskEnabled?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -302,6 +330,7 @@ export interface SolverResult {
 export interface HistoryEntry {
   id: string;
   timestamp: string;
+  name?: string;
   employeeCount: number;
   departmentCount: number;
   hasXlsx: boolean;
@@ -312,6 +341,7 @@ export interface HistoryEntry {
 export interface ConfigSnapshot {
   staff: StaffMember[];
   departments: Department[];
+  frontDeskEnabled: boolean;
   favoredEmployees: Record<string, number>; // employee name -> multiplier
   trainingPairs: TrainingPair[];
   favoredDepartments: Record<string, number>;
@@ -321,6 +351,71 @@ export interface ConfigSnapshot {
   shiftTimePreferences: ShiftTimePreference[];
   equalityConstraints: EqualityConstraint[];
   maxSolveSeconds: number;
+}
+
+export interface ProjectConfigFileV1 {
+  app: 'semester-scheduler';
+  kind: 'project-config';
+  version: 1;
+  exportedAt: string;
+  config: ConfigSnapshot;
+}
+
+export function createDefaultConfigSnapshot(): ConfigSnapshot {
+  return {
+    staff: [],
+    departments: [],
+    frontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
+    favoredEmployees: {},
+    trainingPairs: [],
+    favoredDepartments: {},
+    favoredFrontDeskDepts: {},
+    timesets: [],
+    favoredEmployeeDepts: [],
+    shiftTimePreferences: [],
+    equalityConstraints: [],
+    maxSolveSeconds: 300,
+  };
+}
+
+export function normalizeConfigSnapshot(stored?: Partial<ConfigSnapshot> | null): ConfigSnapshot {
+  const defaults = createDefaultConfigSnapshot();
+
+  return {
+    staff: Array.isArray(stored?.staff) ? stored.staff : defaults.staff,
+    departments: Array.isArray(stored?.departments) ? stored.departments : defaults.departments,
+    frontDeskEnabled:
+      stored?.frontDeskEnabled === undefined
+        ? defaults.frontDeskEnabled
+        : stored.frontDeskEnabled !== false,
+    favoredEmployees:
+      stored?.favoredEmployees && typeof stored.favoredEmployees === 'object'
+        ? stored.favoredEmployees
+        : defaults.favoredEmployees,
+    trainingPairs: Array.isArray(stored?.trainingPairs) ? stored.trainingPairs : defaults.trainingPairs,
+    favoredDepartments:
+      stored?.favoredDepartments && typeof stored.favoredDepartments === 'object'
+        ? stored.favoredDepartments
+        : defaults.favoredDepartments,
+    favoredFrontDeskDepts:
+      stored?.favoredFrontDeskDepts && typeof stored.favoredFrontDeskDepts === 'object'
+        ? stored.favoredFrontDeskDepts
+        : defaults.favoredFrontDeskDepts,
+    timesets: Array.isArray(stored?.timesets) ? stored.timesets : defaults.timesets,
+    favoredEmployeeDepts: Array.isArray(stored?.favoredEmployeeDepts)
+      ? stored.favoredEmployeeDepts
+      : defaults.favoredEmployeeDepts,
+    shiftTimePreferences: Array.isArray(stored?.shiftTimePreferences)
+      ? stored.shiftTimePreferences
+      : defaults.shiftTimePreferences,
+    equalityConstraints: Array.isArray(stored?.equalityConstraints)
+      ? stored.equalityConstraints
+      : defaults.equalityConstraints,
+    maxSolveSeconds:
+      typeof stored?.maxSolveSeconds === 'number' && Number.isFinite(stored.maxSolveSeconds)
+        ? stored.maxSolveSeconds
+        : defaults.maxSolveSeconds,
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -369,6 +464,8 @@ export interface IpcChannels {
   'files:openCsv': (kind: 'staff' | 'dept') => Promise<{ path?: string; content?: string; canceled: boolean }>;
   'files:saveCsvToTemp': (opts: { content: string; filename: string }) => Promise<{ path: string }>;
   'files:saveCsv': (opts: { kind: 'staff' | 'dept'; content: string }) => Promise<{ path?: string; canceled: boolean }>;
+  'files:openConfig': () => Promise<{ path?: string; content?: string; canceled: boolean }>;
+  'files:saveConfig': (opts: { content: string }) => Promise<{ path?: string; canceled: boolean }>;
   'files:downloadSample': (kind: 'staff' | 'dept') => Promise<{ path?: string; canceled: boolean }>;
   'files:readFile': (path: string) => Promise<{ content: string | null; error: string | null }>;
   'files:saveOutputAs': (opts: { sourcePath: string; defaultName: string }) => Promise<{ path?: string; canceled: boolean }>;
@@ -388,7 +485,12 @@ export interface IpcChannels {
   'history:list': () => Promise<HistoryEntry[]>;
   'history:getConfig': (historyId: string) => Promise<{ config: ConfigSnapshot | null; error: string | null }>;
   'history:delete': (historyId: string) => Promise<{ success: boolean }>;
+  'history:updateName': (opts: { historyId: string; name: string }) => Promise<{ success: boolean; entry: HistoryEntry | null }>;
   'history:getOutputPath': (opts: { historyId: string; type: 'xlsx' | 'xlsxFormatted' }) => Promise<{ path: string | null; exists: boolean }>;
+
+  // Current project
+  'project:loadCurrent': () => Promise<ConfigSnapshot>;
+  'project:saveCurrent': (config: ConfigSnapshot) => Promise<{ success: boolean }>;
   
   // Solver
   'solver:run': (opts: { config: SolverRunConfig; snapshot: ConfigSnapshot }) => Promise<{ runId: string | null; error: string | null }>;

@@ -231,6 +231,47 @@ def test_load_staff_data_rejects_misaligned_hours(tmp_path):
         assert "10-minute slot grid" in str(exc)
 
 
+def test_load_staff_data_allows_missing_front_desk_when_disabled(tmp_path):
+    availability = {f"Mon_{time}": True for time in TIME_SLOT_STARTS}
+    csv_path = tmp_path / "staff-no-front-desk.csv"
+    row = _make_staff_row("Alice", availability)
+    row["roles"] = "marketing"
+    pd.DataFrame([row]).to_csv(csv_path, index=False)
+
+    staff_data = load_staff_data(csv_path, front_desk_enabled=False)
+
+    assert staff_data.roles == ["marketing"]
+    assert staff_data.qual["Alice"] == {"marketing"}
+
+
+def test_load_staff_data_requires_front_desk_when_enabled(tmp_path):
+    availability = {f"Mon_{time}": True for time in TIME_SLOT_STARTS}
+    csv_path = tmp_path / "staff-front-desk-required.csv"
+    row = _make_staff_row("Alice", availability)
+    row["roles"] = "marketing"
+    pd.DataFrame([row]).to_csv(csv_path, index=False)
+
+    try:
+        load_staff_data(csv_path, front_desk_enabled=True)
+        assert False, "Should have raised ValueError when Front Desk is enabled"
+    except ValueError as exc:
+        assert "front_desk" in str(exc)
+
+
+def test_load_staff_data_rejects_front_desk_only_employee_when_disabled(tmp_path):
+    availability = {f"Mon_{time}": True for time in TIME_SLOT_STARTS}
+    csv_path = tmp_path / "staff-front-desk-only-disabled.csv"
+    row = _make_staff_row("Alice", availability)
+    row["roles"] = "front_desk"
+    pd.DataFrame([row]).to_csv(csv_path, index=False)
+
+    try:
+        load_staff_data(csv_path, front_desk_enabled=False)
+        assert False, "Should have raised ValueError for front_desk-only employee when disabled"
+    except ValueError as exc:
+        assert "Front Desk is disabled" in str(exc)
+
+
 def test_load_department_requirements_rejects_misaligned_hours(tmp_path):
     csv_path = tmp_path / "departments.csv"
     pd.DataFrame([

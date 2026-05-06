@@ -27,6 +27,7 @@ def print_schedule(
     department_hour_targets,
     department_max_hours,
     primary_frontdesk_department,
+    front_desk_enabled,
 ):
     """
     Display the schedule in a readable format with statistics.
@@ -56,7 +57,7 @@ def print_schedule(
         print(f"{d.upper()}")
         print(f"{'─' * 120}")
 
-        role_columns = [FRONT_DESK_ROLE] + department_roles
+        role_columns = ([FRONT_DESK_ROLE] if front_desk_enabled else []) + department_roles
         column_width = 22
         header = f"\n{'Time':<12}" + "".join(f"{role_display_names[role]:<{column_width}}" for role in role_columns)
         print(header)
@@ -71,7 +72,7 @@ def print_schedule(
                     e for e in employees if (e, d, t, role) in assign and solver.value(assign[(e, d, t, role)])
                 ]
 
-                if role == FRONT_DESK_ROLE:
+                if front_desk_enabled and role == FRONT_DESK_ROLE:
                     cell = ", ".join(workers) if workers else "ERROR: UNCOVERED"
                 else:
                     cell = ", ".join(workers) if workers else "-"
@@ -160,7 +161,7 @@ def print_schedule(
     for role in roles:
         role_name = role_display_names[role]
 
-        if role == FRONT_DESK_ROLE:
+        if front_desk_enabled and role == FRONT_DESK_ROLE:
             actual_hours = slots_to_hours(role_direct_slots[role])
             target = department_hour_targets.get(role)
             max_hours = department_max_hours.get(role)

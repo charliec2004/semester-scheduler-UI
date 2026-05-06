@@ -5,16 +5,16 @@
 
 import { useEffect, useState } from 'react';
 import { CalendarDays, Moon, Settings2, Sun } from 'lucide-react';
-import { useSettingsStore, useUIStore, useFlagsStore, useSolverStore, useHistoryStore, useStaffStore, useDepartmentStore } from './store';
+import { useSettingsStore, useUIStore, useFlagsStore, useSolverStore, useHistoryStore, useProjectStore } from './store';
 import { TabNavigation } from './components/layout/TabNavigation';
 import { Toast } from './components/ui/Toast';
 import { SettingsPanel } from './components/settings/SettingsPanel';
-import { ImportTab } from './components/tabs/ImportTab';
 import { StaffEditorTab } from './components/tabs/StaffEditorTab';
 import { DepartmentsTab } from './components/tabs/DepartmentsTab';
 import { FlagsSetupBanner, FlagsTab } from './components/tabs/FlagsTab';
 import { ResultsTab } from './components/tabs/ResultsTab';
 import { WelcomeTab } from './components/tabs/WelcomeTab';
+import { InfoHelpModal } from './components/ui/InfoHelpModal';
 import { KeyboardShortcutsHelp } from './components/ui/KeyboardShortcutsHelp';
 import { Button } from './components/ui/button';
 import { useKeyboardShortcuts } from './hooks/useKeyboardShortcuts';
@@ -23,22 +23,28 @@ function App() {
   const { settings, loadSettings, saveSettings } = useSettingsStore();
   const { activeTab, showSettings, toast } = useUIStore();
   const { loadPresets } = useFlagsStore();
+  const { loadCurrentProject, persistFlags } = useProjectStore();
   const { setProgress, addLog, setResult } = useSolverStore();
   const { loadHistory } = useHistoryStore();
-  const { loadSavedStaff } = useStaffStore();
-  const { loadSavedDepartments } = useDepartmentStore();
 
   // Load settings, presets, history, and saved data on mount
   useEffect(() => {
     loadSettings();
     loadPresets();
     loadHistory();
-    loadSavedStaff();
-    loadSavedDepartments();
-  }, [loadSettings, loadPresets, loadHistory, loadSavedStaff, loadSavedDepartments]);
+    loadCurrentProject();
+  }, [loadSettings, loadPresets, loadHistory, loadCurrentProject]);
 
   // Global keyboard shortcuts
   useKeyboardShortcuts();
+
+  useEffect(() => {
+    const unsubscribe = useFlagsStore.subscribe(() => {
+      void persistFlags();
+    });
+
+    return unsubscribe;
+  }, [persistFlags]);
 
   // Set up solver event listeners
   useEffect(() => {
@@ -57,6 +63,7 @@ function App() {
         error: result.error,
         errorType: result.errorType,
         elapsed: result.elapsed,
+        frontDeskEnabled: result.frontDeskEnabled,
       });
     });
 
@@ -201,6 +208,7 @@ function App() {
                 {resolvedTheme === 'dark' ? 'Switch to light mode' : 'Switch to dark mode'}
               </span>
             </Button>
+            <InfoHelpModal />
             <KeyboardShortcutsHelp />
             <Button
               onClick={() => useUIStore.getState().setShowSettings(true)}
@@ -225,7 +233,6 @@ function App() {
       <main id="main-content" className="flex-1 overflow-y-auto scrollbar-gutter-stable" role="main">
         <div className="container mx-auto max-w-7xl px-5 py-6">
           {activeTab === 'welcome' && <WelcomeTab />}
-          {activeTab === 'import' && <ImportTab />}
           {activeTab === 'departments' && <DepartmentsTab />}
           {activeTab === 'staff' && <StaffEditorTab />}
           {activeTab === 'flags' && <FlagsTab />}

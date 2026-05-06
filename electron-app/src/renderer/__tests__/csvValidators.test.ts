@@ -13,6 +13,7 @@ import {
   departmentsToCsv,
   AVAILABILITY_COLUMNS,
 } from '../utils/csvValidators';
+import { normalizeDepartmentData } from '../../main/ipc-types';
 import {
   UNAVAILABILITY_BLOCKS_JSON_COLUMN,
   createEmptyUnavailabilityBlocks,
@@ -57,12 +58,12 @@ Alice,front_desk,20,10,2,${AVAILABILITY_COLUMNS.map(() => '1').join(',')}`;
     expect(result.errors.some(e => e.message.includes('cannot exceed'))).toBe(true);
   });
 
-  it('requires at least one front_desk role', () => {
+  it('allows staff CSVs without a front_desk role', () => {
     const csv = `name,roles,target_hours,max_hours,year,${AVAILABILITY_COLUMNS.join(',')}
 Alice,marketing,10,15,2,${AVAILABILITY_COLUMNS.map(() => '1').join(',')}`;
     const result = validateStaffCsv(csv);
-    expect(result.valid).toBe(false);
-    expect(result.errors.some(e => e.message.includes('front_desk'))).toBe(true);
+    expect(result.valid).toBe(true);
+    expect(result.errors).toHaveLength(0);
   });
 
   it('parses staff CSV correctly', () => {
@@ -165,12 +166,29 @@ Marketing,40,30`;
     expect(depts[0].maxHours).toBe(30);
   });
 
+  it('defaults legacy saved department arrays to front desk enabled', () => {
+    const normalized = normalizeDepartmentData([
+      { name: 'Marketing', targetHours: 20, maxHours: 30 },
+    ]);
+
+    expect(normalized.frontDeskEnabled).toBe(true);
+    expect(normalized.departments).toHaveLength(1);
+  });
+
   it('rejects department hour values that do not align to 10-minute increments', () => {
     const csv = `department,target_hours,max_hours
 Marketing,12.25,15`;
     const result = validateDepartmentCsv(csv);
     expect(result.valid).toBe(false);
     expect(result.errors.some(e => e.message.includes('10-minute increments'))).toBe(true);
+  });
+
+  it('rejects Front Desk as a custom department row', () => {
+    const csv = `department,target_hours,max_hours
+Front Desk,20,30`;
+    const result = validateDepartmentCsv(csv);
+    expect(result.valid).toBe(false);
+    expect(result.errors.some(e => e.message.includes('built in'))).toBe(true);
   });
 });
 

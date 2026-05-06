@@ -8,6 +8,7 @@ import type {
   AppSettings,
   StaffMember,
   Department,
+  DepartmentData,
   FlagPreset,
   TrainingPair,
   TimesetRequest,
@@ -19,6 +20,7 @@ import type {
   HistoryEntry,
   ConfigSnapshot,
 } from '../../main/ipc-types';
+import { DEFAULT_FRONT_DESK_ENABLED, normalizeConfigSnapshot, normalizeDepartmentData } from '../../main/ipc-types';
 import {
   migrateStaffAvailabilityShape,
   type DayName,
@@ -97,6 +99,27 @@ function persistUpdatedPresets(presets: FlagPreset[]): void {
     return;
   }
   void Promise.all(presets.map((preset) => window.electronAPI.presets.save(preset)));
+}
+
+function applyConfigSnapshotToStores(config: ConfigSnapshot): void {
+  const normalized = normalizeConfigSnapshot(config);
+  useStaffStore.getState().setStaff(normalized.staff);
+  useStaffStore.getState().setErrors([], []);
+  useDepartmentStore.getState().setDepartments({
+    departments: normalized.departments,
+    frontDeskEnabled: normalized.frontDeskEnabled,
+  });
+  useDepartmentStore.getState().setErrors([], []);
+  useFlagsStore.getState().setFavoredEmployees(normalized.favoredEmployees);
+  useFlagsStore.getState().setTrainingPairs(normalized.trainingPairs);
+  useFlagsStore.getState().setFavoredDepartments(normalized.favoredDepartments);
+  useFlagsStore.getState().setFavoredFrontDeskDepts(normalized.favoredFrontDeskDepts);
+  useFlagsStore.getState().setFavoredEmployeeDepts(normalized.favoredEmployeeDepts);
+  useFlagsStore.getState().setTimesets(normalized.timesets);
+  useFlagsStore.getState().setShiftTimePreferences(normalized.shiftTimePreferences);
+  useFlagsStore.getState().setEqualityConstraints(normalized.equalityConstraints);
+  useFlagsStore.getState().setMaxSolveSeconds(normalized.maxSolveSeconds);
+  useSolverStore.getState().reset();
 }
 
 // ---------------------------------------------------------------------------
@@ -208,6 +231,7 @@ export const useStaffStore = create<StaffState>((set, get) => ({
   
   saveStaff: async () => {
     await window.electronAPI.data.saveStaff(get().staff);
+    await useProjectStore.getState().syncSavedDataSnapshot({ staff: get().staff });
     set({ dirty: false });
   },
   
@@ -225,15 +249,17 @@ export const useStaffStore = create<StaffState>((set, get) => ({
 
 interface DepartmentState {
   departments: Department[];
+  frontDeskEnabled: boolean;
   deptPath: string | null;
   errors: ValidationError[];
   warnings: ValidationError[];
   dirty: boolean;
-  setDepartments: (departments: Department[], path?: string) => void;
+  setDepartments: (data: DepartmentData | Department[], path?: string) => void;
   updateDepartment: (index: number, dept: Partial<Department>) => void;
   addDepartment: (dept: Department) => void;
   removeDepartment: (index: number) => void;
   reorderDepartments: (fromIndex: number, toIndex: number) => void;
+  setFrontDeskEnabled: (enabled: boolean) => void;
   setErrors: (errors: ValidationError[], warnings: ValidationError[]) => void;
   setDirty: (dirty: boolean) => void;
   clearDepartments: () => void;
@@ -243,12 +269,21 @@ interface DepartmentState {
 
 export const useDepartmentStore = create<DepartmentState>((set, get) => ({
   departments: [],
+  frontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
   deptPath: null,
   errors: [],
   warnings: [],
   dirty: false,
 
-  setDepartments: (departments, path) => set({ departments, deptPath: path ?? null, dirty: false }),
+  setDepartments: (data, path) => {
+    const normalized = normalizeDepartmentData(data);
+    set({
+      departments: normalized.departments,
+      frontDeskEnabled: normalized.frontDeskEnabled,
+      deptPath: path ?? null,
+      dirty: false,
+    });
+  },
   
   updateDepartment: (index, dept) => {
     const departments = [...get().departments];
@@ -294,20 +329,37 @@ export const useDepartmentStore = create<DepartmentState>((set, get) => ({
     set({ departments, dirty: true });
   },
 
+  setFrontDeskEnabled: (frontDeskEnabled) => set({ frontDeskEnabled, dirty: true }),
+
   setErrors: (errors, warnings) => set({ errors, warnings }),
   setDirty: (dirty) => set({ dirty }),
-  clearDepartments: () => set({ departments: [], deptPath: null, errors: [], warnings: [], dirty: false }),
+  clearDepartments: () => set({
+    departments: [],
+    frontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
+    deptPath: null,
+    errors: [],
+    warnings: [],
+    dirty: false,
+  }),
   
   saveDepartments: async () => {
-    await window.electronAPI.data.saveDepartments(get().departments);
+    const departments = get().departments;
+    const frontDeskEnabled = get().frontDeskEnabled;
+    await window.electronAPI.data.saveDepartments({
+      departments,
+      frontDeskEnabled,
+    });
+    await useProjectStore.getState().syncSavedDataSnapshot({ departments, frontDeskEnabled });
     set({ dirty: false });
   },
   
   loadSavedDepartments: async () => {
-    const departments = await window.electronAPI.data.loadDepartments();
-    if (departments && departments.length > 0) {
-      set({ departments, dirty: false });
-    }
+    const data = normalizeDepartmentData(await window.electronAPI.data.loadDepartments());
+    set({
+      departments: data.departments,
+      frontDeskEnabled: data.frontDeskEnabled,
+      dirty: false,
+    });
   },
 }));
 
@@ -636,6 +688,90 @@ export const useFlagsStore = create<FlagsState>((set, get) => ({
 }));
 
 // ---------------------------------------------------------------------------
+// Current Project Store
+// ---------------------------------------------------------------------------
+
+interface SavedProjectData {
+  staff: StaffMember[];
+  departments: Department[];
+  frontDeskEnabled: boolean;
+}
+
+interface ProjectState {
+  loading: boolean;
+  hydrating: boolean;
+  savedDataSnapshot: SavedProjectData | null;
+  loadCurrentProject: () => Promise<void>;
+  applyAndSaveCurrentProject: (config: ConfigSnapshot) => Promise<void>;
+  syncSavedDataSnapshot: (data?: Partial<SavedProjectData>) => Promise<void>;
+  persistFlags: () => Promise<void>;
+}
+
+function toSavedProjectData(config: ConfigSnapshot): SavedProjectData {
+  return {
+    staff: config.staff,
+    departments: config.departments,
+    frontDeskEnabled: config.frontDeskEnabled,
+  };
+}
+
+export const useProjectStore = create<ProjectState>((set, get) => ({
+  loading: true,
+  hydrating: false,
+  savedDataSnapshot: null,
+
+  loadCurrentProject: async () => {
+    set({ loading: true, hydrating: true });
+    const config = normalizeConfigSnapshot(await window.electronAPI.project.loadCurrent());
+    applyConfigSnapshotToStores(config);
+    set({
+      savedDataSnapshot: toSavedProjectData(config),
+      loading: false,
+      hydrating: false,
+    });
+  },
+
+  applyAndSaveCurrentProject: async (config) => {
+    const normalized = normalizeConfigSnapshot(config);
+    set({ hydrating: true });
+    applyConfigSnapshotToStores(normalized);
+    await window.electronAPI.project.saveCurrent(normalized);
+    set({
+      savedDataSnapshot: toSavedProjectData(normalized),
+      hydrating: false,
+    });
+  },
+
+  syncSavedDataSnapshot: async (data) => {
+    const liveSnapshot = normalizeConfigSnapshot(createConfigSnapshot());
+    const savedDataSnapshot = get().savedDataSnapshot ?? toSavedProjectData(liveSnapshot);
+    const snapshot = normalizeConfigSnapshot({
+      ...liveSnapshot,
+      staff: data?.staff ?? savedDataSnapshot.staff,
+      departments: data?.departments ?? savedDataSnapshot.departments,
+      frontDeskEnabled: data?.frontDeskEnabled ?? savedDataSnapshot.frontDeskEnabled,
+    });
+    await window.electronAPI.project.saveCurrent(snapshot);
+    set({ savedDataSnapshot: toSavedProjectData(snapshot) });
+  },
+
+  persistFlags: async () => {
+    if (get().hydrating || !get().savedDataSnapshot) {
+      return;
+    }
+
+    const liveSnapshot = createConfigSnapshot();
+    const savedDataSnapshot = get().savedDataSnapshot!;
+    await window.electronAPI.project.saveCurrent({
+      ...liveSnapshot,
+      staff: savedDataSnapshot.staff,
+      departments: savedDataSnapshot.departments,
+      frontDeskEnabled: savedDataSnapshot.frontDeskEnabled,
+    });
+  },
+}));
+
+// ---------------------------------------------------------------------------
 // History Store
 // ---------------------------------------------------------------------------
 
@@ -644,6 +780,7 @@ interface HistoryState {
   loading: boolean;
   loadHistory: () => Promise<void>;
   deleteEntry: (historyId: string) => Promise<void>;
+  updateEntryName: (historyId: string, name: string) => Promise<boolean>;
   restoreConfig: (historyId: string) => Promise<boolean>;
 }
 
@@ -662,22 +799,21 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
     set({ history: get().history.filter(h => h.id !== historyId) });
   },
 
+  updateEntryName: async (historyId, name) => {
+    const result = await window.electronAPI.history.updateName({ historyId, name });
+    if (!result.success || !result.entry) {
+      return false;
+    }
+    set({
+      history: get().history.map((entry) => (entry.id === historyId ? result.entry! : entry)),
+    });
+    return true;
+  },
+
   restoreConfig: async (historyId) => {
     const result = await window.electronAPI.history.getConfig(historyId);
     if (result.config) {
-      const config = result.config;
-      // Restore all stores
-      useStaffStore.getState().setStaff(config.staff);
-      useDepartmentStore.getState().setDepartments(config.departments);
-      useFlagsStore.getState().setFavoredEmployees(config.favoredEmployees);
-      useFlagsStore.getState().setTrainingPairs(config.trainingPairs);
-      useFlagsStore.getState().setFavoredDepartments(config.favoredDepartments);
-      useFlagsStore.getState().setFavoredFrontDeskDepts(config.favoredFrontDeskDepts);
-      useFlagsStore.getState().setFavoredEmployeeDepts(config.favoredEmployeeDepts || []);
-      useFlagsStore.getState().setTimesets(config.timesets);
-      useFlagsStore.getState().setShiftTimePreferences(config.shiftTimePreferences || []);
-      useFlagsStore.getState().setEqualityConstraints(config.equalityConstraints || []);
-      useFlagsStore.getState().setMaxSolveSeconds(config.maxSolveSeconds);
+      await useProjectStore.getState().applyAndSaveCurrentProject(result.config);
       return true;
     }
     return false;
@@ -691,6 +827,7 @@ export const useHistoryStore = create<HistoryState>((set, get) => ({
 interface SolverState {
   running: boolean;
   runId: string | null;
+  runFrontDeskEnabled: boolean;
   progress: SolverProgress | null;
   logs: Array<{ text: string; type: 'stdout' | 'stderr'; timestamp: number }>;
   result: {
@@ -699,9 +836,10 @@ interface SolverState {
     error?: string;
     errorType?: 'error' | 'no_solution' | 'cancelled';
     elapsed: number;
+    frontDeskEnabled?: boolean;
   } | null;
   
-  setRunning: (running: boolean, runId?: string) => void;
+  setRunning: (running: boolean, runId?: string, frontDeskEnabled?: boolean) => void;
   setProgress: (progress: SolverProgress) => void;
   addLog: (text: string, type: 'stdout' | 'stderr') => void;
   setResult: (result: SolverState['result']) => void;
@@ -711,24 +849,44 @@ interface SolverState {
 export const useSolverStore = create<SolverState>((set, get) => ({
   running: false,
   runId: null,
+  runFrontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
   progress: null,
   logs: [],
   result: null,
 
-  setRunning: (running, runId) => set({ running, runId: runId ?? null }),
+  setRunning: (running, runId, frontDeskEnabled) => set((state) => ({
+    running,
+    runId: runId ?? null,
+    runFrontDeskEnabled: frontDeskEnabled ?? state.runFrontDeskEnabled,
+  })),
   setProgress: (progress) => set({ progress }),
   addLog: (text, type) => {
     set({ logs: [...get().logs, { text, type, timestamp: Date.now() }] });
   },
-  setResult: (result) => set({ result, running: false }),
-  reset: () => set({ running: false, runId: null, progress: null, logs: [], result: null }),
+  setResult: (result) => set((state) => ({
+    result: result
+      ? {
+          ...result,
+          frontDeskEnabled: result.frontDeskEnabled ?? state.runFrontDeskEnabled,
+        }
+      : null,
+    running: false,
+  })),
+  reset: () => set({
+    running: false,
+    runId: null,
+    runFrontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
+    progress: null,
+    logs: [],
+    result: null,
+  }),
 }));
 
 // ---------------------------------------------------------------------------
 // UI State Store
 // ---------------------------------------------------------------------------
 
-type TabId = 'welcome' | 'import' | 'staff' | 'departments' | 'flags' | 'results' | 'settings';
+type TabId = 'welcome' | 'staff' | 'departments' | 'flags' | 'results' | 'settings';
 
 interface UIState {
   activeTab: TabId;
@@ -775,12 +933,13 @@ export const useUIStore = create<UIState>((set) => ({
 
 export function createConfigSnapshot(): ConfigSnapshot {
   const staff = useStaffStore.getState().staff;
-  const departments = useDepartmentStore.getState().departments;
+  const { departments, frontDeskEnabled } = useDepartmentStore.getState();
   const flags = useFlagsStore.getState();
   
   return {
     staff,
     departments,
+    frontDeskEnabled,
     favoredEmployees: flags.favoredEmployees,
     trainingPairs: flags.trainingPairs,
     favoredDepartments: flags.favoredDepartments,

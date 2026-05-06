@@ -4,11 +4,12 @@
  */
 
 import { useRef, useEffect, useState, useMemo } from 'react';
-import { AlertTriangle, Ban, CheckCircle2, Download, Plus, Square, Trash2, XCircle } from 'lucide-react';
+import { AlertTriangle, Ban, Check, CheckCircle2, Download, Pencil, Plus, Square, Trash2, X, XCircle } from 'lucide-react';
 import { useSolverStore, useHistoryStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import { Button } from '../ui/button';
 import { ConfirmDialog } from '../ui/confirm-dialog';
+import { Input } from '../ui/input';
 import { NoticePanel } from '../ui/notice-panel';
 import type { HistoryEntry } from '../../../main/ipc-types';
 
@@ -239,20 +240,24 @@ function getLatestMeaningfulLogLine(logs: Array<{ text: string; type: string }>)
 }
 
 export function ResultsTab() {
-  const { running, progress, logs, result, reset } = useSolverStore();
+  const { running, progress, logs, result, reset, runFrontDeskEnabled } = useSolverStore();
   const isCancelled = result?.errorType === 'cancelled';
+  const resultFrontDeskEnabled = result?.frontDeskEnabled ?? runFrontDeskEnabled;
 
   // Parse logs to detect specific issues and extract stats
   const diagnostics = useMemo(() => parseLogDiagnostics(logs), [logs]);
   const solverStats = useMemo(() => parseSolverStats(logs), [logs]);
   const cleanedErrorText = useMemo(() => cleanErrorText(result?.error), [result?.error]);
   const fallbackLogLine = useMemo(() => getLatestMeaningfulLogLine(logs), [logs]);
-  const { history, loadHistory, deleteEntry } = useHistoryStore();
+  const { history, loadHistory, deleteEntry, updateEntryName } = useHistoryStore();
   const { showToast, setActiveTab } = useUIStore();
   const logContainerRef = useRef<HTMLDivElement>(null);
   const [logsExpanded, setLogsExpanded] = useState(false);
   const [statusMessageIndex, setStatusMessageIndex] = useState(0);
   const [entryToDelete, setEntryToDelete] = useState<HistoryEntry | null>(null);
+  const [editingHistoryId, setEditingHistoryId] = useState<string | null>(null);
+  const [editingHistoryName, setEditingHistoryName] = useState('');
+  const editingHistoryInputRef = useRef<HTMLInputElement | null>(null);
 
   // Rotate status messages every 4-5 seconds while running
   useEffect(() => {
@@ -333,6 +338,30 @@ export function ResultsTab() {
     setEntryToDelete(entry);
   };
 
+  const getHistoryLabel = (entry: HistoryEntry, index: number) => entry.name?.trim() || `Schedule ${index + 1}`;
+
+  const beginEditingHistoryName = (entry: HistoryEntry, index: number) => {
+    setEditingHistoryId(entry.id);
+    setEditingHistoryName(entry.name ?? `Schedule ${index + 1}`);
+  };
+
+  const cancelEditingHistoryName = () => {
+    setEditingHistoryId(null);
+    setEditingHistoryName('');
+  };
+
+  const commitHistoryName = async (nameOverride?: string) => {
+    if (!editingHistoryId) return;
+    const nextName = nameOverride ?? editingHistoryInputRef.current?.value ?? editingHistoryName;
+    const success = await updateEntryName(editingHistoryId, nextName);
+    if (success) {
+      showToast(nextName.trim() ? 'Generation name updated' : 'Generation name cleared', 'success');
+    } else {
+      showToast('Failed to rename generation', 'error');
+    }
+    cancelEditingHistoryName();
+  };
+
   const confirmDeleteEntry = async () => {
     if (!entryToDelete) return;
 
@@ -383,7 +412,7 @@ export function ResultsTab() {
     diagnostics.hasTimesetConflict ||
     diagnostics.hasAvailabilityConflict ||
     diagnostics.hasLimitedAvailability ||
-    diagnostics.hasFrontDeskGap;
+    (resultFrontDeskEnabled && diagnostics.hasFrontDeskGap);
 
   const rawErrorDetails =
     cleanedErrorText &&
@@ -669,7 +698,7 @@ export function ResultsTab() {
                       </li>
                     )}
                     {/* Front desk coverage gap */}
-                    {diagnostics.hasFrontDeskGap && (
+                    {resultFrontDeskEnabled && diagnostics.hasFrontDeskGap && (
                       <li className="flex items-start gap-2">
                         <span className="text-warning-300">•</span>
                         <span>
@@ -685,7 +714,7 @@ export function ResultsTab() {
                       !diagnostics.hasTrainingNoOverlap &&
                       !diagnostics.hasInvalidEmployee &&
                       !diagnostics.hasTimesetConflict &&
-                      !diagnostics.hasFrontDeskGap &&
+                      !(resultFrontDeskEnabled && diagnostics.hasFrontDeskGap) &&
                       !diagnostics.hasNotQualified &&
                       !diagnostics.hasEmployeeNotFound &&
                       !diagnostics.hasDepartmentNotFound &&
@@ -790,10 +819,12 @@ export function ResultsTab() {
                 <span className="text-warning-300">•</span>
                 <span><strong className="text-surface-200">Check &quot;Assign Employee to Role/Time&quot;</strong> - Ensure forced assignments don&apos;t conflict with availability</span>
               </li>
-              <li className="flex items-start gap-2">
-                <span className="text-warning-300">•</span>
-                <span><strong className="text-surface-200">Verify front desk coverage</strong> - At least one qualified employee must be available each time slot</span>
-              </li>
+              {resultFrontDeskEnabled && (
+                <li className="flex items-start gap-2">
+                  <span className="text-warning-300">•</span>
+                  <span><strong className="text-surface-200">Verify front desk coverage</strong> - At least one qualified employee must be available each time slot</span>
+                </li>
+              )}
             <li className="flex items-start gap-2">
                 <span className="text-warning-300">•</span>
                 <span><strong className="text-surface-200">Reduce hour requirements</strong> - Department targets may exceed available employee hours</span>
@@ -807,7 +838,7 @@ export function ResultsTab() {
             <ul className="space-y-2 text-sm text-surface-400">
               <li className="flex items-start gap-2">
                 <span className="text-danger-300">•</span>
-                <span>Check that your CSV files are properly formatted</span>
+                <span>Check that your imported project data is properly formatted</span>
             </li>
             <li className="flex items-start gap-2">
                 <span className="text-danger-300">•</span>
@@ -834,7 +865,7 @@ export function ResultsTab() {
             {history.map((entry, index) => (
               <div
                 key={entry.id}
-                className="p-4 bg-surface-800 rounded-lg"
+                className="group rounded-lg bg-surface-800 p-4"
               >
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-3">
@@ -842,23 +873,85 @@ export function ResultsTab() {
                       {index + 1}
                     </div>
                     <div>
-                      <div className="text-sm font-medium text-surface-200">
-                        {formatDate(entry.timestamp)}
+                      <div className="flex items-center gap-1.5">
+                        {editingHistoryId === entry.id ? (
+                          <div className="relative h-8 w-44 max-w-[min(11rem,40vw)]">
+                            <Input
+                              ref={editingHistoryInputRef}
+                              value={editingHistoryName}
+                              onChange={(e) => setEditingHistoryName(e.target.value)}
+                              onKeyDown={(e) => {
+                                if (e.key === 'Enter') {
+                                  e.preventDefault();
+                                  void commitHistoryName(e.currentTarget.value);
+                                }
+                                if (e.key === 'Escape') {
+                                  cancelEditingHistoryName();
+                                }
+                              }}
+                              className="absolute inset-0 h-8 w-full"
+                              placeholder={`Schedule ${index + 1}`}
+                              autoFocus
+                            />
+                          </div>
+                        ) : (
+                          <div className="flex h-8 max-w-[min(11rem,40vw)] items-center truncate text-sm font-medium text-surface-200">
+                            {getHistoryLabel(entry, index)}
+                          </div>
+                        )}
+                        {editingHistoryId === entry.id ? (
+                          <>
+                            <Button
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={() => {
+                                void commitHistoryName();
+                              }}
+                              variant="ghost"
+                              size="icon-sm"
+                              className="action-success h-6 w-6 rounded-full"
+                              aria-label="Save generation name"
+                            >
+                              <Check className="h-3.5 w-3.5" strokeWidth={1.8} />
+                            </Button>
+                            <Button
+                              onMouseDown={(e) => e.preventDefault()}
+                              onClick={cancelEditingHistoryName}
+                              variant="ghost"
+                              size="icon-sm"
+                              className="action-danger h-6 w-6 rounded-full"
+                              aria-label="Cancel renaming generation"
+                            >
+                              <X className="h-3.5 w-3.5" strokeWidth={1.8} />
+                            </Button>
+                          </>
+                        ) : (
+                          <Button
+                            onClick={() => beginEditingHistoryName(entry, index)}
+                            variant="ghost"
+                            size="icon-sm"
+                            className="h-5 w-5 rounded-full opacity-0 transition-opacity group-hover:opacity-100 group-focus-within:opacity-100"
+                            aria-label="Rename generation"
+                          >
+                            <Pencil className="h-3 w-3" strokeWidth={1.8} />
+                          </Button>
+                        )}
                       </div>
                       <div className="text-xs text-surface-400">
-                        {entry.employeeCount} employees, {entry.departmentCount} departments • {formatElapsed(entry.elapsed)}
+                        {formatDate(entry.timestamp)} • {entry.employeeCount} employees, {entry.departmentCount} departments • {formatElapsed(entry.elapsed)}
                       </div>
                     </div>
                   </div>
-                  <Button
-                    onClick={() => handleDeleteEntry(entry)}
-                    variant="ghost"
-                    size="icon-sm"
-                    className="text-danger-300 hover:bg-danger-700/10 hover:text-danger-200"
-                    aria-label="Delete generation"
-                  >
-                    <Trash2 className="h-4 w-4" strokeWidth={1.8} />
-                  </Button>
+                  <div className="flex items-center gap-1">
+                    <Button
+                      onClick={() => handleDeleteEntry(entry)}
+                      variant="ghost"
+                      size="icon-sm"
+                      className="action-danger"
+                      aria-label="Delete generation"
+                    >
+                      <Trash2 className="h-4 w-4" strokeWidth={1.8} />
+                    </Button>
+                  </div>
                 </div>
 
                 <div className="flex gap-2">

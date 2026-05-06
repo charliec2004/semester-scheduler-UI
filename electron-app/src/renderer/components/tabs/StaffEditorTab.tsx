@@ -4,7 +4,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { AlertTriangle, Check, Download, Plus, Trash2 } from 'lucide-react';
+import { AlertTriangle, Check, HelpCircle, Plus, Trash2 } from 'lucide-react';
 import { useDepartmentStore, useSettingsStore, useStaffStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import { NoticePanel } from '../ui/notice-panel';
@@ -13,7 +13,7 @@ import { Checkbox } from '../ui/checkbox';
 import { ConfirmDialog } from '../ui/confirm-dialog';
 import { HourInput } from '../ui/hour-input';
 import { Input } from '../ui/input';
-import { staffToCsv } from '../../utils/csvValidators';
+import { looseParseTimeMinutes } from '../../utils/fuzzyTime';
 import { formatHoursLabel } from '../../utils/hours';
 import {
   BLOCK_END_EXCLUSIVE_OPTIONS,
@@ -21,6 +21,7 @@ import {
   createEmptyUnavailabilityBlocks,
   createFullWorkDayAvailability,
   DAY_EXCLUSIVE_END_TIME,
+  formatDayLabel,
   DAY_NAMES,
   dayUnavailabilityToTimelineSlotStates,
   parseTimeToMinutes,
@@ -86,102 +87,20 @@ function snapToEndExclusive(startTime: string, intentMinutes: number): string {
   return pick;
 }
 
-/**
- * Parse flexible time strings: 24h "8:00", "08:30", "17:00"; 12h "8am", "8:30 pm", "12 pm";
- * compact "830" / "0900"; bare hour "8".."11" morning, "1".."7" afternoon.
- */
-function looseParseTimeMinutes(raw: string): number | null {
-  const s = raw
-    .trim()
-    .toLowerCase()
-    .replace(/\./g, '')
-    .replace(/(\d)\s*([ap])$/, '$1$2m')
-    .replace(/^(\d{3,4})\s*([ap])$/, '$1$2m')
-    .replace(/\s+/g, ' ');
-  if (!s) {
-    return null;
-  }
-
-  let m = s.match(/^(\d{1,2}):(\d{2})\s*([ap]m)?$/);
-  if (m) {
-    let h = parseInt(m[1], 10);
-    const min = parseInt(m[2], 10);
-    const ap = m[3];
-    if (min > 59) {
-      return null;
-    }
-    if (ap) {
-      if (h < 1 || h > 12) {
-        return null;
-      }
-      if (ap.startsWith('p') && h !== 12) {
-        h += 12;
-      }
-      if (ap.startsWith('a') && h === 12) {
-        h = 0;
-      }
-    } else if (h > 23) {
-      return null;
-    }
-    return h * 60 + min;
-  }
-
-  m = s.match(/^(\d{1,2})(?::(\d{2}))?\s*(am|pm)$/);
-  if (m) {
-    let h = parseInt(m[1], 10);
-    const min = m[2] ? parseInt(m[2], 10) : 0;
-    const ap = m[3];
-    if (min > 59 || h < 1 || h > 12) {
-      return null;
-    }
-    if (ap === 'pm' && h !== 12) {
-      h += 12;
-    }
-    if (ap === 'am' && h === 12) {
-      h = 0;
-    }
-    return h * 60 + min;
-  }
-
-  m = s.match(/^(\d{3,4})$/);
-  if (m) {
-    const digits = m[1];
-    let h: number;
-    let min: number;
-    if (digits.length === 3) {
-      h = parseInt(digits.charAt(0), 10);
-      min = parseInt(digits.slice(1), 10);
-    } else {
-      h = parseInt(digits.slice(0, 2), 10);
-      min = parseInt(digits.slice(2), 10);
-    }
-    if (h > 23 || min > 59) {
-      return null;
-    }
-    return h * 60 + min;
-  }
-
-  m = s.match(/^(\d{1,2})$/);
-  if (m) {
-    let h = parseInt(m[1], 10);
-    if (h < 1 || h > 23) {
-      return null;
-    }
-    if (h <= 7) {
-      h += 12;
-    }
-    return h * 60;
-  }
-
-  return null;
-}
-
 function formatBlockTimeLabel(time24: string): string {
   return formatTime12h(time24);
 }
 
 function normalizeRoleValue(role: string): string {
   return role.trim().toLowerCase().replace(/\s+/g, '_');
+}
+
+function isFrontDeskRole(role: string): boolean {
+  return normalizeRoleValue(role) === 'front_desk';
+}
+
+function getEffectiveRoles(roles: string[], frontDeskEnabled: boolean): string[] {
+  return roles.filter((role) => frontDeskEnabled || !isFrontDeskRole(role));
 }
 
 function toTitleCaseWords(value: string): string {
@@ -197,6 +116,52 @@ interface AvailabilityBlockTimeInputsProps {
   startTime: string;
   endTime: string;
   onCommit: (next: { startTime: string; endTime: string }) => void;
+}
+
+function Tooltip({ text }: { text: React.ReactNode }) {
+  const [show, setShow] = useState(false);
+  const [coords, setCoords] = useState({ top: 0, left: 0 });
+
+  const updatePosition = (target: HTMLElement) => {
+    const rect = target.getBoundingClientRect();
+    const tooltipWidth = 320;
+    let left = rect.left + rect.width / 2 - tooltipWidth / 2;
+    left = Math.max(8, Math.min(left, window.innerWidth - tooltipWidth - 8));
+    setCoords({
+      top: rect.bottom + 8,
+      left,
+    });
+  };
+
+  return (
+    <span className="relative inline-flex shrink-0">
+      <button
+        type="button"
+        onMouseEnter={(e) => {
+          updatePosition(e.currentTarget);
+          setShow(true);
+        }}
+        onMouseLeave={() => setShow(false)}
+        onFocus={(e) => {
+          updatePosition(e.currentTarget);
+          setShow(true);
+        }}
+        onBlur={() => setShow(false)}
+        className="inline-flex h-5 w-5 items-center justify-center rounded-full border border-border bg-surface-800 text-surface-400 transition-colors hover:text-surface-200 focus:outline-none focus:ring-1 focus:ring-ring"
+        aria-label="Availability help"
+      >
+        <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} />
+      </button>
+      {show && (
+        <div
+          className="pointer-events-none fixed z-[100] w-80 rounded-lg border border-surface-700 bg-surface-800 px-3 py-2 text-left text-xs leading-5 text-surface-200 shadow-lg"
+          style={{ top: coords.top, left: coords.left }}
+        >
+          {text}
+        </div>
+      )}
+    </span>
+  );
 }
 
 function AvailabilityBlockTimeInputs({ rowKey, startTime, endTime, onCommit }: AvailabilityBlockTimeInputsProps) {
@@ -313,7 +278,7 @@ function isFullDayUnavailable(dayBlocks: UnavailabilityBlock[]): boolean {
 
 export function StaffEditorTab() {
   const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty, saveStaff } = useStaffStore();
-  const { departments } = useDepartmentStore();
+  const { departments, frontDeskEnabled } = useDepartmentStore();
   const { settings } = useSettingsStore();
   const { showToast } = useUIStore();
 
@@ -334,10 +299,15 @@ export function StaffEditorTab() {
   }, [departments]);
 
   const availableRoles = useMemo(() => {
-    const roles = new Set(COMMON_ROLES);
-    roleLabelMap.forEach((_, role) => roles.add(role));
+    const roles = new Set(frontDeskEnabled ? COMMON_ROLES : []);
+    roleLabelMap.forEach((_, role) => {
+      if (!frontDeskEnabled && role === 'front_desk') {
+        return;
+      }
+      roles.add(role);
+    });
     return Array.from(roles).filter(Boolean).sort();
-  }, [roleLabelMap]);
+  }, [frontDeskEnabled, roleLabelMap]);
 
   const formatRoleLabel = useCallback((role: string) => {
     const normalized = normalizeRoleValue(role);
@@ -373,9 +343,12 @@ export function StaffEditorTab() {
 
   const handleAddEmployee = () => {
     const unavailabilityBlocks = createEmptyUnavailabilityBlocks();
+    const defaultRole = frontDeskEnabled
+      ? 'front_desk'
+      : normalizeRoleValue(departments[0]?.name ?? '');
     const newEmployee: StaffMember = {
       name: '',
-      roles: ['front_desk'],
+      roles: defaultRole ? [defaultRole] : [],
       targetHours: 10,
       maxHours: 15,
       year: 1,
@@ -386,24 +359,17 @@ export function StaffEditorTab() {
     setSelectedIndex(staff.length);
   };
 
-  const handleExport = async () => {
-    try {
-      const csv = staffToCsv(staff, settings?.travelBufferMinutes);
-      const result = await window.electronAPI.files.saveCsv({
-        kind: 'staff',
-        content: csv,
-      });
-      if (!result.canceled) {
-        setDirty(false);
-        showToast('Staff CSV exported successfully', 'success');
-      }
-    } catch (err) {
-      console.error('Failed to export staff CSV:', err);
-      showToast('Failed to export staff CSV', 'error');
-    }
-  };
-
   const selectedEmployee = selectedIndex !== null ? staff[selectedIndex] : null;
+  const selectedEmployeeRoleOptions = useMemo(() => {
+    const roles = new Set(availableRoles);
+    selectedEmployee?.roles.forEach((role) => {
+      const normalized = normalizeRoleValue(role);
+      if (normalized) {
+        roles.add(normalized);
+      }
+    });
+    return Array.from(roles).sort();
+  }, [availableRoles, selectedEmployee]);
 
   const confirmDeleteEmployee = async () => {
     if (!employeeToDelete) return;
@@ -445,7 +411,7 @@ export function StaffEditorTab() {
           </svg>
         }
         title="No Staff Data"
-        description="Import a staff CSV from the Import tab or create employees manually."
+        description="Import a project configuration from Welcome or create employees manually."
         action={{
           label: 'Add First Employee',
           onClick: handleAddEmployee,
@@ -458,13 +424,7 @@ export function StaffEditorTab() {
     <div className="space-y-6 animate-fade-in">
       <div className="flex items-center justify-between">
         <div className="space-y-1">
-          <div className="flex items-center gap-3">
-            <h2 className="text-2xl font-display font-semibold text-surface-100">Staff Editor</h2>
-            <Button onClick={handleExport} variant="secondary" size="sm" disabled={staff.length === 0}>
-              <Download className="h-4 w-4" strokeWidth={1.8} />
-              Export CSV
-            </Button>
-          </div>
+          <h2 className="text-2xl font-display font-semibold text-surface-100">Staff Editor</h2>
           <p className="text-surface-400">
             {staff.length} employee{staff.length !== 1 ? 's' : ''}
             {dirty && <span className="ml-2 text-warning-300">(unsaved changes)</span>}
@@ -525,7 +485,9 @@ export function StaffEditorTab() {
           <div className="max-h-[calc(100vh-280px)] overflow-y-auto">
             {filteredStaff.map(employee => {
               const actualIndex = staff.indexOf(employee);
-              const hasNoRoles = employee.roles.length === 0;
+              const effectiveRoles = getEffectiveRoles(employee.roles, frontDeskEnabled);
+              const hasNoRoles = effectiveRoles.length === 0;
+              const hasFrontDeskOnlyWhileDisabled = !frontDeskEnabled && employee.roles.length > 0 && hasNoRoles;
               return (
                 <button
                   key={actualIndex}
@@ -545,7 +507,7 @@ export function StaffEditorTab() {
                   </div>
                   <div className={`text-sm mt-0.5 ${hasNoRoles ? 'text-surface-400' : 'text-surface-400'}`}>
                     {hasNoRoles ? (
-                      'No qualifications'
+                      hasFrontDeskOnlyWhileDisabled ? 'Front Desk only (disabled)' : 'No qualifications'
                     ) : (
                       <>
                         {employee.roles.slice(0, 2).map((role) => formatRoleLabel(role)).join(', ')}
@@ -631,8 +593,17 @@ export function StaffEditorTab() {
 
               <div className="card">
                 <h3 className="font-semibold text-surface-200 mb-1">Roles / Qualifications</h3>
+                {!frontDeskEnabled && selectedEmployee.roles.some((role) => isFrontDeskRole(role)) && (
+                  <div className="mb-3">
+                    <NoticePanel
+                      variant="info"
+                      title="Front Desk is disabled for this configuration"
+                      description="This employee still has Front Desk saved as a qualification. You can remove it here, or re-enable Front Desk in Departments if you still want to schedule that role."
+                    />
+                  </div>
+                )}
                 <div className="flex flex-wrap gap-2">
-                  {availableRoles.map(role => {
+                  {selectedEmployeeRoleOptions.map(role => {
                     const isSelected = selectedEmployee.roles.some(
                       selectedRole => normalizeRoleValue(selectedRole) === role,
                     );
@@ -656,7 +627,7 @@ export function StaffEditorTab() {
                     );
                   })}
                 </div>
-                {selectedEmployee.roles.length === 0 && (
+                {getEffectiveRoles(selectedEmployee.roles, frontDeskEnabled).length === 0 && (
                   <div className="mt-3">
                     <NoticePanel
                       variant="warning"
@@ -668,18 +639,44 @@ export function StaffEditorTab() {
               </div>
 
               <div className="card">
-                <h3 className="font-semibold text-surface-200 mb-1">When they cannot work</h3>
-                <p className="text-xs text-surface-500 mb-4">
-                  Add commitments or other times they are not available (classes, etc.). End time is exclusive (e.g.{' '}
-                  <span className="text-surface-400">10:00</span> ends at the 9:50 slot). Type times like{' '}
-                  <span className="text-surface-400">8:00 AM</span>, <span className="text-surface-400">2pm</span>, or{' '}
-                  <span className="text-surface-400">17:00</span>. Use buffer checkboxes to block the extra {SLOT_MINUTES}
-                  -minute slot immediately before or after the selected window for travel/buffer time. The current
-                  buffer length is {settings?.travelBufferMinutes ?? SLOT_MINUTES} minutes.
-                </p>
+                <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-2">
+                  <h3 className="font-semibold text-surface-200">Define Employee Availiability</h3>
+                  <Tooltip
+                    text={
+                      <>
+                        Add classes, meetings, or any other times they are unavailable. End time is exclusive, so{' '}
+                        <span className="text-surface-100">10:00</span> blocks through the{' '}
+                        <span className="text-surface-100">9:50</span> slot. You can type times like{' '}
+                        <span className="text-surface-100">8:00 AM</span>, <span className="text-surface-100">2pm</span>,{' '}
+                        <span className="text-surface-100">645pm</span>, or <span className="text-surface-100">17:00</span>.
+                        Use the buffer checkboxes to block the extra {SLOT_MINUTES}-minute slot immediately before or after a
+                        block. The current buffer length is {settings?.travelBufferMinutes ?? SLOT_MINUTES} minutes.
+                      </>
+                    }
+                  />
+                  <span
+                    className="hidden h-5 w-px shrink-0 bg-border/80 sm:inline-block"
+                    aria-hidden="true"
+                  />
+                  <div className="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-surface-400">
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-4 rounded bg-[hsl(var(--action-primary)/0.9)]" />
+                      <span>Can work</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-4 rounded bg-[hsl(var(--danger-500)/0.85)]" />
+                      <span>Cannot work</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="h-3 w-4 rounded bg-[hsl(var(--warning-500)/0.85)]" />
+                      <span>Buffer</span>
+                    </div>
+                  </div>
+                </div>
 
                 <div className="space-y-4">
                   {DAY_NAMES.map(day => {
+                    const dayLabel = formatDayLabel(day);
                     const dayBlocks = selectedEmployee.unavailabilityBlocks[day] ?? [];
                     const timeline = dayUnavailabilityToTimelineSlotStates(
                       dayBlocks,
@@ -691,7 +688,7 @@ export function StaffEditorTab() {
                     return (
                       <div key={day} className="rounded-lg border border-surface-800 bg-surface-900/40 p-3">
                         <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
-                          <span className="font-semibold text-surface-200">{day}</span>
+                          <span className="font-semibold text-surface-200">{dayLabel}</span>
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="button"
@@ -782,7 +779,7 @@ export function StaffEditorTab() {
                                     type="button"
                                     variant="ghost"
                                     size="sm"
-                                    className="h-6 px-1.5 text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    className="action-danger h-6 px-1.5"
                                     onClick={() => {
                                       const nb = dayBlocks.filter((_, j) => j !== bi);
                                       updateDayUnavailability(selectedIndex!, day, nb);
@@ -800,9 +797,9 @@ export function StaffEditorTab() {
 
                         <div
                           className="mt-2 flex h-3 w-full gap-px overflow-hidden rounded"
-                          title={`${day}: ${SLOT_MINUTES}-minute timeline (8 AM–5 PM)`}
+                          title={`${dayLabel}: ${SLOT_MINUTES}-minute timeline (8 AM–5 PM)`}
                           role="img"
-                          aria-label={`${day} can-work preview`}
+                          aria-label={`${dayLabel} can-work preview`}
                         >
                           {timeline.map((state, si) => (
                             <div
@@ -820,21 +817,6 @@ export function StaffEditorTab() {
                       </div>
                     );
                   })}
-                </div>
-
-                <div className="mt-4 pt-3 border-t border-surface-800 flex flex-wrap items-center gap-x-6 gap-y-2 text-xs text-surface-400">
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-4 rounded bg-[hsl(var(--action-primary)/0.9)]" />
-                    <span>Can work</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-4 rounded bg-[hsl(var(--danger-500)/0.85)]" />
-                    <span>Cannot work</span>
-                  </div>
-                  <div className="flex items-center gap-2">
-                    <span className="h-3 w-4 rounded bg-[hsl(var(--warning-500)/0.85)]" />
-                    <span>Buffer ({SLOT_MINUTES} min)</span>
-                  </div>
                 </div>
               </div>
 

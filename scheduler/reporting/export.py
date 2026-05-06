@@ -33,14 +33,19 @@ def export_schedule_to_excel(
     department_max_hours,
     output_path: Path,
     primary_frontdesk_department,
+    front_desk_enabled,
 ):
     """Export the generated schedule to an Excel workbook with formatted sheets."""
     if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
         return
 
-    role_columns = [FRONT_DESK_ROLE] + department_roles
-    frontdesk_comment_for = _build_frontdesk_comment_lookup(
-        employees, qual, primary_frontdesk_department, role_display_names
+    role_columns = ([FRONT_DESK_ROLE] if front_desk_enabled else []) + department_roles
+    frontdesk_comment_for = (
+        _build_frontdesk_comment_lookup(
+            employees, qual, primary_frontdesk_department, role_display_names
+        )
+        if front_desk_enabled
+        else (lambda _name: None)
     )
 
     daily_tables = []
@@ -56,7 +61,9 @@ def export_schedule_to_excel(
                 workers = [
                     e for e in employees if (e, day, t, role) in assign and solver.value(assign[(e, day, t, role)])
                 ]
-                cell_values.append(", ".join(workers) if workers else ("UNCOVERED" if role == FRONT_DESK_ROLE else ""))
+                cell_values.append(
+                    ", ".join(workers) if workers else ("UNCOVERED" if front_desk_enabled and role == FRONT_DESK_ROLE else "")
+                )
             day_rows.append([slot_names[t], *cell_values])
             weekly_rows.append([day, slot_names[t], *cell_values])
         daily_tables.append((f"{day} Schedule", ["Time"] + role_headers, day_rows))
@@ -158,29 +165,31 @@ def export_schedule_to_excel(
         df_weekly = pd.DataFrame(weekly_rows, columns=weekly_columns)
         df_weekly.to_excel(writer, sheet_name="Weekly Grid", index=False)
         _autosize_columns(writer, "Weekly Grid", df_weekly)
-        _add_frontdesk_comments_table(
-            writer=writer,
-            engine=engine,
-            sheet_name="Weekly Grid",
-            rows=weekly_rows,
-            value_column_idx=2,  # front desk column
-            row_offset=1,
-            comment_lookup=frontdesk_comment_for,
-        )
+        if front_desk_enabled:
+            _add_frontdesk_comments_table(
+                writer=writer,
+                engine=engine,
+                sheet_name="Weekly Grid",
+                rows=weekly_rows,
+                value_column_idx=2,
+                row_offset=1,
+                comment_lookup=frontdesk_comment_for,
+            )
 
         for sheet_name, columns, rows in daily_tables:
             df_day = pd.DataFrame(rows, columns=columns)
             df_day.to_excel(writer, sheet_name=sheet_name, index=False)
             _autosize_columns(writer, sheet_name, df_day)
-            _add_frontdesk_comments_table(
-                writer=writer,
-                engine=engine,
-                sheet_name=sheet_name,
-                rows=rows,
-                value_column_idx=1,  # front desk column
-                row_offset=1,
-                comment_lookup=frontdesk_comment_for,
-            )
+            if front_desk_enabled:
+                _add_frontdesk_comments_table(
+                    writer=writer,
+                    engine=engine,
+                    sheet_name=sheet_name,
+                    rows=rows,
+                    value_column_idx=1,
+                    row_offset=1,
+                    comment_lookup=frontdesk_comment_for,
+                )
 
         df_summary = pd.DataFrame(summary_rows, columns=summary_columns)
         df_summary.to_excel(writer, sheet_name="Employee Summary", index=False)
@@ -360,6 +369,7 @@ def export_formatted_schedule(
     department_hour_targets,
     department_max_hours,
     primary_frontdesk_department,
+    front_desk_enabled,
     output_path: Path,
 ):
     """Create an alternate, styled schedule file with per-department day grids."""
@@ -378,9 +388,13 @@ def export_formatted_schedule(
     )
 
     # Build department order: front desk then department roles
-    ordered_roles = [FRONT_DESK_ROLE] + department_roles
-    frontdesk_comment_for = _build_frontdesk_comment_lookup(
-        employees, qual, primary_frontdesk_department, role_display_names
+    ordered_roles = ([FRONT_DESK_ROLE] if front_desk_enabled else []) + department_roles
+    frontdesk_comment_for = (
+        _build_frontdesk_comment_lookup(
+            employees, qual, primary_frontdesk_department, role_display_names
+        )
+        if front_desk_enabled
+        else (lambda _name: None)
     )
 
     # Gather intervals per role/day
@@ -472,7 +486,7 @@ def export_formatted_schedule(
         max_len = max((len(v) for v in intervals.values()), default=0)
         display = role_display_names.get(role, role.replace("_", " ").title())
 
-        if role == FRONT_DESK_ROLE:
+        if front_desk_enabled and role == FRONT_DESK_ROLE:
             # FD: Row has FD label + day headers on same row
             counted = slots_to_hours(role_direct_slots[role])
             ws.write(row, 0, f"FD: {counted:.1f}", bold_fmt)

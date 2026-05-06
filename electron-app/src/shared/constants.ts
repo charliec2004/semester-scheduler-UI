@@ -6,6 +6,17 @@
 // Days of the week
 export const DAY_NAMES = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri'] as const;
 export type DayName = typeof DAY_NAMES[number];
+export const DAY_LABELS: Record<DayName, string> = {
+  Mon: 'Monday',
+  Tue: 'Tuesday',
+  Wed: 'Wednesday',
+  Thu: 'Thursday',
+  Fri: 'Friday',
+};
+
+export function formatDayLabel(day: DayName): string {
+  return DAY_LABELS[day];
+}
 
 export const SLOT_MINUTES = 10;
 export const LEGACY_SLOT_MINUTES = 30;

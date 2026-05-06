@@ -9,7 +9,7 @@ export function QuickStartGuide() {
           </div>
           <h4 className="font-medium text-surface-200">Import or Create Data</h4>
           <p className="max-w-sm text-surface-400">
-            Upload your CSV files or use the Departments and Staff tabs to create data from scratch.
+            Import a saved project configuration or use the Departments and Staff tabs to create data from scratch.
           </p>
         </div>
         <div className="space-y-3">

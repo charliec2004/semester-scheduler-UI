@@ -232,8 +232,6 @@ export function validateStaffCsv(content: string): ValidationResult {
 
   // Validate each row
   const names = new Set<string>();
-  let hasFrontDesk = false;
-
   for (let i = 0; i < parsed.data.length; i++) {
     const row = parsed.data[i];
     const rowNum = i + 2; // Account for header row
@@ -267,11 +265,6 @@ export function validateStaffCsv(content: string): ValidationResult {
         message: 'At least one role is required',
         severity: 'error',
       });
-    } else {
-      const roleList = roles.split(/[;,]/).map(r => r.trim().toLowerCase());
-      if (roleList.includes('front_desk')) {
-        hasFrontDesk = true;
-      }
     }
 
     // Hours validation
@@ -365,14 +358,6 @@ export function validateStaffCsv(content: string): ValidationResult {
         });
       }
     }
-  }
-
-  // Check for at least one front_desk qualified employee
-  if (!hasFrontDesk && parsed.data.length > 0) {
-    errors.push({
-      message: 'At least one employee must have front_desk role',
-      severity: 'error',
-    });
   }
 
   return {
@@ -504,6 +489,13 @@ export function validateDepartmentCsv(content: string): ValidationResult {
         row: rowNum,
         column: 'department',
         message: 'Department name is required',
+        severity: 'error',
+      });
+    } else if (deptName.toLowerCase().replace(/[\s_]+/g, '_') === 'front_desk') {
+      errors.push({
+        row: rowNum,
+        column: 'department',
+        message: 'Front Desk is built in and cannot appear as a custom department row',
         severity: 'error',
       });
     } else if (deptNames.has(deptName.toLowerCase())) {

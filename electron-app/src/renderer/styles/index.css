@@ -63,6 +63,12 @@
     --action-primary-hover: 141 39% 36%;
     --action-primary-border: 141 41% 46%;
     --action-primary-foreground: 0 0% 100%;
+    --success-accent: 145 58% 30%;
+    --success-accent-hover: 145 56% 24%;
+    --success-accent-bg: 145 55% 92%;
+    --danger-accent: 0 68% 42%;
+    --danger-accent-hover: 0 65% 36%;
+    --danger-accent-bg: 0 72% 94%;
     --success-notice-foreground: 141 46% 19%;
     --success-notice-muted: 141 28% 27%;
     --status-shimmer-highlight: 205 88% 68%;
@@ -129,6 +135,12 @@
     --action-primary-hover: 141 39% 36%;
     --action-primary-border: 141 41% 46%;
     --action-primary-foreground: 0 0% 100%;
+    --success-accent: 145 72% 72%;
+    --success-accent-hover: 145 78% 80%;
+    --success-accent-bg: 145 48% 22%;
+    --danger-accent: 0 82% 74%;
+    --danger-accent-hover: 0 90% 82%;
+    --danger-accent-bg: 0 44% 22%;
     --success-notice-foreground: 141 22% 92%;
     --success-notice-muted: 141 18% 78%;
     --status-shimmer-highlight: 201 100% 80%;
@@ -303,6 +315,24 @@
 
   .btn-ghost {
     @apply btn bg-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground;
+  }
+
+  .action-success {
+    color: hsl(var(--success-accent)) !important;
+  }
+
+  .action-success:hover {
+    background-color: hsl(var(--success-accent-bg) / 0.55) !important;
+    color: hsl(var(--success-accent-hover)) !important;
+  }
+
+  .action-danger {
+    color: hsl(var(--danger-accent)) !important;
+  }
+
+  .action-danger:hover {
+    background-color: hsl(var(--danger-accent-bg) / 0.65) !important;
+    color: hsl(var(--danger-accent-hover)) !important;
   }
 
   .input {

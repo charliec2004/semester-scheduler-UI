@@ -3,12 +3,12 @@
  * Accessible tab bar with keyboard navigation
  */
 
-import { Building2, FileOutput, Flag, Home, Upload, Users } from 'lucide-react';
+import { Building2, FileOutput, Flag, Home, Users } from 'lucide-react';
 import { useUIStore, useStaffStore, useDepartmentStore, useSolverStore } from '../../store';
 import { Badge } from '../ui/badge';
 import { cn } from '../../lib/utils';
 
-type TabId = 'welcome' | 'import' | 'staff' | 'departments' | 'flags' | 'results';
+type TabId = 'welcome' | 'staff' | 'departments' | 'flags' | 'results';
 
 interface Tab {
   id: TabId;
@@ -28,11 +28,6 @@ export function TabNavigation() {
       id: 'welcome',
       label: 'Home',
       icon: <Home className="h-4 w-4" strokeWidth={1.8} />,
-    },
-    {
-      id: 'import',
-      label: 'Import',
-      icon: <Upload className="h-4 w-4" strokeWidth={1.8} />,
     },
     {
       id: 'departments',

@@ -13,11 +13,46 @@ interface DropZoneProps {
   label: string;
   description?: string;
   icon?: JSX.Element;
+  className?: string;
+  activeLabel?: string;
+  activeDescription?: string;
+  activeIcon?: JSX.Element;
+  children?: React.ReactNode;
 }
 
-export function DropZone({ onFileDrop, accept = '.csv', label, description, icon }: DropZoneProps) {
+export function DropZone({
+  onFileDrop,
+  accept = '.csv',
+  label,
+  description,
+  icon,
+  className,
+  activeLabel,
+  activeDescription,
+  activeIcon,
+  children,
+}: DropZoneProps) {
   const [isDragging, setIsDragging] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const acceptsFile = useCallback((file: File) => {
+    const acceptedTokens = accept
+      .split(',')
+      .map((token) => token.trim().toLowerCase())
+      .filter(Boolean);
+
+    if (acceptedTokens.length === 0) {
+      return true;
+    }
+
+    const lowercaseName = file.name.toLowerCase();
+    return acceptedTokens.some((token) => {
+      if (token.startsWith('.')) {
+        return lowercaseName.endsWith(token);
+      }
+      return file.type.toLowerCase() === token;
+    });
+  }, [accept]);
 
   const handleDragOver = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -39,7 +74,7 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const file = files[0];
-      if (file.name.endsWith('.csv')) {
+      if (acceptsFile(file)) {
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target?.result as string;
@@ -48,12 +83,15 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
         reader.readAsText(file);
       }
     }
-  }, [onFileDrop]);
+  }, [acceptsFile, onFileDrop]);
 
   const handleFileSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
     if (files && files.length > 0) {
       const file = files[0];
+      if (!acceptsFile(file)) {
+        return;
+      }
       const reader = new FileReader();
       reader.onload = (event) => {
         const content = event.target?.result as string;
@@ -61,7 +99,7 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
       };
       reader.readAsText(file);
     }
-  }, [onFileDrop]);
+  }, [acceptsFile, onFileDrop]);
 
   const handleClick = () => {
     inputRef.current?.click();
@@ -87,7 +125,11 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
       onDragOver={handleDragOver}
       onDragLeave={handleDragLeave}
       onDrop={handleDrop}
-      className={cn('drop-zone cursor-pointer', isDragging && 'drop-zone-active')}
+      className={cn(
+        'drop-zone relative cursor-pointer overflow-hidden transition-[border-color,background-color,transform,box-shadow] duration-200 ease-out',
+        isDragging && 'drop-zone-active',
+        className,
+      )}
       aria-label={`${label}. Click or drag and drop a file.`}
     >
       <input
@@ -99,20 +141,51 @@ export function DropZone({ onFileDrop, accept = '.csv', label, description, icon
         aria-hidden="true"
       />
       
-      <div className={cn('text-surface-400', isDragging && 'text-foreground')}>
-        {icon || defaultIcon}
-      </div>
-      
-      <div className="text-center">
-        <p className="text-sm font-medium text-surface-200">{label}</p>
-        {description && (
-          <p className="mt-1 text-[13px] text-surface-400">{description}</p>
+      <div
+        className={cn(
+          'flex w-full flex-col items-center gap-3 text-center transition-all duration-200 ease-out',
+          isDragging && 'translate-y-2 scale-[0.985] opacity-0',
+        )}
+      >
+        {children ?? (
+          <>
+            <div className="text-surface-400">
+              {icon || defaultIcon}
+            </div>
+
+            <div className="text-center">
+              <p className="text-sm font-medium text-surface-200">{label}</p>
+              {description && (
+                <p className="mt-1 text-[13px] text-surface-400">{description}</p>
+              )}
+            </div>
+
+          <p className="text-[11px] text-surface-500">
+            Drag & drop or click to browse
+          </p>
+          </>
         )}
       </div>
-      
-      <p className="text-[11px] text-surface-500">
-        Drag & drop or click to browse
-      </p>
+
+      <div
+        className={cn(
+          'pointer-events-none absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center transition-all duration-200 ease-out',
+          isDragging ? 'scale-100 opacity-100' : 'scale-[0.985] opacity-0',
+        )}
+        aria-hidden={!isDragging}
+      >
+        <div className="text-foreground">
+          {activeIcon || icon || defaultIcon}
+        </div>
+        <div>
+          <p className="text-base font-semibold text-foreground">
+            {activeLabel || 'Drop file'}
+          </p>
+          <p className="mt-1 text-[13px] text-surface-300">
+            {activeDescription || 'Release to import'}
+          </p>
+        </div>
+      </div>
     </div>
   );
 }

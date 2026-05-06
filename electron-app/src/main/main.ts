@@ -19,8 +19,16 @@ import type {
   ConfigSnapshot,
   StaffMember,
   Department,
+  DepartmentData,
 } from './ipc-types';
-import { DEFAULT_SETTINGS, normalizeAppSettings } from './ipc-types';
+import {
+  createDefaultConfigSnapshot,
+  DEFAULT_FRONT_DESK_ENABLED,
+  DEFAULT_SETTINGS,
+  normalizeAppSettings,
+  normalizeConfigSnapshot,
+  normalizeDepartmentData,
+} from './ipc-types';
 import {
   initUpdater,
   checkForUpdates,
@@ -50,10 +58,11 @@ process.on('uncaughtException', (err: NodeJS.ErrnoException) => {
 const store = new Store<{
   settings: AppSettings;
   presets: FlagPreset[];
-  recentFiles: { staff?: string; dept?: string };
+  recentFiles: { staff?: string; dept?: string; config?: string };
   history: HistoryEntry[];
   savedStaff: StaffMember[];
-  savedDepartments: Department[];
+  savedDepartments: DepartmentData | Department[];
+  currentProject: ConfigSnapshot | null;
 }>({
   defaults: {
     settings: DEFAULT_SETTINGS,
@@ -61,7 +70,11 @@ const store = new Store<{
     recentFiles: {},
     history: [],
     savedStaff: [],
-    savedDepartments: [],
+    savedDepartments: {
+      departments: [],
+      frontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
+    },
+    currentProject: null,
   },
 });
 
@@ -363,7 +376,7 @@ function saveHistoryEntry(entry: HistoryEntry, config: ConfigSnapshot): void {
   // Save config snapshot
   fs.writeFileSync(
     path.join(entryDir, 'config.json'),
-    JSON.stringify(config, null, 2)
+    JSON.stringify(normalizeConfigSnapshot(config), null, 2)
   );
   
   // Add to history
@@ -380,6 +393,69 @@ function saveHistoryEntry(entry: HistoryEntry, config: ConfigSnapshot): void {
   } else {
     store.set('history', history);
   }
+}
+
+function saveCurrentProject(config: ConfigSnapshot): void {
+  const normalized = normalizeConfigSnapshot(config);
+  store.set('currentProject', normalized);
+  store.set('savedStaff', normalized.staff);
+  store.set('savedDepartments', {
+    departments: normalized.departments,
+    frontDeskEnabled: normalized.frontDeskEnabled,
+  });
+}
+
+function mergeCurrentProject(partial: Partial<ConfigSnapshot>): ConfigSnapshot {
+  const current = getCurrentProject();
+  const next = normalizeConfigSnapshot({
+    ...current,
+    ...partial,
+  });
+  saveCurrentProject(next);
+  return next;
+}
+
+function buildLegacyCurrentProject(): ConfigSnapshot {
+  const savedStaff = store.get('savedStaff');
+  const savedDepartments = normalizeDepartmentData(store.get('savedDepartments'));
+
+  return normalizeConfigSnapshot({
+    staff: savedStaff,
+    departments: savedDepartments.departments,
+    frontDeskEnabled: savedDepartments.frontDeskEnabled,
+  });
+}
+
+function getCurrentProject(): ConfigSnapshot {
+  const storedProject = store.get('currentProject');
+  if (storedProject) {
+    const normalized = normalizeConfigSnapshot(storedProject);
+    store.set('currentProject', normalized);
+    return normalized;
+  }
+
+  const migrated = buildLegacyCurrentProject();
+  saveCurrentProject(migrated);
+  return migrated;
+}
+
+function updateHistoryEntryName(historyId: string, name: string): HistoryEntry | null {
+  const trimmed = name.trim();
+  const history = store.get('history');
+  const nextHistory = history.map((entry) =>
+    entry.id === historyId
+      ? {
+          ...entry,
+          name: trimmed || undefined,
+        }
+      : entry,
+  );
+  const updatedEntry = nextHistory.find((entry) => entry.id === historyId) ?? null;
+  if (!updatedEntry) {
+    return null;
+  }
+  store.set('history', nextHistory);
+  return updatedEntry;
 }
 
 // ---------------------------------------------------------------------------
@@ -405,6 +481,23 @@ function registerIpcHandlers(): void {
     return { path: filePath, content, canceled: false };
   });
 
+  ipcMain.handle('files:openConfig', async () => {
+    const result = await dialog.showOpenDialog(mainWindow!, {
+      title: 'Open Project Configuration',
+      filters: [{ name: 'JSON Files', extensions: ['json'] }],
+      properties: ['openFile'],
+    });
+
+    if (result.canceled || result.filePaths.length === 0) {
+      return { canceled: true };
+    }
+
+    const filePath = result.filePaths[0];
+    const content = fs.readFileSync(filePath, 'utf-8');
+    store.set('recentFiles', { ...store.get('recentFiles'), config: filePath });
+    return { path: filePath, content, canceled: false };
+  });
+
   ipcMain.handle('files:saveCsvToTemp', async (_event, { content, filename }: { content: string; filename: string }) => {
     const tempDir = path.join(app.getPath('temp'), 'scheduler-temp');
     fs.mkdirSync(tempDir, { recursive: true });
@@ -420,6 +513,21 @@ function registerIpcHandlers(): void {
       title: `Save ${kind === 'staff' ? 'Staff' : 'Department'} CSV`,
       defaultPath: defaultName,
       filters: [{ name: 'CSV Files', extensions: ['csv'] }],
+    });
+
+    if (result.canceled || !result.filePath) {
+      return { canceled: true };
+    }
+
+    fs.writeFileSync(result.filePath, content, 'utf-8');
+    return { path: result.filePath, canceled: false };
+  });
+
+  ipcMain.handle('files:saveConfig', async (_event, { content }: { content: string }) => {
+    const result = await dialog.showSaveDialog(mainWindow!, {
+      title: 'Export Project Configuration',
+      defaultPath: 'semester-scheduler-config.json',
+      filters: [{ name: 'JSON Files', extensions: ['json'] }],
     });
 
     if (result.canceled || !result.filePath) {
@@ -506,23 +614,33 @@ function registerIpcHandlers(): void {
 
   ipcMain.handle('data:saveStaff', (_event, staff: StaffMember[]) => {
     store.set('savedStaff', staff);
+    mergeCurrentProject({ staff });
     return { success: true };
   });
 
   ipcMain.handle('data:loadDepartments', () => {
-    return store.get('savedDepartments');
+    return normalizeDepartmentData(store.get('savedDepartments'));
   });
 
-  ipcMain.handle('data:saveDepartments', (_event, departments: Department[]) => {
-    store.set('savedDepartments', departments);
+  ipcMain.handle('data:saveDepartments', (_event, data: DepartmentData) => {
+    const normalized = normalizeDepartmentData(data);
+    store.set('savedDepartments', normalized);
+    mergeCurrentProject({
+      departments: normalized.departments,
+      frontDeskEnabled: normalized.frontDeskEnabled,
+    });
     return { success: true };
   });
 
   ipcMain.handle('data:clearAll', () => {
     store.set('savedStaff', []);
-    store.set('savedDepartments', []);
+    store.set('savedDepartments', {
+      departments: [],
+      frontDeskEnabled: DEFAULT_FRONT_DESK_ENABLED,
+    });
     store.set('presets', []);
     store.set('recentFiles', {});
+    store.set('currentProject', createDefaultConfigSnapshot());
     return { success: true };
   });
 
@@ -563,7 +681,16 @@ function registerIpcHandlers(): void {
     }
     
     const content = fs.readFileSync(configPath, 'utf-8');
-    return { config: JSON.parse(content) as ConfigSnapshot, error: null };
+    return { config: normalizeConfigSnapshot(JSON.parse(content) as ConfigSnapshot), error: null };
+  });
+
+  ipcMain.handle('project:loadCurrent', () => {
+    return getCurrentProject();
+  });
+
+  ipcMain.handle('project:saveCurrent', (_event, config: ConfigSnapshot) => {
+    saveCurrentProject(config);
+    return { success: true };
   });
 
   ipcMain.handle('history:delete', async (_event, historyId: string) => {
@@ -571,6 +698,11 @@ function registerIpcHandlers(): void {
     const history = store.get('history').filter((h: HistoryEntry) => h.id !== historyId);
     store.set('history', history);
     return { success: true };
+  });
+
+  ipcMain.handle('history:updateName', async (_event, { historyId, name }: { historyId: string; name: string }) => {
+    const entry = updateHistoryEntryName(historyId, name);
+    return { success: entry !== null, entry };
   });
 
   ipcMain.handle('history:getOutputPath', async (_event, { historyId, type }: { historyId: string; type: 'xlsx' | 'xlsxFormatted' }) => {
@@ -664,6 +796,7 @@ function registerIpcHandlers(): void {
           error: 'Schedule generation was cancelled.',
           errorType: 'cancelled',
           elapsed,
+          frontDeskEnabled: snapshot.frontDeskEnabled,
         });
       } else if (code === 0) {
         // Success - check for output files
@@ -693,6 +826,7 @@ function registerIpcHandlers(): void {
           success: true,
           outputs,
           elapsed,
+          frontDeskEnabled: snapshot.frontDeskEnabled,
         });
       } else {
         // Clean up failed run directory
@@ -709,6 +843,7 @@ function registerIpcHandlers(): void {
             : `Solver encountered an unexpected error (code ${code}). Check the logs for details.`,
           errorType: isNoSolution ? 'no_solution' : 'error',
           elapsed,
+          frontDeskEnabled: snapshot.frontDeskEnabled,
         });
       }
 
@@ -938,6 +1073,10 @@ async function triggerUpdateCheck(): Promise<void> {
 
 function buildSolverArgs(config: SolverRunConfig): string[] {
   const args: string[] = [config.staffPath, config.deptPath];
+
+  if (config.frontDeskEnabled === false) {
+    args.push('--no-front-desk');
+  }
 
   if (config.maxSolveSeconds) {
     args.push('--max-solve-seconds', config.maxSolveSeconds.toString());

@@ -1554,7 +1554,7 @@ export function SettingsPanel() {
             </h3>
             <div className="space-y-3">
               <p className="text-[13px] leading-5 text-surface-400">
-                Clear all saved staff, departments, and presets. History will be preserved.
+                Clear all saved staff, departments, and flag presets. Recent project history will be preserved.
               </p>
               <Button
                 onClick={handleClearAllData}
@@ -1587,7 +1587,7 @@ export function SettingsPanel() {
         description={
           pendingConfirmAction === 'reset'
             ? 'This will replace your current solver and appearance settings with the app defaults.'
-            : 'This clears all staff, departments, and saved presets. Solver history will be preserved.'
+            : 'This clears all staff, departments, and saved flag presets. Recent project history will be preserved.'
         }
         confirmLabel={pendingConfirmAction === 'reset' ? 'Reset Settings' : 'Clear Data'}
         confirmVariant={pendingConfirmAction === 'reset' ? 'default' : 'destructive'}

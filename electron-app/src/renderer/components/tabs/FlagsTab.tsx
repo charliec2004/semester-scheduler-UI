@@ -5,7 +5,7 @@
 
 import { useState, useMemo, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
-import { AlertTriangle, ChevronDown, HelpCircle, LoaderCircle, X } from 'lucide-react';
+import { AlertTriangle, ChevronDown, Download, HelpCircle, LoaderCircle, Upload, X } from 'lucide-react';
 import { 
   useFlagsStore, 
   useStaffStore, 
@@ -16,11 +16,13 @@ import {
   createConfigSnapshot,
 } from '../../store';
 import type { TrainingPair, TimesetRequest, FlagPreset, FavoredEmployeeDept, ShiftTimePreference, EqualityConstraint, StaffMember, Department } from '../../../main/ipc-types';
+import { useProjectConfigActions } from '../../hooks/useProjectConfigActions';
 import { staffToCsv, departmentsToCsv } from '../../utils/csvValidators';
 import { DAY_NAMES, DAY_END_MINUTES, TIME_SLOT_STARTS } from '../../../shared/constants';
 import { Badge } from '../ui/badge';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
+import { ConfirmDialog } from '../ui/confirm-dialog';
 import { DialogShell } from '../ui/dialog-shell';
 import { Input } from '../ui/input';
 import { NoticePanel } from '../ui/notice-panel';
@@ -233,7 +235,19 @@ function normalizeLabel(value: string): string {
   return value.trim().toLowerCase();
 }
 
-export function getFlagsRunBlockingIssues(staff: StaffMember[], departments: Department[]): string[] {
+function isFrontDeskRole(value: string): boolean {
+  return value.trim().toLowerCase().replace(/\s+/g, '_') === 'front_desk';
+}
+
+function getEffectiveRoles(roles: string[], frontDeskEnabled: boolean): string[] {
+  return roles.filter((role) => frontDeskEnabled || !isFrontDeskRole(role));
+}
+
+export function getFlagsRunBlockingIssues(
+  staff: StaffMember[],
+  departments: Department[],
+  frontDeskEnabled: boolean,
+): string[] {
   const issues: string[] = [];
 
   if (staff.length === 0) {
@@ -267,7 +281,7 @@ export function getFlagsRunBlockingIssues(staff: StaffMember[], departments: Dep
     );
   }
 
-  const staffWithNoRoles = staff.filter(member => member.roles.length === 0);
+  const staffWithNoRoles = staff.filter(member => getEffectiveRoles(member.roles, frontDeskEnabled).length === 0);
   if (staffWithNoRoles.length > 0) {
     issues.push(
       staffWithNoRoles.length === 1
@@ -283,6 +297,15 @@ export function getFlagsRunBlockingIssues(staff: StaffMember[], departments: Dep
         ? 'One employee has target hours above max hours.'
         : `${invalidStaffHoursCount} employees have target hours above max hours.`,
     );
+  }
+
+  if (frontDeskEnabled) {
+    const hasFrontDeskQualifiedEmployee = staff.some(member =>
+      member.roles.some((role) => isFrontDeskRole(role)),
+    );
+    if (!hasFrontDeskQualifiedEmployee) {
+      issues.push('At least one employee must be qualified for Front Desk while Front Desk is enabled.');
+    }
   }
 
   const blankDepartmentCount = departments.filter(department => !department.name.trim()).length;
@@ -313,6 +336,11 @@ export function getFlagsRunBlockingIssues(staff: StaffMember[], departments: Dep
     );
   }
 
+  const hasReservedFrontDeskDepartment = departments.some(department => isFrontDeskRole(department.name));
+  if (hasReservedFrontDeskDepartment) {
+    issues.push('Front Desk is built in and cannot be added as a custom department.');
+  }
+
   const invalidDepartmentHoursCount = departments.filter(department => department.targetHours > department.maxHours).length;
   if (invalidDepartmentHoursCount > 0) {
     issues.push(
@@ -328,9 +356,12 @@ export function getFlagsRunBlockingIssues(staff: StaffMember[], departments: Dep
 export function FlagsSetupBanner() {
   const { activeTab, setActiveTab } = useUIStore();
   const { staff } = useStaffStore();
-  const { departments } = useDepartmentStore();
+  const { departments, frontDeskEnabled } = useDepartmentStore();
 
-  const runBlockingIssues = useMemo(() => getFlagsRunBlockingIssues(staff, departments), [departments, staff]);
+  const runBlockingIssues = useMemo(
+    () => getFlagsRunBlockingIssues(staff, departments, frontDeskEnabled),
+    [departments, frontDeskEnabled, staff],
+  );
   const canRun = runBlockingIssues.length === 0;
 
   const staffNames = staff.map(member => normalizeLabel(member.name)).filter(Boolean);
@@ -338,7 +369,7 @@ export function FlagsSetupBanner() {
   const hasStaffSetupIssues =
     staff.length === 0 ||
     staff.some(member => !member.name.trim()) ||
-    staff.some(member => member.roles.length === 0) ||
+    staff.some(member => getEffectiveRoles(member.roles, frontDeskEnabled).length === 0) ||
     staff.some(member => member.targetHours > member.maxHours) ||
     new Set(staffNames).size !== staffNames.length;
   const hasDepartmentSetupIssues =
@@ -361,9 +392,9 @@ export function FlagsSetupBanner() {
           <button
             type="button"
             className="warning-banner-link ml-auto underline underline-offset-4"
-            onClick={() => setActiveTab('import')}
+            onClick={() => setActiveTab('welcome')}
           >
-            Open Import
+            Open Welcome
           </button>
         )}
         {hasStaffSetupIssues && (
@@ -462,19 +493,27 @@ export function FlagsTab() {
   } = useFlagsStore();
   
   const { staff, saveStaff, dirty: staffDirty } = useStaffStore();
-  const { departments, saveDepartments, dirty: deptDirty } = useDepartmentStore();
+  const { departments, frontDeskEnabled, saveDepartments, dirty: deptDirty } = useDepartmentStore();
   const { running, setRunning, reset } = useSolverStore();
   const { settings } = useSettingsStore();
   const { showToast, setActiveTab } = useUIStore();
+  const { exportConfig, exporting, importErrors, importing, openConfigPicker } = useProjectConfigActions();
 
   const [newFavored, setNewFavored] = useState('');
   const [newFavoredMultiplier, setNewFavoredMultiplier] = useState(1.0);
   const [newPresetName, setNewPresetName] = useState('');
   const [showPresetDialog, setShowPresetDialog] = useState(false);
+  const [showOpenConfigWarning, setShowOpenConfigWarning] = useState(false);
 
   const employeeNames = useMemo(() => staff.map(s => s.name).filter(Boolean), [staff]);
   const departmentNames = useMemo(() => departments.map(d => d.name).filter(Boolean), [departments]);
-  const runBlockingIssues = useMemo(() => getFlagsRunBlockingIssues(staff, departments), [departments, staff]);
+  const hiddenFrontDeskDepartmentPreferenceCount = !frontDeskEnabled
+    ? Object.keys(favoredFrontDeskDepts).length
+    : 0;
+  const runBlockingIssues = useMemo(
+    () => getFlagsRunBlockingIssues(staff, departments, frontDeskEnabled),
+    [departments, frontDeskEnabled, staff],
+  );
   const canRun = runBlockingIssues.length === 0;
 
   const handleAddFavored = () => {
@@ -506,10 +545,10 @@ export function FlagsTab() {
       await savePreset(preset);
       setNewPresetName('');
       setShowPresetDialog(false);
-      showToast('Preset saved', 'success');
+      showToast('Flag preset saved', 'success');
     } catch (error) {
       console.error('Failed to save preset:', error);
-      showToast('Failed to save preset', 'error');
+      showToast('Failed to save flag preset', 'error');
     }
   };
 
@@ -528,6 +567,13 @@ export function FlagsTab() {
       // Save CSVs to temp files
       const staffCsv = staffToCsv(staff, settings?.travelBufferMinutes);
       const deptCsv = departmentsToCsv(departments);
+      const filteredFavoredFrontDeskDepts = frontDeskEnabled ? favoredFrontDeskDepts : {};
+      const filteredFavoredEmployeeDepts = frontDeskEnabled
+        ? favoredEmployeeDepts
+        : favoredEmployeeDepts.filter((entry) => !isFrontDeskRole(entry.department));
+      const filteredTimesets = frontDeskEnabled
+        ? timesets
+        : timesets.filter((timeset) => !isFrontDeskRole(timeset.department));
       
       const staffResult = await window.electronAPI.files.saveCsvToTemp({ 
         content: staffCsv, 
@@ -543,19 +589,20 @@ export function FlagsTab() {
 
       // Clear previous result/error before starting
       reset();
-      setRunning(true);
+      setRunning(true, undefined, frontDeskEnabled);
       
       const result = await window.electronAPI.solver.run({
         config: {
           staffPath: staffResult.path,
           deptPath: deptResult.path,
+          frontDeskEnabled,
           maxSolveSeconds: maxSolveSeconds || settings?.solverMaxTime || 300,
           favoredEmployees,
           trainingPairs,
           favoredDepartments,
-          favoredFrontDeskDepts,
-          favoredEmployeeDepts,
-          timesets,
+          favoredFrontDeskDepts: filteredFavoredFrontDeskDepts,
+          favoredEmployeeDepts: filteredFavoredEmployeeDepts,
+          timesets: filteredTimesets,
           shiftTimePreferences,
           equalityConstraints,
           enforceMinDeptBlock: settings?.enforceMinDeptBlock ?? true,
@@ -644,7 +691,7 @@ export function FlagsTab() {
             variant="secondary"
             size="sm"
           >
-            Save as Preset
+            Save Flag Preset
           </Button>
           <Button
             type="button"
@@ -672,10 +719,59 @@ export function FlagsTab() {
         </div>
       </div>
 
+      <div className="card space-y-4">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <h3 className="font-semibold text-surface-200">Project Configuration</h3>
+            <p className="mt-1 max-w-[38rem] text-sm leading-6 text-surface-400">
+              Open or save a full project file, including linked staff, departments, and solve preferences.
+            </p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <Button
+              type="button"
+              onClick={() => {
+                setShowOpenConfigWarning(true);
+              }}
+              variant="secondary"
+              size="sm"
+              disabled={importing}
+            >
+              <Upload className="h-4 w-4" strokeWidth={1.8} />
+              {importing ? 'Opening...' : 'Open Config File'}
+            </Button>
+            <Button
+              type="button"
+              onClick={() => {
+                void exportConfig();
+              }}
+              variant="secondary"
+              size="sm"
+              disabled={exporting}
+            >
+              <Download className="h-4 w-4" strokeWidth={1.8} />
+              {exporting ? 'Saving...' : 'Save Config File'}
+            </Button>
+          </div>
+        </div>
+        {importErrors.length > 0 && (
+          <NoticePanel variant="error" title={`Import issues (${importErrors.length})`}>
+            <ul className="space-y-1">
+              {importErrors.map((item, index) => (
+                <li key={`${item.message}-${index}`} className="flex items-start gap-2">
+                  <span className="text-surface-300">•</span>
+                  <span>{item.message}</span>
+                </li>
+              ))}
+            </ul>
+          </NoticePanel>
+        )}
+      </div>
+
       {/* Presets */}
       {presets.length > 0 && (
         <div className="card">
-          <h3 className="font-semibold text-surface-200 mb-4">Saved Presets</h3>
+          <h3 className="mb-4 font-semibold text-surface-200">Saved Flag Presets</h3>
           <div className="flex flex-wrap gap-2">
             {presets.map(preset => (
               <div key={preset.id} className="flex items-stretch bg-surface-800 rounded-lg">
@@ -688,7 +784,7 @@ export function FlagsTab() {
                 <button
                   onClick={() => deletePreset(preset.id)}
                   className="px-2 flex items-center text-surface-400 hover:bg-surface-700/80 hover:text-surface-100 transition-colors rounded-r-lg"
-                  aria-label={`Delete preset ${preset.name}`}
+                  aria-label={`Delete flag preset ${preset.name}`}
                 >
                   <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -774,15 +870,23 @@ export function FlagsTab() {
             </div>
           </div>
 
-          {/* Favor Department for Front Desk */}
-          <DepartmentPreferenceCard
-            title="Favor Departments for Front Desk"
-            description="Prioritize members of these departments to cover front desk shifts. At least one member must have front desk qualification."
-            departments={departmentNames}
-            selectedDepartments={favoredFrontDeskDepts}
-            onSelectedDepartmentsChange={setFavoredFrontDeskDepts}
-            tooltip="When filling front desk shifts, prioritize employees from these departments. Use the strength multiplier to control priority when multiple departments are favored. Department members must be qualified for front desk."
-          />
+          {frontDeskEnabled && (
+            <DepartmentPreferenceCard
+              title="Favor Departments for Front Desk"
+              description="Prioritize members of these departments to cover front desk shifts. At least one member must have front desk qualification."
+              departments={departmentNames}
+              selectedDepartments={favoredFrontDeskDepts}
+              onSelectedDepartmentsChange={setFavoredFrontDeskDepts}
+              tooltip="When filling front desk shifts, prioritize employees from these departments. Use the strength multiplier to control priority when multiple departments are favored. Department members must be qualified for front desk."
+            />
+          )}
+          {!frontDeskEnabled && hiddenFrontDeskDepartmentPreferenceCount > 0 && (
+            <NoticePanel
+              variant="info"
+              title="Front Desk department preferences are preserved"
+              description={`${hiddenFrontDeskDepartmentPreferenceCount} saved Front Desk department preference${hiddenFrontDeskDepartmentPreferenceCount === 1 ? '' : 's'} ${hiddenFrontDeskDepartmentPreferenceCount === 1 ? 'is' : 'are'} inactive while Front Desk is disabled. Re-enable Front Desk to review or edit ${hiddenFrontDeskDepartmentPreferenceCount === 1 ? 'it' : 'them'}.`}
+            />
+          )}
 
           {/* Department Hour Priority */}
           <DepartmentPreferenceCard
@@ -798,10 +902,12 @@ export function FlagsTab() {
           <div className="card lg:col-span-2">
           <h3 className="font-semibold text-surface-200 mb-2 flex items-center">
             Favor Employee for Department
-            <Tooltip text="Adds a soft preference for an employee to work in a specific department or front desk. Use the multiplier to control strength: 0.5x = weak preference, 1x = normal, 2x = strong, 3x = very strong. The employee must be qualified for the role." />
+            <Tooltip text={frontDeskEnabled
+              ? "Adds a soft preference for an employee to work in a specific department or front desk. Use the multiplier to control strength: 0.5x = weak preference, 1x = normal, 2x = strong, 3x = very strong. The employee must be qualified for the role."
+              : "Adds a soft preference for an employee to work in a specific department. Use the multiplier to control strength: 0.5x = weak preference, 1x = normal, 2x = strong, 3x = very strong. The employee must be qualified for the role."} />
           </h3>
           <p className="text-sm text-surface-400 mb-4">
-            Softly prefer assigning specific employees to specific departments or front desk.
+            Softly prefer assigning specific employees to specific departments{frontDeskEnabled ? ' or Front Desk' : ''}.
             The employee must be qualified for the role.
           </p>
           
@@ -809,6 +915,7 @@ export function FlagsTab() {
             employees={employeeNames}
             departments={departmentNames}
             staff={staff}
+            frontDeskEnabled={frontDeskEnabled}
             onAdd={addFavoredEmployeeDept}
           />
 
@@ -992,6 +1099,7 @@ export function FlagsTab() {
             <TimesetForm
               staff={staff}
               departments={departmentNames}
+              frontDeskEnabled={frontDeskEnabled}
               onAdd={addTimeset}
             />
 
@@ -1066,6 +1174,18 @@ export function FlagsTab() {
           onClose={() => setShowPresetDialog(false)}
         />
       )}
+
+      <ConfirmDialog
+        open={showOpenConfigWarning}
+        onOpenChange={setShowOpenConfigWarning}
+        title="Replace current project?"
+        description="Opening a config file will override the current project, including departments, employees, Front Desk settings, and all Flags & Solve preferences."
+        confirmLabel="Open And Replace"
+        confirmVariant="destructive"
+        onConfirm={() => {
+          void openConfigPicker();
+        }}
+      />
     </div>
   );
 }
@@ -1092,8 +1212,8 @@ function PresetDialog({
     <DialogShell
       open
       onClose={onClose}
-      title="Save preset"
-      description="Store the current flag configuration as a reusable preset."
+      title="Save flag preset"
+      description="Store only the current Flags & Solve choices as a reusable preset. This does not save staff or departments."
       widthClassName="max-w-sm"
       footer={
         <>
@@ -1101,14 +1221,14 @@ function PresetDialog({
             Cancel
           </Button>
           <Button type="button" variant="default" size="sm" onClick={onSave} disabled={!value.trim()}>
-            Save Preset
+            Save Flag Preset
           </Button>
         </>
       }
     >
       <div className="space-y-2">
         <label className="label" htmlFor="preset-name">
-          Preset Name
+          Flag Preset Name
         </label>
         <Input
           id="preset-name"
@@ -1116,7 +1236,7 @@ function PresetDialog({
           value={value}
           onChange={(e) => onChange(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Preset name..."
+          placeholder="Flag preset name..."
           className="input"
           autoFocus
         />
@@ -1209,10 +1329,12 @@ function TrainingPairForm({
 function TimesetForm({
   staff,
   departments,
+  frontDeskEnabled,
   onAdd,
 }: {
   staff: StaffMember[];
   departments: string[];
+  frontDeskEnabled: boolean;
   onAdd: (ts: TimesetRequest) => void;
 }) {
   const [employee, setEmployee] = useState('');
@@ -1224,12 +1346,11 @@ function TimesetForm({
   // All departments plus Front Desk option
   const allRoles = useMemo(() => {
     const normalized = departments.map(d => d.toLowerCase().replace(/\s+/g, '_'));
-    // Add front_desk if not already present
-    if (!normalized.includes('front_desk')) {
+    if (frontDeskEnabled && !normalized.includes('front_desk')) {
       normalized.push('front_desk');
     }
     return normalized;
-  }, [departments]);
+  }, [departments, frontDeskEnabled]);
 
   // Reset dependent fields when employee changes
   const handleEmployeeChange = (name: string) => {
@@ -1427,11 +1548,13 @@ function FavoredEmployeeDeptForm({
   employees,
   departments,
   staff,
+  frontDeskEnabled,
   onAdd,
 }: {
   employees: string[];
   departments: string[];
   staff: StaffMember[];
+  frontDeskEnabled: boolean;
   onAdd: (fed: FavoredEmployeeDept) => void;
 }) {
   const [employee, setEmployee] = useState('');
@@ -1447,7 +1570,7 @@ function FavoredEmployeeDeptForm({
     const roles: string[] = [];
     
     // Check if qualified for front_desk
-    if (staffMember.roles.some(role => 
+    if (frontDeskEnabled && staffMember.roles.some(role => 
       role.toLowerCase().replace(/\s+/g, '_') === 'front_desk'
     )) {
       roles.push('front_desk');
@@ -1463,7 +1586,7 @@ function FavoredEmployeeDeptForm({
     });
     
     return roles;
-  }, [employee, staff, departments]);
+  }, [departments, employee, frontDeskEnabled, staff]);
 
   const handleAdd = () => {
     if (employee && department) {

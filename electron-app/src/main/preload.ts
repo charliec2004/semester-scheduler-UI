@@ -14,7 +14,7 @@ import type {
   HistoryEntry,
   ConfigSnapshot,
   StaffMember,
-  Department,
+  DepartmentData,
 } from './ipc-types';
 
 // Update status type (mirrors updater.ts)
@@ -35,12 +35,18 @@ const electronAPI = {
   files: {
     openCsv: (kind: 'staff' | 'dept') => 
       ipcRenderer.invoke('files:openCsv', kind) as Promise<{ path?: string; content?: string; canceled: boolean }>,
+
+    openConfig: () =>
+      ipcRenderer.invoke('files:openConfig') as Promise<{ path?: string; content?: string; canceled: boolean }>,
     
     saveCsvToTemp: (opts: { content: string; filename: string }) =>
       ipcRenderer.invoke('files:saveCsvToTemp', opts) as Promise<{ path: string }>,
     
     saveCsv: (opts: { kind: 'staff' | 'dept'; content: string }) =>
       ipcRenderer.invoke('files:saveCsv', opts) as Promise<{ path?: string; canceled: boolean }>,
+
+    saveConfig: (opts: { content: string }) =>
+      ipcRenderer.invoke('files:saveConfig', opts) as Promise<{ path?: string; canceled: boolean }>,
     
     downloadSample: (kind: 'staff' | 'dept') =>
       ipcRenderer.invoke('files:downloadSample', kind) as Promise<{ path?: string; canceled: boolean }>,
@@ -70,8 +76,8 @@ const electronAPI = {
   data: {
     loadStaff: () => ipcRenderer.invoke('data:loadStaff') as Promise<StaffMember[]>,
     saveStaff: (staff: StaffMember[]) => ipcRenderer.invoke('data:saveStaff', staff) as Promise<{ success: boolean }>,
-    loadDepartments: () => ipcRenderer.invoke('data:loadDepartments') as Promise<Department[]>,
-    saveDepartments: (departments: Department[]) => ipcRenderer.invoke('data:saveDepartments', departments) as Promise<{ success: boolean }>,
+    loadDepartments: () => ipcRenderer.invoke('data:loadDepartments') as Promise<DepartmentData>,
+    saveDepartments: (data: DepartmentData) => ipcRenderer.invoke('data:saveDepartments', data) as Promise<{ success: boolean }>,
     clearAll: () => ipcRenderer.invoke('data:clearAll') as Promise<{ success: boolean }>,
   },
 
@@ -93,8 +99,19 @@ const electronAPI = {
       ipcRenderer.invoke('history:getConfig', historyId) as Promise<{ config: ConfigSnapshot | null; error: string | null }>,
     delete: (historyId: string) => 
       ipcRenderer.invoke('history:delete', historyId) as Promise<{ success: boolean }>,
+    updateName: (opts: { historyId: string; name: string }) =>
+      ipcRenderer.invoke('history:updateName', opts) as Promise<{ success: boolean; entry: HistoryEntry | null }>,
     getOutputPath: (opts: { historyId: string; type: 'xlsx' | 'xlsxFormatted' }) =>
       ipcRenderer.invoke('history:getOutputPath', opts) as Promise<{ path: string | null; exists: boolean }>,
+  },
+
+  // ---------------------------------------------------------------------------
+  // Current Project
+  // ---------------------------------------------------------------------------
+  project: {
+    loadCurrent: () => ipcRenderer.invoke('project:loadCurrent') as Promise<ConfigSnapshot>,
+    saveCurrent: (config: ConfigSnapshot) =>
+      ipcRenderer.invoke('project:saveCurrent', config) as Promise<{ success: boolean }>,
   },
 
   // ---------------------------------------------------------------------------
