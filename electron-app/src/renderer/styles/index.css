@@ -63,6 +63,7 @@
     --action-primary-hover: 141 39% 36%;
     --action-primary-border: 141 41% 46%;
     --action-primary-foreground: 0 0% 100%;
+    --status-shimmer-highlight: 205 88% 68%;
     --radius: 0.5rem;
     --focus-ring: 0 0 0 1px hsl(var(--ring));
   }
@@ -126,6 +127,7 @@
     --action-primary-hover: 141 39% 36%;
     --action-primary-border: 141 41% 46%;
     --action-primary-foreground: 0 0% 100%;
+    --status-shimmer-highlight: 201 100% 80%;
   }
 
   html {
@@ -447,22 +449,31 @@
 }
 
 .status-message-enter {
+  position: relative;
   display: inline-block;
+  color: hsl(var(--surface-200));
+  text-shadow: 0 0 0.01px currentColor;
+  animation: statusFadeSlide 0.35s ease-out;
+}
+
+.status-message-enter::after {
+  content: attr(data-text);
+  position: absolute;
+  inset: 0;
   color: transparent;
   background: linear-gradient(
     90deg,
-    hsl(var(--surface-400)) 0%,
-    hsl(var(--surface-400)) 35%,
-    hsl(var(--surface-100)) 50%,
-    hsl(var(--surface-400)) 65%,
-    hsl(var(--surface-400)) 100%
+    transparent 0%,
+    transparent 40%,
+    hsl(var(--status-shimmer-highlight) / 0.95) 50%,
+    transparent 60%,
+    transparent 100%
   );
   background-size: 200% 100%;
   -webkit-background-clip: text;
   background-clip: text;
-  animation:
-    statusFadeSlide 0.35s ease-out,
-    statusShimmer 2.5s ease-in-out infinite;
+  pointer-events: none;
+  animation: statusShimmer 2.5s ease-in-out infinite;
 }
 
 /* Scrollbar gutter - prevents layout shift when scrollbar appears/disappears */

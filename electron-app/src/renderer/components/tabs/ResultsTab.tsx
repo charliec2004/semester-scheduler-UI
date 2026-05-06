@@ -458,6 +458,7 @@ export function ResultsTab() {
             <span
               key={messageKey}
               className="text-sm font-medium status-message-enter"
+              data-text={currentStatusMessage}
             >
               {currentStatusMessage}
             </span>
