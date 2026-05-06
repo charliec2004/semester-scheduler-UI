@@ -28,14 +28,32 @@ export type UpdateStatus =
 
 let currentStatus: UpdateStatus = { state: 'idle' };
 let mainWindow: BrowserWindow | null = null;
+let updaterInitialized = false;
+
+function getLiveWindows(): BrowserWindow[] {
+  return BrowserWindow.getAllWindows().filter(
+    (window) => !window.isDestroyed() && !window.webContents.isDestroyed(),
+  );
+}
+
+function getPrimaryWindow(): BrowserWindow | null {
+  if (mainWindow && !mainWindow.isDestroyed() && !mainWindow.webContents.isDestroyed()) {
+    return mainWindow;
+  }
+
+  mainWindow = getLiveWindows()[0] ?? null;
+  return mainWindow;
+}
 
 /**
  * Initialize the updater with the main window reference
  */
 export function initUpdater(window: BrowserWindow): void {
   mainWindow = window;
-  
-  if (process.platform !== 'darwin') {
+
+  if (process.platform !== 'darwin' && !updaterInitialized) {
+    updaterInitialized = true;
+
     // Configure electron-updater for Windows/Linux
     autoUpdater.autoDownload = false;
     autoUpdater.autoInstallOnAppQuit = true;
@@ -75,7 +93,14 @@ export function initUpdater(window: BrowserWindow): void {
  */
 function setStatus(status: UpdateStatus): void {
   currentStatus = status;
-  mainWindow?.webContents.send('updater:status', status);
+
+  for (const window of getLiveWindows()) {
+    try {
+      window.webContents.send('updater:status', status);
+    } catch {
+      // Ignore windows that are tearing down while a status update is emitted.
+    }
+  }
 }
 
 /**
@@ -193,8 +218,8 @@ async function downloadAndInstallMacOS(): Promise<void> {
     await shell.openPath(mountPoint);
     
     // Show instructions dialog
-    const result = await dialog.showMessageBox(mainWindow!, {
-      type: 'info',
+    const dialogOptions = {
+      type: 'info' as const,
       title: 'Update Downloaded',
       message: 'Update Ready to Install',
       detail: `The new version has been downloaded and mounted.\n\n` +
@@ -208,7 +233,11 @@ async function downloadAndInstallMacOS(): Promise<void> {
       buttons: ['Quit and Install', 'Cancel'],
       defaultId: 0,
       cancelId: 1,
-    });
+    };
+    const window = getPrimaryWindow();
+    const result = window
+      ? await dialog.showMessageBox(window, dialogOptions)
+      : await dialog.showMessageBox(dialogOptions);
     
     if (result.response === 0) {
       // User chose to proceed - quit the app

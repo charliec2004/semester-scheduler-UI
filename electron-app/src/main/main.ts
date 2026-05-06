@@ -317,6 +317,8 @@ function createWindow(): void {
       activeSolverProcess = null;
     }
   });
+
+  initUpdater(mainWindow);
 }
 
 app.whenReady().then(() => {
@@ -327,11 +329,6 @@ app.whenReady().then(() => {
   registerIpcHandlers();
   cleanupOldHistory();
   createApplicationMenu();
-
-  // Initialize auto-updater after window is ready
-  if (mainWindow) {
-    initUpdater(mainWindow);
-  }
 
   app.on('activate', () => {
     if (BrowserWindow.getAllWindows().length === 0) {
