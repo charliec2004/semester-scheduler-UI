@@ -4,6 +4,7 @@
  */
 
 import { useState, useMemo, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { AlertTriangle, ChevronDown, HelpCircle, LoaderCircle, X } from 'lucide-react';
 import { 
   useFlagsStore, 
@@ -420,7 +421,7 @@ function Tooltip({ text }: { text: React.ReactNode }) {
   };
   
   return (
-    <span className="relative inline-flex items-center ml-1.5">
+    <span className="relative ml-1.5 inline-flex shrink-0 -translate-y-0.5 align-middle">
       <button
         ref={buttonRef}
         type="button"
@@ -428,18 +429,19 @@ function Tooltip({ text }: { text: React.ReactNode }) {
         onMouseLeave={() => setShow(false)}
         onFocus={handleMouseEnter}
         onBlur={() => setShow(false)}
-        className="flex h-4 w-4 items-center justify-center rounded-full bg-transparent text-surface-400 transition-colors hover:text-surface-300"
+        className="flex h-4 w-4 items-center justify-center text-surface-400 transition-colors hover:text-surface-300"
         aria-label="More information"
       >
         <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} />
       </button>
-      {show && (
+      {show && createPortal(
         <div 
-          className="fixed z-[100] px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left"
+          className="pointer-events-none fixed z-[100] px-3 py-2 text-xs text-surface-200 bg-surface-800 border border-surface-700 rounded-lg shadow-lg w-64 text-left"
           style={{ top: coords.top, left: coords.left }}
         >
           {text}
-        </div>
+        </div>,
+        document.body,
       )}
     </span>
   );
@@ -524,7 +526,7 @@ export function FlagsTab() {
       }
       
       // Save CSVs to temp files
-      const staffCsv = staffToCsv(staff);
+      const staffCsv = staffToCsv(staff, settings?.travelBufferMinutes);
       const deptCsv = departmentsToCsv(departments);
       
       const staffResult = await window.electronAPI.files.saveCsvToTemp({ 
@@ -562,12 +564,50 @@ export function FlagsTab() {
           maxSlots: settings?.maxSlots,
           frontDeskCoverageWeight: settings?.frontDeskCoverageWeight,
           departmentTargetWeight: settings?.departmentTargetWeight,
+          officeCoverageWeight: settings?.officeCoverageWeight,
+          singleCoverageWeight: settings?.singleCoverageWeight,
           targetAdherenceWeight: settings?.targetAdherenceWeight,
           collaborativeHoursWeight: settings?.collaborativeHoursWeight,
+          departmentSpreadWeight: settings?.departmentSpreadWeight,
+          departmentDayCoverageWeight: settings?.departmentDayCoverageWeight,
           shiftLengthWeight: settings?.shiftLengthWeight,
+          shiftTimePreferenceWeight: settings?.shiftTimePreferenceWeight,
           favoredEmployeeDeptWeight: settings?.favoredEmployeeDeptWeight,
+          underclassmenFrontDeskWeight: settings?.underclassmenFrontDeskWeight,
+          departmentTotalWeight: settings?.departmentTotalWeight,
+          equalityConstraintWeight: settings?.equalityConstraintWeight,
           departmentHourThreshold: settings?.departmentHourThreshold,
           targetHardDeltaHours: settings?.targetHardDeltaHours,
+          weeklyHourCap: settings?.weeklyHourCap,
+          favoredStudentDailyMaxHours: settings?.favoredStudentDailyMaxHours,
+          favoredStudentMinShiftHours: settings?.favoredStudentMinShiftHours,
+          favoredStudentTargetPriority: settings?.favoredStudentTargetPriority,
+          favoredStudentFillBonus: settings?.favoredStudentFillBonus,
+          travelBufferMinutes: settings?.travelBufferMinutes,
+          defaultWeeklyMaxHours: settings?.defaultWeeklyMaxHours,
+          defaultTargetHours: settings?.defaultTargetHours,
+          trainingMinHours: settings?.trainingMinHours,
+          trainingOverlapTargetPercent: settings?.trainingOverlapTargetPercent,
+          trainingOverlapWeight: settings?.trainingOverlapWeight,
+          trainingOverlapBonus: settings?.trainingOverlapBonus,
+          collaborationMinCareerEducationHours: settings?.collaborationMinCareerEducationHours,
+          collaborationMinMarketingHours: settings?.collaborationMinMarketingHours,
+          collaborationMinEmployerEngagementHours: settings?.collaborationMinEmployerEngagementHours,
+          collaborationMinEventsHours: settings?.collaborationMinEventsHours,
+          collaborationMinDataSystemsHours: settings?.collaborationMinDataSystemsHours,
+          favoredDepartmentTargetMultiplier: settings?.favoredDepartmentTargetMultiplier,
+          favoredDepartmentFocusedBonus: settings?.favoredDepartmentFocusedBonus,
+          favoredDepartmentDualPenalty: settings?.favoredDepartmentDualPenalty,
+          favoredFrontDeskDeptBonus: settings?.favoredFrontDeskDeptBonus,
+          timesetBonusWeight: settings?.timesetBonusWeight,
+          departmentScarcityWeight: settings?.departmentScarcityWeight,
+          largeDeviationThresholdHours: settings?.largeDeviationThresholdHours,
+          employeeLargeDeviationPenalty: settings?.employeeLargeDeviationPenalty,
+          departmentLargeDeviationPenalty: settings?.departmentLargeDeviationPenalty,
+          year1TargetMultiplier: settings?.year1TargetMultiplier,
+          year2TargetMultiplier: settings?.year2TargetMultiplier,
+          year3TargetMultiplier: settings?.year3TargetMultiplier,
+          year4TargetMultiplier: settings?.year4TargetMultiplier,
         },
         snapshot,
       });
@@ -1351,14 +1391,14 @@ function MultiplierTooltip() {
   const [show, setShow] = useState(false);
   
   return (
-    <span className="relative inline-flex items-center">
+    <span className="relative inline-flex shrink-0 -translate-y-0.5 align-middle">
       <button
         type="button"
         onMouseEnter={() => setShow(true)}
         onMouseLeave={() => setShow(false)}
         onFocus={() => setShow(true)}
         onBlur={() => setShow(false)}
-        className="flex h-4 w-4 items-center justify-center rounded-full bg-transparent text-surface-400 transition-colors hover:text-surface-300"
+        className="flex h-4 w-4 items-center justify-center text-surface-400 transition-colors hover:text-surface-300"
         aria-label="Multiplier explanation"
       >
         <HelpCircle className="h-3.5 w-3.5" strokeWidth={2} />

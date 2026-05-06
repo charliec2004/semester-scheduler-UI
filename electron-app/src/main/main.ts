@@ -4,7 +4,7 @@
  * All operations run fully locally - no network required.
  */
 
-import { app, BrowserWindow, ipcMain, dialog, shell, Menu } from 'electron';
+import { app, BrowserWindow, ipcMain, dialog, shell, Menu, nativeTheme } from 'electron';
 import path from 'path';
 import fs from 'fs';
 import { spawn, ChildProcess } from 'child_process';
@@ -84,6 +84,33 @@ const WINDOW_THEME_COLORS = {
     symbols: '#334155',
   },
 } as const;
+
+function getResolvedWindowTheme(themePreference: AppSettings['theme']): 'dark' | 'light' {
+  if (themePreference === 'system') {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light';
+  }
+  return themePreference === 'light' ? 'light' : 'dark';
+}
+
+function applyWindowThemePreference(themePreference: AppSettings['theme']): void {
+  nativeTheme.themeSource = themePreference;
+
+  if (!mainWindow) {
+    return;
+  }
+
+  const resolvedTheme = getResolvedWindowTheme(themePreference);
+  const chromeColors = WINDOW_THEME_COLORS[resolvedTheme];
+  mainWindow.setBackgroundColor(chromeColors.background);
+
+  if (process.platform === 'win32' || process.platform === 'linux') {
+    mainWindow.setTitleBarOverlay({
+      color: chromeColors.titleBar,
+      symbolColor: chromeColors.symbols,
+      height: 48,
+    });
+  }
+}
 
 // Get the project root (parent of electron-app)
 function getProjectRoot(): string {
@@ -223,7 +250,8 @@ function createWindow(): void {
   const isWin = process.platform === 'win32';
   const isLinux = process.platform === 'linux';
   const savedSettings = normalizeAppSettings(store.get('settings'));
-  const initialWindowTheme = savedSettings.theme === 'light' ? 'light' : 'dark';
+  nativeTheme.themeSource = savedSettings.theme;
+  const initialWindowTheme = getResolvedWindowTheme(savedSettings.theme);
   const chromeColors = WINDOW_THEME_COLORS[initialWindowTheme];
   
   const windowOptions: Electron.BrowserWindowConstructorOptions = {
@@ -458,13 +486,17 @@ function registerIpcHandlers(): void {
   });
 
   ipcMain.handle('settings:save', (_event, settings: AppSettings) => {
-    store.set('settings', normalizeAppSettings(settings));
+    const normalized = normalizeAppSettings(settings);
+    store.set('settings', normalized);
+    applyWindowThemePreference(normalized.theme);
     return { success: true };
   });
 
   ipcMain.handle('settings:reset', () => {
     store.reset('settings');
-    return store.get('settings');
+    const resetSettings = store.get('settings');
+    applyWindowThemePreference(resetSettings.theme);
+    return resetSettings;
   });
 
   // Staff & Department Data Persistence
@@ -964,23 +996,137 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
   if (config.departmentTargetWeight !== undefined) {
     args.push('--dept-target-weight', config.departmentTargetWeight.toString());
   }
+  if (config.officeCoverageWeight !== undefined) {
+    args.push('--office-coverage-weight', config.officeCoverageWeight.toString());
+  }
+  if (config.singleCoverageWeight !== undefined) {
+    args.push('--single-coverage-weight', config.singleCoverageWeight.toString());
+  }
   if (config.targetAdherenceWeight !== undefined) {
     args.push('--target-adherence-weight', config.targetAdherenceWeight.toString());
   }
   if (config.collaborativeHoursWeight !== undefined) {
     args.push('--collab-weight', config.collaborativeHoursWeight.toString());
   }
+  if (config.departmentSpreadWeight !== undefined) {
+    args.push('--department-spread-weight', config.departmentSpreadWeight.toString());
+  }
+  if (config.departmentDayCoverageWeight !== undefined) {
+    args.push('--department-day-coverage-weight', config.departmentDayCoverageWeight.toString());
+  }
   if (config.shiftLengthWeight !== undefined) {
     args.push('--shift-length-weight', config.shiftLengthWeight.toString());
   }
+  if (config.shiftTimePreferenceWeight !== undefined) {
+    args.push('--shift-time-pref-weight', config.shiftTimePreferenceWeight.toString());
+  }
   if (config.favoredEmployeeDeptWeight !== undefined) {
     args.push('--favor-emp-dept-weight', config.favoredEmployeeDeptWeight.toString());
+  }
+  if (config.underclassmenFrontDeskWeight !== undefined) {
+    args.push('--underclassmen-front-desk-weight', config.underclassmenFrontDeskWeight.toString());
+  }
+  if (config.departmentTotalWeight !== undefined) {
+    args.push('--department-total-weight', config.departmentTotalWeight.toString());
+  }
+  if (config.equalityConstraintWeight !== undefined) {
+    args.push('--equality-weight', config.equalityConstraintWeight.toString());
   }
   if (config.departmentHourThreshold !== undefined) {
     args.push('--dept-hour-threshold', config.departmentHourThreshold.toString());
   }
   if (config.targetHardDeltaHours !== undefined) {
     args.push('--target-hard-delta', config.targetHardDeltaHours.toString());
+  }
+  if (config.weeklyHourCap !== undefined) {
+    args.push('--weekly-hour-cap', config.weeklyHourCap.toString());
+  }
+  if (config.favoredStudentDailyMaxHours !== undefined) {
+    args.push('--favored-student-daily-max-hours', config.favoredStudentDailyMaxHours.toString());
+  }
+  if (config.favoredStudentMinShiftHours !== undefined) {
+    args.push('--favored-student-min-shift-hours', config.favoredStudentMinShiftHours.toString());
+  }
+  if (config.favoredStudentTargetPriority !== undefined) {
+    args.push('--favored-student-target-priority', config.favoredStudentTargetPriority.toString());
+  }
+  if (config.favoredStudentFillBonus !== undefined) {
+    args.push('--favored-student-fill-bonus', config.favoredStudentFillBonus.toString());
+  }
+  if (config.travelBufferMinutes !== undefined) {
+    args.push('--travel-buffer-minutes', config.travelBufferMinutes.toString());
+  }
+  if (config.defaultWeeklyMaxHours !== undefined) {
+    args.push('--default-weekly-max-hours', config.defaultWeeklyMaxHours.toString());
+  }
+  if (config.defaultTargetHours !== undefined) {
+    args.push('--default-target-hours', config.defaultTargetHours.toString());
+  }
+  if (config.trainingMinHours !== undefined) {
+    args.push('--training-min-hours', config.trainingMinHours.toString());
+  }
+  if (config.trainingOverlapTargetPercent !== undefined) {
+    args.push('--training-overlap-target-percent', config.trainingOverlapTargetPercent.toString());
+  }
+  if (config.trainingOverlapWeight !== undefined) {
+    args.push('--training-overlap-weight', config.trainingOverlapWeight.toString());
+  }
+  if (config.trainingOverlapBonus !== undefined) {
+    args.push('--training-overlap-bonus', config.trainingOverlapBonus.toString());
+  }
+  if (config.collaborationMinCareerEducationHours !== undefined) {
+    args.push('--collab-min-career-education-hours', config.collaborationMinCareerEducationHours.toString());
+  }
+  if (config.collaborationMinMarketingHours !== undefined) {
+    args.push('--collab-min-marketing-hours', config.collaborationMinMarketingHours.toString());
+  }
+  if (config.collaborationMinEmployerEngagementHours !== undefined) {
+    args.push('--collab-min-employer-engagement-hours', config.collaborationMinEmployerEngagementHours.toString());
+  }
+  if (config.collaborationMinEventsHours !== undefined) {
+    args.push('--collab-min-events-hours', config.collaborationMinEventsHours.toString());
+  }
+  if (config.collaborationMinDataSystemsHours !== undefined) {
+    args.push('--collab-min-data-systems-hours', config.collaborationMinDataSystemsHours.toString());
+  }
+  if (config.favoredDepartmentTargetMultiplier !== undefined) {
+    args.push('--favored-dept-target-multiplier', config.favoredDepartmentTargetMultiplier.toString());
+  }
+  if (config.favoredDepartmentFocusedBonus !== undefined) {
+    args.push('--favored-dept-focused-bonus', config.favoredDepartmentFocusedBonus.toString());
+  }
+  if (config.favoredDepartmentDualPenalty !== undefined) {
+    args.push('--favored-dept-dual-penalty', config.favoredDepartmentDualPenalty.toString());
+  }
+  if (config.favoredFrontDeskDeptBonus !== undefined) {
+    args.push('--favored-frontdesk-dept-bonus', config.favoredFrontDeskDeptBonus.toString());
+  }
+  if (config.timesetBonusWeight !== undefined) {
+    args.push('--timeset-bonus-weight', config.timesetBonusWeight.toString());
+  }
+  if (config.departmentScarcityWeight !== undefined) {
+    args.push('--department-scarcity-weight', config.departmentScarcityWeight.toString());
+  }
+  if (config.largeDeviationThresholdHours !== undefined) {
+    args.push('--large-deviation-threshold-hours', config.largeDeviationThresholdHours.toString());
+  }
+  if (config.employeeLargeDeviationPenalty !== undefined) {
+    args.push('--employee-large-deviation-penalty', config.employeeLargeDeviationPenalty.toString());
+  }
+  if (config.departmentLargeDeviationPenalty !== undefined) {
+    args.push('--department-large-deviation-penalty', config.departmentLargeDeviationPenalty.toString());
+  }
+  if (config.year1TargetMultiplier !== undefined) {
+    args.push('--year1-target-multiplier', config.year1TargetMultiplier.toString());
+  }
+  if (config.year2TargetMultiplier !== undefined) {
+    args.push('--year2-target-multiplier', config.year2TargetMultiplier.toString());
+  }
+  if (config.year3TargetMultiplier !== undefined) {
+    args.push('--year3-target-multiplier', config.year3TargetMultiplier.toString());
+  }
+  if (config.year4TargetMultiplier !== undefined) {
+    args.push('--year4-target-multiplier', config.year4TargetMultiplier.toString());
   }
 
   return args;

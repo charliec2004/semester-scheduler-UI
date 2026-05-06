@@ -83,7 +83,6 @@ function App() {
       ? 'font-size-large' 
       : 'font-size-medium';
 
-  const contrastClass = settings?.highContrast ? 'high-contrast' : '';
   const themePreference = settings?.theme ?? 'dark';
   const [resolvedTheme, setResolvedTheme] = useState<'dark' | 'light'>('dark');
 
@@ -93,6 +92,12 @@ function App() {
     root.classList.add(theme);
     setResolvedTheme(theme);
   };
+
+  useEffect(() => {
+    const root = document.documentElement;
+    root.classList.remove('font-size-small', 'font-size-medium', 'font-size-large');
+    root.classList.add(fontSizeClass);
+  }, [fontSizeClass]);
 
   useEffect(() => {
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
@@ -142,7 +147,7 @@ function App() {
   const isMac = navigator.platform.toLowerCase().includes('mac');
 
   return (
-    <div className={`h-screen flex flex-col bg-background overflow-hidden ${fontSizeClass} ${contrastClass}`}>
+    <div className="h-screen flex flex-col bg-background overflow-hidden">
       {/* Skip link for keyboard navigation */}
       <a href="#main-content" className="skip-link">
         Skip to main content

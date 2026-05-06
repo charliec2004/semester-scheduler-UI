@@ -127,6 +127,7 @@ FAVORED_DEPARTMENT_DUAL_PENALTY = legacy_per_slot_weight(20)  # Penalty per dual
 FAVORED_FRONT_DESK_DEPT_BONUS = legacy_per_slot_weight(40)  # Bonus per front desk slot filled by favored department members
 FAVORED_EMPLOYEE_DEPT_BONUS = legacy_per_slot_weight(50)  # Bonus per slot when a favored employee works their preferred department
 TARGET_HARD_DELTA_HOURS = 5  # Hard bound: keep each employee within +/- this many hours of target (when feasible)
+UNIVERSAL_WEEKLY_HOUR_CAP = 19  # Hard weekly cap applied to everyone, even if personal max is higher
 
 # ---------------------------------------------------------------------------
 # Solver + objective tuning knobs

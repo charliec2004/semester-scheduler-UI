@@ -44,6 +44,14 @@ export function slotsToHours(slots: number): number {
   return slots / SLOTS_PER_HOUR;
 }
 
+export function travelBufferMinutesToSlots(minutes: number): number {
+  const roundedMinutes = Math.max(0, Math.round(minutes));
+  if (roundedMinutes === 0) {
+    return 0;
+  }
+  return minutesToSlots(roundedMinutes);
+}
+
 export function isSlotAlignedHours(hours: number): boolean {
   const minutes = hours * MINUTES_PER_HOUR;
   const roundedMinutes = Math.round(minutes);
@@ -223,9 +231,11 @@ export function createFullWorkDayAvailability(): Record<string, boolean> {
  */
 export function unavailabilityBlocksToFlatWorkAvailability(
   blocks: Record<DayName, UnavailabilityBlock[]>,
+  travelBufferSlots: number = travelBufferMinutesToSlots(TRAVEL_BUFFER_MINUTES),
 ): Record<string, boolean> {
   const out = createFullWorkDayAvailability();
   const n = TIME_SLOT_STARTS.length;
+  const normalizedBufferSlots = Math.max(0, travelBufferSlots);
   for (const day of DAY_NAMES) {
     const dayBlocks = blocks[day] ?? [];
     for (const block of dayBlocks) {
@@ -238,11 +248,17 @@ export function unavailabilityBlocksToFlatWorkAvailability(
       for (let i = startIdx; i < endIdx; i += 1) {
         out[`${day}_${TIME_SLOT_STARTS[i]}`] = false;
       }
-      if (nb.bufferBeforeStart && startIdx > 0) {
-        out[`${day}_${TIME_SLOT_STARTS[startIdx - 1]}`] = false;
+      if (nb.bufferBeforeStart && normalizedBufferSlots > 0 && startIdx > 0) {
+        const bufferStart = Math.max(0, startIdx - normalizedBufferSlots);
+        for (let i = bufferStart; i < startIdx; i += 1) {
+          out[`${day}_${TIME_SLOT_STARTS[i]}`] = false;
+        }
       }
-      if (nb.bufferAfterEnd && endIdx < n) {
-        out[`${day}_${TIME_SLOT_STARTS[endIdx]}`] = false;
+      if (nb.bufferAfterEnd && normalizedBufferSlots > 0 && endIdx < n) {
+        const bufferEnd = Math.min(n, endIdx + normalizedBufferSlots);
+        for (let i = endIdx; i < bufferEnd; i += 1) {
+          out[`${day}_${TIME_SLOT_STARTS[i]}`] = false;
+        }
       }
     }
   }
@@ -519,9 +535,11 @@ export function migrateStaffAvailabilityShape(member: {
 /** Timeline for unavailability UI: can work | cannot work | travel buffer slot. */
 export function dayUnavailabilityToTimelineSlotStates(
   blocks: UnavailabilityBlock[],
+  travelBufferSlots: number = travelBufferMinutesToSlots(TRAVEL_BUFFER_MINUTES),
 ): Array<'work' | 'busy' | 'buffer'> {
   const n = TIME_SLOT_STARTS.length;
   const result: Array<'work' | 'busy' | 'buffer'> = Array.from({ length: n }, () => 'work');
+  const normalizedBufferSlots = Math.max(0, travelBufferSlots);
   for (const block of blocks) {
     const nb = normalizeUnavailabilityBlock(block);
     if (!nb) {
@@ -532,11 +550,21 @@ export function dayUnavailabilityToTimelineSlotStates(
     for (let i = startIdx; i < endIdx; i += 1) {
       result[i] = 'busy';
     }
-    if (nb.bufferBeforeStart && startIdx > 0) {
-      result[startIdx - 1] = 'buffer';
+    if (nb.bufferBeforeStart && normalizedBufferSlots > 0 && startIdx > 0) {
+      const bufferStart = Math.max(0, startIdx - normalizedBufferSlots);
+      for (let i = bufferStart; i < startIdx; i += 1) {
+        if (result[i] === 'work') {
+          result[i] = 'buffer';
+        }
+      }
     }
-    if (nb.bufferAfterEnd && endIdx < n) {
-      result[endIdx] = 'buffer';
+    if (nb.bufferAfterEnd && normalizedBufferSlots > 0 && endIdx < n) {
+      const bufferEnd = Math.min(n, endIdx + normalizedBufferSlots);
+      for (let i = endIdx; i < bufferEnd; i += 1) {
+        if (result[i] === 'work') {
+          result[i] = 'buffer';
+        }
+      }
     }
   }
   return result;

@@ -5,7 +5,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AlertTriangle, Check, Download, Plus, Trash2 } from 'lucide-react';
-import { useStaffStore, useDepartmentStore, useUIStore } from '../../store';
+import { useDepartmentStore, useSettingsStore, useStaffStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import { NoticePanel } from '../ui/notice-panel';
 import { Button } from '../ui/button';
@@ -26,6 +26,7 @@ import {
   parseTimeToMinutes,
   SLOT_MINUTES,
   TIME_SLOT_STARTS,
+  travelBufferMinutesToSlots,
   type DayName,
   type UnavailabilityBlock,
 } from '@shared/constants';
@@ -313,6 +314,7 @@ function isFullDayUnavailable(dayBlocks: UnavailabilityBlock[]): boolean {
 export function StaffEditorTab() {
   const { staff, updateStaffMember, addStaffMember, removeStaffMember, dirty, setDirty, saveStaff } = useStaffStore();
   const { departments } = useDepartmentStore();
+  const { settings } = useSettingsStore();
   const { showToast } = useUIStore();
 
   const [selectedIndex, setSelectedIndex] = useState<number | null>(null);
@@ -386,7 +388,7 @@ export function StaffEditorTab() {
 
   const handleExport = async () => {
     try {
-      const csv = staffToCsv(staff);
+      const csv = staffToCsv(staff, settings?.travelBufferMinutes);
       const result = await window.electronAPI.files.saveCsv({
         kind: 'staff',
         content: csv,
@@ -672,13 +674,17 @@ export function StaffEditorTab() {
                   <span className="text-surface-400">10:00</span> ends at the 9:50 slot). Type times like{' '}
                   <span className="text-surface-400">8:00 AM</span>, <span className="text-surface-400">2pm</span>, or{' '}
                   <span className="text-surface-400">17:00</span>. Use buffer checkboxes to block the extra {SLOT_MINUTES}
-                  -minute slot immediately before or after the selected window for travel/buffer time.
+                  -minute slot immediately before or after the selected window for travel/buffer time. The current
+                  buffer length is {settings?.travelBufferMinutes ?? SLOT_MINUTES} minutes.
                 </p>
 
                 <div className="space-y-4">
                   {DAY_NAMES.map(day => {
                     const dayBlocks = selectedEmployee.unavailabilityBlocks[day] ?? [];
-                    const timeline = dayUnavailabilityToTimelineSlotStates(dayBlocks);
+                    const timeline = dayUnavailabilityToTimelineSlotStates(
+                      dayBlocks,
+                      travelBufferMinutesToSlots(settings?.travelBufferMinutes ?? SLOT_MINUTES),
+                    );
                     const isAvailableAllDay = dayBlocks.length === 0;
                     const isUnavailableAllDay = isFullDayUnavailable(dayBlocks);
 

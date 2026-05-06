@@ -210,19 +210,6 @@
     }
   }
 
-  /* High contrast mode */
-  .high-contrast {
-    --focus-ring: 0 0 0 2px hsl(var(--foreground));
-  }
-
-  .high-contrast .bg-surface-900 {
-    background-color: hsl(var(--surface-950));
-  }
-
-  .high-contrast .text-surface-400 {
-    color: hsl(var(--surface-300));
-  }
-
   /* Focus styles for accessibility */
   *:focus-visible {
     outline: none;
@@ -484,14 +471,14 @@
 }
 
 /* Font size variants for accessibility */
-.font-size-small {
-  font-size: 0.875rem;
+html.font-size-small {
+  font-size: 14px;
 }
 
-.font-size-medium {
-  font-size: 1rem;
+html.font-size-medium {
+  font-size: 16px;
 }
 
-.font-size-large {
-  font-size: 1.125rem;
+html.font-size-large {
+  font-size: 18px;
 }

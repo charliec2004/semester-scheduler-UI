@@ -17,7 +17,10 @@ import {
   TRAVEL_BUFFER_AFTER_COLUMNS,
   TRAVEL_BUFFER_BEFORE_COLUMNS,
   TRAVEL_BUFFER_COLUMNS,
+  TRAVEL_BUFFER_MINUTES,
   UNAVAILABILITY_BLOCKS_JSON_COLUMN,
+  unavailabilityBlocksToFlatWorkAvailability,
+  travelBufferMinutesToSlots,
   type DayName,
   type LegacyAvailabilityBlock,
   type UnavailabilityBlock,
@@ -573,7 +576,10 @@ export function parseDepartmentCsv(content: string): Department[] {
 // CSV Export Utilities
 // ---------------------------------------------------------------------------
 
-export function staffToCsv(staff: StaffMember[]): string {
+export function staffToCsv(
+  staff: StaffMember[],
+  travelBufferMinutes: number = TRAVEL_BUFFER_MINUTES,
+): string {
   const headers = [
     ...REQUIRED_STAFF_COLUMNS,
     ...TRAVEL_BUFFER_COLUMNS,
@@ -597,8 +603,13 @@ export function staffToCsv(staff: StaffMember[]): string {
 
     row[UNAVAILABILITY_BLOCKS_JSON_COLUMN] = JSON.stringify(member.unavailabilityBlocks);
 
+    const derivedAvailability = unavailabilityBlocksToFlatWorkAvailability(
+      member.unavailabilityBlocks,
+      travelBufferMinutesToSlots(travelBufferMinutes),
+    );
+
     for (const col of AVAILABILITY_COLUMNS) {
-      row[col] = member.availability[col] ? '1' : '0';
+      row[col] = derivedAvailability[col] ? '1' : '0';
     }
 
     return row;

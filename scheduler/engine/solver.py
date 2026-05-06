@@ -46,6 +46,7 @@ from scheduler.config import (
     TARGET_HARD_DELTA_HOURS,
     TIME_SLOT_STARTS,
     TIMESET_BONUS_WEIGHT,
+    UNIVERSAL_WEEKLY_HOUR_CAP,
     hours_to_slots,
     legacy_per_slot_weight,
     slots_to_hours,
@@ -92,6 +93,44 @@ def solve_schedule(
     favor_emp_dept_weight_override: int | None = None,
     dept_hour_threshold_override: int | None = None,
     target_hard_delta_override: int | None = None,
+    weekly_hour_cap_override: float | None = None,
+    office_coverage_weight_override: int | None = None,
+    single_coverage_weight_override: int | None = None,
+    department_spread_weight_override: int | None = None,
+    department_day_coverage_weight_override: float | None = None,
+    shift_time_pref_weight_override: int | None = None,
+    favored_student_daily_max_hours_override: float | None = None,
+    favored_student_min_shift_hours_override: float | None = None,
+    favored_student_target_priority_override: float | None = None,
+    favored_student_fill_bonus_override: int | None = None,
+    underclassmen_front_desk_weight_override: float | None = None,
+    department_total_weight_override: float | None = None,
+    equality_weight_override: int | None = None,
+    travel_buffer_minutes_override: int | None = None,
+    default_weekly_max_hours_override: float | None = None,
+    default_target_hours_override: float | None = None,
+    training_min_hours_override: float | None = None,
+    training_overlap_target_percent_override: float | None = None,
+    training_overlap_weight_override: int | None = None,
+    training_overlap_bonus_override: int | None = None,
+    collaboration_min_career_education_hours_override: float | None = None,
+    collaboration_min_marketing_hours_override: float | None = None,
+    collaboration_min_employer_engagement_hours_override: float | None = None,
+    collaboration_min_events_hours_override: float | None = None,
+    collaboration_min_data_systems_hours_override: float | None = None,
+    favored_department_target_multiplier_override: float | None = None,
+    favored_department_focused_bonus_override: int | None = None,
+    favored_department_dual_penalty_override: int | None = None,
+    favored_frontdesk_dept_bonus_override: int | None = None,
+    timeset_bonus_weight_override: int | None = None,
+    department_scarcity_weight_override: int | None = None,
+    large_deviation_threshold_hours_override: float | None = None,
+    employee_large_deviation_penalty_override: int | None = None,
+    department_large_deviation_penalty_override: int | None = None,
+    year1_target_multiplier_override: float | None = None,
+    year2_target_multiplier_override: float | None = None,
+    year3_target_multiplier_override: float | None = None,
+    year4_target_multiplier_override: float | None = None,
 ):
     """Main function to build and solve the scheduling model"""
     
@@ -102,25 +141,158 @@ def solve_schedule(
     DEPARTMENT_HOUR_THRESHOLD_LOCAL = dept_hour_threshold_override if dept_hour_threshold_override is not None else DEPARTMENT_HOUR_THRESHOLD
     TARGET_HARD_DELTA_HOURS_LOCAL = target_hard_delta_override if target_hard_delta_override is not None else TARGET_HARD_DELTA_HOURS
     FAVORED_EMPLOYEE_DEPT_BONUS_LOCAL = favor_emp_dept_weight_override if favor_emp_dept_weight_override is not None else FAVORED_EMPLOYEE_DEPT_BONUS
+    UNIVERSAL_WEEKLY_HOUR_CAP_LOCAL = weekly_hour_cap_override if weekly_hour_cap_override is not None else UNIVERSAL_WEEKLY_HOUR_CAP
+    FAVORED_MIN_SLOTS_LOCAL = (
+        hours_to_slots(favored_student_min_shift_hours_override)
+        if favored_student_min_shift_hours_override is not None
+        else FAVORED_MIN_SLOTS
+    )
+    FAVORED_MAX_SLOTS_LOCAL = (
+        hours_to_slots(favored_student_daily_max_hours_override)
+        if favored_student_daily_max_hours_override is not None
+        else FAVORED_MAX_SLOTS
+    )
+    FAVOR_TARGET_MULTIPLIER_LOCAL = (
+        favored_student_target_priority_override
+        if favored_student_target_priority_override is not None
+        else FAVOR_TARGET_MULTIPLIER
+    )
+    FAVORED_HOURS_BONUS_WEIGHT_LOCAL = (
+        favored_student_fill_bonus_override
+        if favored_student_fill_bonus_override is not None
+        else FAVORED_HOURS_BONUS_WEIGHT
+    )
+    TRAVEL_BUFFER_SLOTS_LOCAL = (
+        hours_to_slots(travel_buffer_minutes_override / 60)
+        if travel_buffer_minutes_override is not None
+        else 1
+    )
+    TRAINING_TARGET_FRACTION_LOCAL = (
+        training_overlap_target_percent_override / 100
+        if training_overlap_target_percent_override is not None
+        else TRAINING_TARGET_FRACTION
+    )
+    DEFAULT_WEEKLY_MAX_HOURS_LOCAL = (
+        default_weekly_max_hours_override
+        if default_weekly_max_hours_override is not None
+        else 40
+    )
+    DEFAULT_TARGET_HOURS_LOCAL = (
+        default_target_hours_override
+        if default_target_hours_override is not None
+        else 11
+    )
+    TRAINING_MIN_SLOTS_LOCAL = (
+        hours_to_slots(training_min_hours_override)
+        if training_min_hours_override is not None
+        else TRAINING_MIN_SLOTS
+    )
+    TRAINING_OVERLAP_WEIGHT_LOCAL = (
+        training_overlap_weight_override
+        if training_overlap_weight_override is not None
+        else TRAINING_OVERLAP_WEIGHT
+    )
+    TRAINING_OVERLAP_BONUS_LOCAL = (
+        training_overlap_bonus_override
+        if training_overlap_bonus_override is not None
+        else TRAINING_OVERLAP_BONUS
+    )
+    TIMESET_BONUS_WEIGHT_LOCAL = (
+        timeset_bonus_weight_override
+        if timeset_bonus_weight_override is not None
+        else TIMESET_BONUS_WEIGHT
+    )
+    DEPARTMENT_SCARCITY_BASE_WEIGHT_LOCAL = (
+        department_scarcity_weight_override
+        if department_scarcity_weight_override is not None
+        else DEPARTMENT_SCARCITY_BASE_WEIGHT
+    )
+    LARGE_DEVIATION_SLOT_THRESHOLD_LOCAL = (
+        hours_to_slots(large_deviation_threshold_hours_override)
+        if large_deviation_threshold_hours_override is not None
+        else LARGE_DEVIATION_SLOT_THRESHOLD
+    )
+    EMPLOYEE_LARGE_DEVIATION_PENALTY_LOCAL = (
+        employee_large_deviation_penalty_override
+        if employee_large_deviation_penalty_override is not None
+        else EMPLOYEE_LARGE_DEVIATION_PENALTY
+    )
+    DEPARTMENT_LARGE_DEVIATION_PENALTY_LOCAL = (
+        department_large_deviation_penalty_override
+        if department_large_deviation_penalty_override is not None
+        else DEPARTMENT_LARGE_DEVIATION_PENALTY
+    )
+    YEAR_TARGET_MULTIPLIERS_LOCAL = {
+        1: year1_target_multiplier_override if year1_target_multiplier_override is not None else YEAR_TARGET_MULTIPLIERS.get(1, 1.0),
+        2: year2_target_multiplier_override if year2_target_multiplier_override is not None else YEAR_TARGET_MULTIPLIERS.get(2, 1.0),
+        3: year3_target_multiplier_override if year3_target_multiplier_override is not None else YEAR_TARGET_MULTIPLIERS.get(3, 1.0),
+        4: year4_target_multiplier_override if year4_target_multiplier_override is not None else YEAR_TARGET_MULTIPLIERS.get(4, 1.0),
+    }
+    SHIFT_PREF_BONUS_WEIGHT_LOCAL = (
+        shift_time_pref_weight_override
+        if shift_time_pref_weight_override is not None
+        else legacy_per_slot_weight(15)
+    )
+    EQUALITY_WEIGHT_LOCAL = (
+        equality_weight_override
+        if equality_weight_override is not None
+        else legacy_per_slot_weight(200)
+    )
+    COLLABORATION_MINIMUM_HOURS_LOCAL = {
+        "career_education": collaboration_min_career_education_hours_override
+        if collaboration_min_career_education_hours_override is not None
+        else COLLABORATION_MINIMUM_HOURS.get("career_education", 0),
+        "marketing": collaboration_min_marketing_hours_override
+        if collaboration_min_marketing_hours_override is not None
+        else COLLABORATION_MINIMUM_HOURS.get("marketing", 0),
+        "employer_engagement": collaboration_min_employer_engagement_hours_override
+        if collaboration_min_employer_engagement_hours_override is not None
+        else COLLABORATION_MINIMUM_HOURS.get("employer_engagement", 0),
+        "events": collaboration_min_events_hours_override
+        if collaboration_min_events_hours_override is not None
+        else COLLABORATION_MINIMUM_HOURS.get("events", 0),
+        "data_systems": collaboration_min_data_systems_hours_override
+        if collaboration_min_data_systems_hours_override is not None
+        else COLLABORATION_MINIMUM_HOURS.get("data_systems", 0),
+    }
+    FAVOR_DEPARTMENT_TARGET_MULTIPLIER_LOCAL = (
+        favored_department_target_multiplier_override
+        if favored_department_target_multiplier_override is not None
+        else FAVOR_DEPARTMENT_TARGET_MULTIPLIER
+    )
+    FAVORED_DEPARTMENT_FOCUSED_BONUS_LOCAL = (
+        favored_department_focused_bonus_override
+        if favored_department_focused_bonus_override is not None
+        else FAVORED_DEPARTMENT_FOCUSED_BONUS
+    )
+    FAVORED_DEPARTMENT_DUAL_PENALTY_LOCAL = (
+        favored_department_dual_penalty_override
+        if favored_department_dual_penalty_override is not None
+        else FAVORED_DEPARTMENT_DUAL_PENALTY
+    )
+    FAVORED_FRONT_DESK_DEPT_BONUS_LOCAL = (
+        favored_frontdesk_dept_bonus_override
+        if favored_frontdesk_dept_bonus_override is not None
+        else FAVORED_FRONT_DESK_DEPT_BONUS
+    )
     
     # Build custom objective weights with overrides
     objective_weights = ObjectiveWeights(
         department_target=dept_target_weight_override if dept_target_weight_override is not None else OBJECTIVE_WEIGHTS.department_target,
         collaborative_hours=collab_weight_override if collab_weight_override is not None else OBJECTIVE_WEIGHTS.collaborative_hours,
+        office_coverage=office_coverage_weight_override if office_coverage_weight_override is not None else OBJECTIVE_WEIGHTS.office_coverage,
+        single_coverage=single_coverage_weight_override if single_coverage_weight_override is not None else OBJECTIVE_WEIGHTS.single_coverage,
         target_adherence=target_adherence_weight_override if target_adherence_weight_override is not None else OBJECTIVE_WEIGHTS.target_adherence,
+        department_spread=department_spread_weight_override if department_spread_weight_override is not None else OBJECTIVE_WEIGHTS.department_spread,
         shift_length=shift_length_weight_override if shift_length_weight_override is not None else OBJECTIVE_WEIGHTS.shift_length,
-        # Keep other weights at defaults
-        office_coverage=OBJECTIVE_WEIGHTS.office_coverage,
-        single_coverage=OBJECTIVE_WEIGHTS.single_coverage,
-        department_spread=OBJECTIVE_WEIGHTS.department_spread,
-        department_day_coverage=OBJECTIVE_WEIGHTS.department_day_coverage,
-        department_scarcity=OBJECTIVE_WEIGHTS.department_scarcity,
-        underclassmen_front_desk=OBJECTIVE_WEIGHTS.underclassmen_front_desk,
+        department_day_coverage=department_day_coverage_weight_override if department_day_coverage_weight_override is not None else OBJECTIVE_WEIGHTS.department_day_coverage,
+        department_scarcity=department_scarcity_weight_override if department_scarcity_weight_override is not None else OBJECTIVE_WEIGHTS.department_scarcity,
+        underclassmen_front_desk=underclassmen_front_desk_weight_override if underclassmen_front_desk_weight_override is not None else OBJECTIVE_WEIGHTS.underclassmen_front_desk,
         morning_preference=OBJECTIVE_WEIGHTS.morning_preference,
-        department_total=OBJECTIVE_WEIGHTS.department_total,
+        department_total=department_total_weight_override if department_total_weight_override is not None else OBJECTIVE_WEIGHTS.department_total,
     )
 
-    staff_data = load_staff_data(staff_csv)
+    staff_data = load_staff_data(staff_csv, travel_buffer_slots=TRAVEL_BUFFER_SLOTS_LOCAL)
     department_requirements = load_department_requirements(requirements_csv)
     department_hour_targets_raw = department_requirements.targets
     department_max_hours_raw = department_requirements.max_hours
@@ -380,8 +552,8 @@ def solve_schedule(
 
         min_target_slots = hours_to_slots(min(target_weekly_hours[trainee_one], target_weekly_hours[trainee_two]))
         if min_target_slots > 0:
-            target_slots = int(round(min_target_slots * TRAINING_TARGET_FRACTION))
-            goal_slots = max(TRAINING_MIN_SLOTS, target_slots)
+            target_slots = int(round(min_target_slots * TRAINING_TARGET_FRACTION_LOCAL))
+            goal_slots = max(TRAINING_MIN_SLOTS_LOCAL, target_slots)
             goal_slots = min(goal_slots, min_target_slots)
         else:
             goal_slots = 0
@@ -456,7 +628,7 @@ def solve_schedule(
     # Precompute slots where each employee can legally work a minimum-length shift
     workable_slots = {}
     for e in employees:
-        min_len = MIN_SLOTS_LOCAL if e.lower() not in favored_employees_normalized else FAVORED_MIN_SLOTS
+        min_len = MIN_SLOTS_LOCAL if e.lower() not in favored_employees_normalized else FAVORED_MIN_SLOTS_LOCAL
         workable_slots[e] = {}
         for d in days:
             avail_slots = [t for t in T if not (e in unavailable and d in unavailable[e] and t in unavailable[e][d])]
@@ -680,7 +852,7 @@ def solve_schedule(
             # HARD CONSTRAINT: If working (works_today=1), MUST meet min slots by favor status
             # EXCEPTION: Days with forced assignments (timesets) are exempt from minimum
             if not has_forced_assignment:
-                min_slots_today = FAVORED_MIN_SLOTS if is_favored else MIN_SLOTS_LOCAL
+                min_slots_today = FAVORED_MIN_SLOTS_LOCAL if is_favored else MIN_SLOTS_LOCAL
                 model.add(total_slots_today >= min_slots_today).only_enforce_if(works_today)
 
             # HARD CONSTRAINT: If not working (works_today=0), total must be exactly 0
@@ -688,7 +860,7 @@ def solve_schedule(
 
             # Maximum shift length
             # If timesets force more slots than the standard max, use the forced count as the minimum max
-            standard_max = FAVORED_MAX_SLOTS if is_favored else MAX_SLOTS_LOCAL
+            standard_max = FAVORED_MAX_SLOTS_LOCAL if is_favored else MAX_SLOTS_LOCAL
             forced_slots = forced_slot_count.get((e, d), 0)
             max_slots_today = max(standard_max, forced_slots)
 
@@ -697,7 +869,7 @@ def solve_schedule(
             # Block tiny shifts UNLESS this day has a forced assignment.
             # Non-favored staff need 2 hours minimum; favored staff still need at least 1 hour.
             if not has_forced_assignment:
-                minimum_shift_slots = FAVORED_MIN_SLOTS if is_favored else MIN_SLOTS_LOCAL
+                minimum_shift_slots = FAVORED_MIN_SLOTS_LOCAL if is_favored else MIN_SLOTS_LOCAL
                 for disallowed_slots in range(1, minimum_shift_slots):
                     model.add(total_slots_today != disallowed_slots)
     
@@ -706,9 +878,7 @@ def solve_schedule(
     # STEP 7B: ADD WEEKLY HOUR LIMIT CONSTRAINTS
     # ============================================================================
     # Limit total hours per employee per week (prevents overwork)
-    # Two levels: individual personal maximum preferences AND universal 19-hour limit
-    
-    UNIVERSAL_MAXIMUM_HOURS = 19  # Universal limit - no one can exceed this regardless of personal preference
+    # Two levels: individual personal maximum preferences AND a universal weekly cap
     availability_slots = {
         e: len(days) * len(T) - sum(len(unavailable.get(e, {}).get(d, [])) for d in days)
         for e in employees
@@ -723,15 +893,15 @@ def solve_schedule(
         )
         
         # Individual personal preference limit (customized per employee)
-        max_weekly_hours = weekly_hour_limits.get(e, 40)  # Default to 40 if not specified
+        max_weekly_hours = weekly_hour_limits.get(e, DEFAULT_WEEKLY_MAX_HOURS_LOCAL)
         max_weekly_slots = hours_to_slots(max_weekly_hours)
         model.add(total_weekly_slots <= max_weekly_slots)
         
         # Universal maximum (applies to everyone)
-        universal_max_slots = hours_to_slots(UNIVERSAL_MAXIMUM_HOURS)
+        universal_max_slots = hours_to_slots(UNIVERSAL_WEEKLY_HOUR_CAP_LOCAL)
         model.add(total_weekly_slots <= universal_max_slots)
         
-        print(f"   └─ {e}: max {max_weekly_hours} hours/week (universal limit: {UNIVERSAL_MAXIMUM_HOURS}h)")
+        print(f"   └─ {e}: max {max_weekly_hours} hours/week (universal limit: {UNIVERSAL_WEEKLY_HOUR_CAP_LOCAL}h)")
     
     
     # ============================================================================
@@ -841,7 +1011,7 @@ def solve_schedule(
             # EXCEPTION 1: Employee with forced FD assignment is exempt
             # EXCEPTION 2: ALL employees exempt on days with ANY forced FD assignment
             #              (forced FD can block adjacent slots, making normal minimums impossible)
-            min_front_desk_slots = FAVORED_MIN_SLOTS if is_favored else MIN_FRONT_DESK_SLOTS
+            min_front_desk_slots = FAVORED_MIN_SLOTS_LOCAL if is_favored else MIN_FRONT_DESK_SLOTS
             # EXCEPTION 1: Employee with forced FD assignment is exempt
             # EXCEPTION 2: ALL employees exempt on days with ANY forced FD assignment
             #              (forced FD can block adjacent slots, making normal minimums impossible)
@@ -937,7 +1107,7 @@ def solve_schedule(
                 #              (forced FD can block adjacent slots, making normal minimums impossible)
                 fd_day_exempt = (r == FRONT_DESK_ROLE and day_has_any_forced_fd_for_step9c)
                 if not has_forced_role_assignment and not fd_day_exempt:
-                    for disallowed_slots in range(1, FAVORED_MIN_SLOTS):
+                    for disallowed_slots in range(1, FAVORED_MIN_SLOTS_LOCAL):
                         model.add(total_role_slots != disallowed_slots)
 
                 # CONDITIONAL: Enforce 2-hour minimum for non-FD departments (when toggle ON)
@@ -946,7 +1116,7 @@ def solve_schedule(
                 if enforce_min_dept_block:
                     is_favored = e.lower() in favored_employees_normalized
                     if not is_favored and r != FRONT_DESK_ROLE and not has_forced_role_assignment:
-                        for disallowed_slots in range(FAVORED_MIN_SLOTS, MIN_SLOTS_LOCAL):
+                        for disallowed_slots in range(FAVORED_MIN_SLOTS_LOCAL, MIN_SLOTS_LOCAL):
                             model.add(total_role_slots != disallowed_slots)
     
     # ============================================================================
@@ -964,8 +1134,8 @@ def solve_schedule(
                 for r in department_roles:
                     total_r = sum(assign.get((e, d, t, r), 0) for t in T)
                     has_one_hour = model.new_bool_var(f"has_one_hour_block[{e},{d},{r}]")
-                    model.add(total_r == FAVORED_MIN_SLOTS).only_enforce_if(has_one_hour)
-                    model.add(total_r != FAVORED_MIN_SLOTS).only_enforce_if(has_one_hour.Not())
+                    model.add(total_r == FAVORED_MIN_SLOTS_LOCAL).only_enforce_if(has_one_hour)
+                    model.add(total_r != FAVORED_MIN_SLOTS_LOCAL).only_enforce_if(has_one_hour.Not())
                     has_one_hour_block[r] = has_one_hour
                 
                 # Count departments with exactly one hour assigned.
@@ -1054,14 +1224,14 @@ def solve_schedule(
             focused_slots = department_assignments[role]
             dual_slots = dual_front_desk_slots[role]
             favored_department_bonus += mult * (
-                FAVORED_DEPARTMENT_FOCUSED_BONUS * focused_slots
-                - FAVORED_DEPARTMENT_DUAL_PENALTY * dual_slots
+                FAVORED_DEPARTMENT_FOCUSED_BONUS_LOCAL * focused_slots
+                - FAVORED_DEPARTMENT_DUAL_PENALTY_LOCAL * dual_slots
             )
         if role in favored_fd_departments_normalized:
             mult = favored_fd_departments_normalized[role].multiplier
             # Bonus for each front desk slot filled by members of this department
             fd_slots = sum(assign.get((e, d, t, FRONT_DESK_ROLE), 0) for e in employees if role in qual[e] for d in days for t in T)
-            favored_fd_bonus += mult * FAVORED_FRONT_DESK_DEPT_BONUS * fd_slots
+            favored_fd_bonus += mult * FAVORED_FRONT_DESK_DEPT_BONUS_LOCAL * fd_slots
     
     # Bonus for favored employee-department assignments
     favored_emp_dept_bonus = 0
@@ -1143,7 +1313,11 @@ def solve_schedule(
         under = model.new_int_var(0, 400, f"department_under[{role}]")
         model.add(total_role_units == target_units + over - under)
 
-        favor_mult = favored_departments_normalized.get(role).multiplier if role in favored_departments_normalized else 1.0     # type: ignore
+        favor_mult = (
+            FAVOR_DEPARTMENT_TARGET_MULTIPLIER_LOCAL * favored_departments_normalized.get(role).multiplier
+            if role in favored_departments_normalized
+            else 1.0
+        )  # type: ignore
         department_target_score -= favor_mult * (over + under)
 
         if threshold_units > 0:
@@ -1156,7 +1330,7 @@ def solve_schedule(
             model.add(under >= threshold_units).only_enforce_if(large_under)
             model.add(under < threshold_units).only_enforce_if(large_under.Not())
 
-            department_large_deviation_penalty -= favor_mult * DEPARTMENT_LARGE_DEVIATION_PENALTY * (large_over + large_under)
+            department_large_deviation_penalty -= favor_mult * DEPARTMENT_LARGE_DEVIATION_PENALTY_LOCAL * (large_over + large_under)
     
     # Calculate target hours encouragement (SOFT constraint via objective)
     # We want to encourage employees to work close to their target hours
@@ -1172,14 +1346,14 @@ def solve_schedule(
         total_slots = sum(work[e, d, t] for d in days for t in T)
         
         # Get this employee's target (in hours, convert to slots)
-        target_hours = target_weekly_hours.get(e, 11)  # Default 11 hours
+        target_hours = target_weekly_hours.get(e, DEFAULT_TARGET_HOURS_LOCAL)
         target_slots = hours_to_slots(target_hours)
         delta_slots = hours_to_slots(TARGET_HARD_DELTA_HOURS_LOCAL)
         lower_bound = max(0, target_slots - delta_slots)
         upper_bound = target_slots + delta_slots
-        max_weekly_hours = weekly_hour_limits.get(e, 40)
+        max_weekly_hours = weekly_hour_limits.get(e, DEFAULT_WEEKLY_MAX_HOURS_LOCAL)
         max_weekly_slots = hours_to_slots(max_weekly_hours)
-        universal_max_slots = hours_to_slots(UNIVERSAL_MAXIMUM_HOURS)
+        universal_max_slots = hours_to_slots(UNIVERSAL_WEEKLY_HOUR_CAP_LOCAL)
         feasible_upper = min(upper_bound, max_weekly_slots, universal_max_slots)
         feasible_lower = min(lower_bound, availability_slots.get(e, lower_bound), feasible_upper)
 
@@ -1237,10 +1411,10 @@ def solve_schedule(
         # Seniors and juniors get higher weight to ensure they hit their hours
         # even if it means putting them at front desk (overriding the underclassmen preference)
         year = employee_year.get(e, 2)
-        year_multiplier = YEAR_TARGET_MULTIPLIERS.get(year, 1.0)
+        year_multiplier = YEAR_TARGET_MULTIPLIERS_LOCAL.get(year, 1.0)
         # Use favored employee multiplier if set, with base FAVOR_TARGET_MULTIPLIER
         emp_lower = e.lower()
-        favored_multiplier = (FAVOR_TARGET_MULTIPLIER * favored_employees_normalized.get(emp_lower, 0)) if emp_lower in favored_employees_normalized else 1.0
+        favored_multiplier = (FAVOR_TARGET_MULTIPLIER_LOCAL * favored_employees_normalized.get(emp_lower, 0)) if emp_lower in favored_employees_normalized else 1.0
         
         # Penalize deviation with graduated weight
         # Upperclassmen deviations are penalized more heavily
@@ -1253,16 +1427,16 @@ def solve_schedule(
         large_under = model.new_bool_var(f"large_under[{e}]")
         
         # Large over = more than threshold slots (default 4 -> 2 hours)
-        model.add(over_target >= LARGE_DEVIATION_SLOT_THRESHOLD).only_enforce_if(large_over)
-        model.add(over_target < LARGE_DEVIATION_SLOT_THRESHOLD).only_enforce_if(large_over.Not())
+        model.add(over_target >= LARGE_DEVIATION_SLOT_THRESHOLD_LOCAL).only_enforce_if(large_over)
+        model.add(over_target < LARGE_DEVIATION_SLOT_THRESHOLD_LOCAL).only_enforce_if(large_over.Not())
         
         # Large under = more than threshold slots under target
-        model.add(under_target >= LARGE_DEVIATION_SLOT_THRESHOLD).only_enforce_if(large_under)
-        model.add(under_target < LARGE_DEVIATION_SLOT_THRESHOLD).only_enforce_if(large_under.Not())
+        model.add(under_target >= LARGE_DEVIATION_SLOT_THRESHOLD_LOCAL).only_enforce_if(large_under)
+        model.add(under_target < LARGE_DEVIATION_SLOT_THRESHOLD_LOCAL).only_enforce_if(large_under.Not())
         
         # Apply MASSIVE penalty for large deviations
         large_deviation_penalty -= (
-            favored_multiplier * EMPLOYEE_LARGE_DEVIATION_PENALTY * (large_over + large_under)
+            favored_multiplier * EMPLOYEE_LARGE_DEVIATION_PENALTY_LOCAL * (large_over + large_under)
         )
     
     # Calculate shift length preference (encourage longer shifts)
@@ -1331,7 +1505,7 @@ def solve_schedule(
             min_dept_size = min(department_sizes[dept] for dept in employee_departments)
             
             # Scarcity penalty: smaller department = higher penalty for using at front desk
-            scarcity_factor = DEPARTMENT_SCARCITY_BASE_WEIGHT / min_dept_size
+            scarcity_factor = DEPARTMENT_SCARCITY_BASE_WEIGHT_LOCAL / min_dept_size
             
             # Apply penalty for each front desk assignment
             for d in days:
@@ -1372,10 +1546,10 @@ def solve_schedule(
     collaborative_hours_score = 0
     
     for role in department_roles:
-        if role not in COLLABORATION_MINIMUM_HOURS:
+        if role not in COLLABORATION_MINIMUM_HOURS_LOCAL:
             continue
         
-        min_slots = hours_to_slots(COLLABORATION_MINIMUM_HOURS[role])
+        min_slots = hours_to_slots(COLLABORATION_MINIMUM_HOURS_LOCAL[role])
         
         if min_slots == 0:
             # No collaboration requirement for this department (e.g., data_systems with 1 person)
@@ -1427,20 +1601,18 @@ def solve_schedule(
             training_available_overlap[idx] = available_overlap_slots
             # Training overlap is purely soft - no hard constraint
             # The bonus/penalty system will encourage overlap without making the model infeasible
-        training_overlap_bonus += TRAINING_OVERLAP_BONUS * total_overlap
+        training_overlap_bonus += TRAINING_OVERLAP_BONUS_LOCAL * total_overlap
         max_week_slots = len(T) * len(days)
         under = model.new_int_var(0, max_week_slots, f"training_under[{idx}]")
         model.add(total_overlap + under >= goal_slots)
 
-        training_overlap_penalty -= TRAINING_OVERLAP_WEIGHT * under
+        training_overlap_penalty -= TRAINING_OVERLAP_WEIGHT_LOCAL * under
     
     # ============================================================================
     # EQUALITY CONSTRAINTS - Equalize department hours between pairs of employees
     # ============================================================================
     # Soft constraint: minimize the difference in department hours between two employees
     equality_penalty = 0
-    EQUALITY_WEIGHT = legacy_per_slot_weight(200)  # Penalty per slot of difference
-    
     for idx, eq in enumerate(validated_equality):
         dept = eq["department"]
         emp1 = eq["employee1"]
@@ -1473,7 +1645,7 @@ def solve_schedule(
         model.add_abs_equality(abs_diff, diff)
         
         # Penalize the absolute difference (soft constraint)
-        equality_penalty -= EQUALITY_WEIGHT * abs_diff
+        equality_penalty -= EQUALITY_WEIGHT_LOCAL * abs_diff
     
     # ============================================================================
     # OFFICE COVERAGE - Encourage at least 2 people in office at all times
@@ -1534,7 +1706,6 @@ def solve_schedule(
     # Morning = 8am-12pm, Afternoon = 12pm-5pm
     # This is a gentle nudge - won't override hard constraints or availability
     
-    SHIFT_PREF_BONUS_WEIGHT = legacy_per_slot_weight(15)  # Moderate weight - noticeable but not overwhelming
     shift_time_pref_score = 0
     
     # Build a lookup for preferences: (employee_lower, day) -> 'morning' or 'afternoon'
@@ -1578,7 +1749,7 @@ def solve_schedule(
         # Add bonus for each slot worked in preferred time range
         for t in preferred_slots:
             if (emp, day, t) in work:
-                shift_time_pref_score += SHIFT_PREF_BONUS_WEIGHT * work[emp, day, t]
+                shift_time_pref_score += SHIFT_PREF_BONUS_WEIGHT_LOCAL * work[emp, day, t]
     
     # ============================================================================
     # FAVORED HOURS BONUS - Encourage filling favored employees' available time
@@ -1595,7 +1766,7 @@ def solve_schedule(
                 favored_hours_bonus += weight * sum(work[e, d, t] for d in days for t in T)
 
     # Massive bonus for meeting explicit --timeset requests (paired with hard constraints)
-    timeset_bonus = sum(TIMESET_BONUS_WEIGHT * assign[(e, d, t, r)] for (e, d, t, r) in forced_assignments)
+    timeset_bonus = sum(TIMESET_BONUS_WEIGHT_LOCAL * assign[(e, d, t, r)] for (e, d, t, r) in forced_assignments)
 
     # Objective: Maximize coverage with priorities:
     # 1. Front desk coverage (weight 10000) - EXTREMELY HIGH PRIORITY - virtually guarantees coverage
@@ -1631,7 +1802,7 @@ def solve_schedule(
         objective_weights.underclassmen_front_desk * underclassmen_preference_score +
         objective_weights.morning_preference * morning_preference_score +
         shift_time_pref_score +                 # Per-employee shift time preferences (morning/afternoon)
-        FAVORED_HOURS_BONUS_WEIGHT * favored_hours_bonus +
+        FAVORED_HOURS_BONUS_WEIGHT_LOCAL * favored_hours_bonus +
         objective_weights.department_total * total_department_units +
         timeset_bonus +
         favored_department_bonus +
@@ -1883,7 +2054,7 @@ def solve_schedule(
                     print(f"  {req['trainee_one']} & {req['trainee_two']} in {req['department']}")
                     print(f"  These employees have no overlapping availability - they can never work together.")
                     print(f"  Fix: Adjust their availability or remove this training pair.\n")
-                elif available < TRAINING_MIN_SLOTS:
+                elif available < TRAINING_MIN_SLOTS_LOCAL:
                     print(f"TRAINING PAIR WARNING")
                     print(f"  {req['trainee_one']} & {req['trainee_two']} in {req['department']}")
                     print(f"  Only {slots_to_hours(available):.1f} hours of overlapping availability (may be insufficient).\n")

@@ -122,10 +122,14 @@ def _raw_available_from_legacy_work_blocks(day_blocks: List[Dict[str, Any]]) -> 
     return raw
 
 
-def _raw_available_from_unavailability(day_blocks: List[Dict[str, Any]]) -> List[bool]:
-    """Periods when the student CANNOT work + optional one-slot buffers (Electron unavailabilityBlocksToFlatWorkAvailability)."""
+def _raw_available_from_unavailability(
+    day_blocks: List[Dict[str, Any]],
+    travel_buffer_slots: int = 1,
+) -> List[bool]:
+    """Periods when the student CANNOT work + optional before/after buffers."""
     slot_count = len(TIME_SLOT_STARTS)
     raw = [True] * slot_count
+    normalized_buffer_slots = max(0, int(travel_buffer_slots))
     for block in day_blocks:
         start = block.get("startTime") or block.get("start_time")
         end = block.get("endTime") or block.get("end_time")
@@ -139,10 +143,14 @@ def _raw_available_from_unavailability(day_blocks: List[Dict[str, Any]]) -> List
         end_i = _exclusive_end_to_slot_count(str(end))
         for i in range(start_i, end_i):
             raw[i] = False
-        if buffer_before and start_i > 0:
-            raw[start_i - 1] = False
-        if buffer_after and end_i < slot_count:
-            raw[end_i] = False
+        if buffer_before and normalized_buffer_slots > 0 and start_i > 0:
+            buffer_start = max(0, start_i - normalized_buffer_slots)
+            for i in range(buffer_start, start_i):
+                raw[i] = False
+        if buffer_after and normalized_buffer_slots > 0 and end_i < slot_count:
+            buffer_end = min(slot_count, end_i + normalized_buffer_slots)
+            for i in range(end_i, buffer_end):
+                raw[i] = False
     return raw
 
 
@@ -222,7 +230,7 @@ def _resolve_availability_schema(column_map: Dict[str, str], path: Path) -> str:
     )
 
 
-def load_staff_data(path: Path) -> StaffData:
+def load_staff_data(path: Path, travel_buffer_slots: int = 1) -> StaffData:
     if not path.exists():
         raise FileNotFoundError(f"Staff CSV not found: {path}")
 
@@ -297,7 +305,10 @@ def load_staff_data(path: Path) -> StaffData:
 
             raw_available: List[bool]
             if unavail_payload is not None:
-                raw_available = _raw_available_from_unavailability(unavail_payload.get(day, []))
+                raw_available = _raw_available_from_unavailability(
+                    unavail_payload.get(day, []),
+                    travel_buffer_slots=travel_buffer_slots,
+                )
                 before_buffer = False
                 after_buffer = False
             elif legacy_blocks_payload is not None:

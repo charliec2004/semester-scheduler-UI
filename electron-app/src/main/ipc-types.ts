@@ -19,21 +19,58 @@ export interface AppSettings {
   // Objective weights
   frontDeskCoverageWeight: number;
   departmentTargetWeight: number;
+  officeCoverageWeight: number;
+  singleCoverageWeight: number;
   targetAdherenceWeight: number;
   collaborativeHoursWeight: number;
+  departmentSpreadWeight: number;
+  departmentDayCoverageWeight: number;
   shiftLengthWeight: number;
+  shiftTimePreferenceWeight: number;
   favoredEmployeeDeptWeight: number;
+  underclassmenFrontDeskWeight: number;
+  departmentTotalWeight: number;
+  equalityConstraintWeight: number;
   
-  // Thresholds
+  // Scheduling and tuning
   departmentHourThreshold: number;
   targetHardDeltaHours: number;
+  weeklyHourCap: number;
+  favoredStudentDailyMaxHours: number;
+  favoredStudentMinShiftHours: number;
+  favoredStudentTargetPriority: number;
+  favoredStudentFillBonus: number;
+  travelBufferMinutes: number;
+  defaultWeeklyMaxHours: number;
+  defaultTargetHours: number;
+  trainingMinHours: number;
+  trainingOverlapTargetPercent: number;
+  trainingOverlapWeight: number;
+  trainingOverlapBonus: number;
+  collaborationMinCareerEducationHours: number;
+  collaborationMinMarketingHours: number;
+  collaborationMinEmployerEngagementHours: number;
+  collaborationMinEventsHours: number;
+  collaborationMinDataSystemsHours: number;
+  favoredDepartmentTargetMultiplier: number;
+  favoredDepartmentFocusedBonus: number;
+  favoredDepartmentDualPenalty: number;
+  favoredFrontDeskDeptBonus: number;
+  timesetBonusWeight: number;
+  departmentScarcityWeight: number;
+  largeDeviationThresholdHours: number;
+  employeeLargeDeviationPenalty: number;
+  departmentLargeDeviationPenalty: number;
+  year1TargetMultiplier: number;
+  year2TargetMultiplier: number;
+  year3TargetMultiplier: number;
+  year4TargetMultiplier: number;
   
   // UI preferences
-  highContrast: boolean;
   fontSize: 'small' | 'medium' | 'large';
   theme: 'system' | 'dark' | 'light';
   
-  // Experimental
+  // Scheduling rules
   enforceMinDeptBlock: boolean;
 }
 
@@ -43,13 +80,50 @@ export const DEFAULT_SETTINGS: AppSettings = {
   maxSlots: DEFAULT_MAX_SLOTS,
   frontDeskCoverageWeight: 10000,
   departmentTargetWeight: 1000,
+  officeCoverageWeight: 150,
+  singleCoverageWeight: 500,
   targetAdherenceWeight: 100,
   collaborativeHoursWeight: 200,
+  departmentSpreadWeight: 60,
+  departmentDayCoverageWeight: 30,
   shiftLengthWeight: 20,
+  shiftTimePreferenceWeight: 15,
   favoredEmployeeDeptWeight: 50,
+  underclassmenFrontDeskWeight: 1,
+  departmentTotalWeight: 1 / 3,
+  equalityConstraintWeight: 67,
   departmentHourThreshold: 4,
   targetHardDeltaHours: 5,
-  highContrast: false,
+  weeklyHourCap: 19,
+  favoredStudentDailyMaxHours: 8,
+  favoredStudentMinShiftHours: 1,
+  favoredStudentTargetPriority: 10,
+  favoredStudentFillBonus: 67,
+  travelBufferMinutes: 10,
+  defaultWeeklyMaxHours: 40,
+  defaultTargetHours: 11,
+  trainingMinHours: 1,
+  trainingOverlapTargetPercent: 35,
+  trainingOverlapWeight: 5000,
+  trainingOverlapBonus: 67,
+  collaborationMinCareerEducationHours: 1,
+  collaborationMinMarketingHours: 1,
+  collaborationMinEmployerEngagementHours: 2,
+  collaborationMinEventsHours: 4,
+  collaborationMinDataSystemsHours: 0,
+  favoredDepartmentTargetMultiplier: 1.5,
+  favoredDepartmentFocusedBonus: 10,
+  favoredDepartmentDualPenalty: 7,
+  favoredFrontDeskDeptBonus: 13,
+  timesetBonusWeight: 20000,
+  departmentScarcityWeight: 8,
+  largeDeviationThresholdHours: 2,
+  employeeLargeDeviationPenalty: 5000,
+  departmentLargeDeviationPenalty: 4000,
+  year1TargetMultiplier: 1,
+  year2TargetMultiplier: 1.2,
+  year3TargetMultiplier: 1.5,
+  year4TargetMultiplier: 2,
   fontSize: 'medium',
   theme: 'dark',
   enforceMinDeptBlock: true,
@@ -155,12 +229,50 @@ export interface SolverRunConfig {
   maxSlots?: number;
   frontDeskCoverageWeight?: number;
   departmentTargetWeight?: number;
+  officeCoverageWeight?: number;
+  singleCoverageWeight?: number;
   targetAdherenceWeight?: number;
   collaborativeHoursWeight?: number;
+  departmentSpreadWeight?: number;
+  departmentDayCoverageWeight?: number;
   shiftLengthWeight?: number;
+  shiftTimePreferenceWeight?: number;
   favoredEmployeeDeptWeight?: number;
+  underclassmenFrontDeskWeight?: number;
+  departmentTotalWeight?: number;
+  equalityConstraintWeight?: number;
   departmentHourThreshold?: number;
   targetHardDeltaHours?: number;
+  weeklyHourCap?: number;
+  favoredStudentDailyMaxHours?: number;
+  favoredStudentMinShiftHours?: number;
+  favoredStudentTargetPriority?: number;
+  favoredStudentFillBonus?: number;
+  travelBufferMinutes?: number;
+  defaultWeeklyMaxHours?: number;
+  defaultTargetHours?: number;
+  trainingMinHours?: number;
+  trainingOverlapTargetPercent?: number;
+  trainingOverlapWeight?: number;
+  trainingOverlapBonus?: number;
+  collaborationMinCareerEducationHours?: number;
+  collaborationMinMarketingHours?: number;
+  collaborationMinEmployerEngagementHours?: number;
+  collaborationMinEventsHours?: number;
+  collaborationMinDataSystemsHours?: number;
+  favoredDepartmentTargetMultiplier?: number;
+  favoredDepartmentFocusedBonus?: number;
+  favoredDepartmentDualPenalty?: number;
+  favoredFrontDeskDeptBonus?: number;
+  timesetBonusWeight?: number;
+  departmentScarcityWeight?: number;
+  largeDeviationThresholdHours?: number;
+  employeeLargeDeviationPenalty?: number;
+  departmentLargeDeviationPenalty?: number;
+  year1TargetMultiplier?: number;
+  year2TargetMultiplier?: number;
+  year3TargetMultiplier?: number;
+  year4TargetMultiplier?: number;
 }
 
 export interface SolverProgress {

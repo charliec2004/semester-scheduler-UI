@@ -6,7 +6,15 @@ import argparse
 import sys
 from pathlib import Path
 
-from scheduler.config import DAY_NAMES, DEFAULT_SOLVER_MAX_TIME, MAX_SLOTS, MIN_SLOTS, SLOT_MINUTES, TIME_SLOT_STARTS
+from scheduler.config import (
+    DAY_NAMES,
+    DEFAULT_SOLVER_MAX_TIME,
+    MAX_SLOTS,
+    MIN_SLOTS,
+    SLOT_MINUTES,
+    TIME_SLOT_STARTS,
+    UNIVERSAL_WEEKLY_HOUR_CAP,
+)
 from scheduler.domain.models import (
     EqualityRequest,
     FavoredEmployeeDepartment,
@@ -204,6 +212,237 @@ def build_parser() -> argparse.ArgumentParser:
         type=int,
         default=None,
         help="Hard bound: keep employees within +/- this many hours of target (default: 5).",
+    )
+    parser.add_argument(
+        "--weekly-hour-cap",
+        type=float,
+        default=None,
+        help=(
+            "Universal weekly hour cap applied to every employee, even if their personal max is higher "
+            f"(default: {UNIVERSAL_WEEKLY_HOUR_CAP})."
+        ),
+    )
+    parser.add_argument(
+        "--office-coverage-weight",
+        type=int,
+        default=None,
+        help="Weight for keeping at least two people in the office at once (default: 150).",
+    )
+    parser.add_argument(
+        "--single-coverage-weight",
+        type=int,
+        default=None,
+        help="Penalty weight for leaving only one person working at a time (default: 500).",
+    )
+    parser.add_argument(
+        "--department-spread-weight",
+        type=int,
+        default=None,
+        help="Weight for spreading department work across more time slots (default: 60).",
+    )
+    parser.add_argument(
+        "--department-day-coverage-weight",
+        type=float,
+        default=None,
+        help="Weight for covering a department across more days of the week (default: 30).",
+    )
+    parser.add_argument(
+        "--shift-time-pref-weight",
+        type=int,
+        default=None,
+        help="Weight for matching morning/afternoon employee shift preferences (default: 15).",
+    )
+    parser.add_argument(
+        "--favored-student-daily-max-hours",
+        type=float,
+        default=None,
+        help="Daily max hours allowed for favored students (default: 8).",
+    )
+    parser.add_argument(
+        "--favored-student-min-shift-hours",
+        type=float,
+        default=None,
+        help="Minimum shift length allowed for favored students (default: 1).",
+    )
+    parser.add_argument(
+        "--favored-student-target-priority",
+        type=float,
+        default=None,
+        help="Extra target-hours priority applied to favored students (default: 10).",
+    )
+    parser.add_argument(
+        "--favored-student-fill-bonus",
+        type=int,
+        default=None,
+        help="Bonus per worked slot for favored students (default: 67).",
+    )
+    parser.add_argument(
+        "--underclassmen-front-desk-weight",
+        type=float,
+        default=None,
+        help="How strongly the solver prefers lower-year students for front desk shifts (default: 1).",
+    )
+    parser.add_argument(
+        "--department-total-weight",
+        type=float,
+        default=None,
+        help="Weight for rewarding total staffed department presence across the week (default: 0.33).",
+    )
+    parser.add_argument(
+        "--equality-weight",
+        type=int,
+        default=None,
+        help="Penalty weight per slot of difference for equality constraints (default: 67).",
+    )
+    parser.add_argument(
+        "--travel-buffer-minutes",
+        type=int,
+        default=None,
+        help="Minutes to block before/after unavailable time when buffer flags are enabled (default: 10).",
+    )
+    parser.add_argument(
+        "--default-weekly-max-hours",
+        type=float,
+        default=None,
+        help="Fallback weekly max used only when a staff member is missing a personal max-hours value (default: 40).",
+    )
+    parser.add_argument(
+        "--default-target-hours",
+        type=float,
+        default=None,
+        help="Fallback target hours used only when a staff member is missing a target-hours value (default: 11).",
+    )
+    parser.add_argument(
+        "--training-min-hours",
+        type=float,
+        default=None,
+        help="Minimum overlap goal for a training pair before the percentage target is applied (default: 1).",
+    )
+    parser.add_argument(
+        "--training-overlap-target-percent",
+        type=float,
+        default=None,
+        help="Target overlap percent for training pairs, based on the smaller student's target hours (default: 35).",
+    )
+    parser.add_argument(
+        "--training-overlap-weight",
+        type=int,
+        default=None,
+        help="Penalty weight for missing the training overlap target (default: 5000).",
+    )
+    parser.add_argument(
+        "--training-overlap-bonus",
+        type=int,
+        default=None,
+        help="Bonus per overlapping training slot after a pair is scheduled together (default: 67).",
+    )
+    parser.add_argument(
+        "--collab-min-career-education-hours",
+        type=float,
+        default=None,
+        help="Desired weekly collaboration hours for Career Education (default: 1).",
+    )
+    parser.add_argument(
+        "--collab-min-marketing-hours",
+        type=float,
+        default=None,
+        help="Desired weekly collaboration hours for Marketing (default: 1).",
+    )
+    parser.add_argument(
+        "--collab-min-employer-engagement-hours",
+        type=float,
+        default=None,
+        help="Desired weekly collaboration hours for Employer Engagement (default: 2).",
+    )
+    parser.add_argument(
+        "--collab-min-events-hours",
+        type=float,
+        default=None,
+        help="Desired weekly collaboration hours for Events (default: 4).",
+    )
+    parser.add_argument(
+        "--collab-min-data-systems-hours",
+        type=float,
+        default=None,
+        help="Desired weekly collaboration hours for Data Systems (default: 0).",
+    )
+    parser.add_argument(
+        "--favored-dept-target-multiplier",
+        type=float,
+        default=None,
+        help="Multiplier on department-target adherence for favored departments (default: 1.5).",
+    )
+    parser.add_argument(
+        "--favored-dept-focused-bonus",
+        type=int,
+        default=None,
+        help="Bonus per focused slot for favored departments (default: 10).",
+    )
+    parser.add_argument(
+        "--favored-dept-dual-penalty",
+        type=int,
+        default=None,
+        help="Penalty per dual-counted favored-department slot (default: 7).",
+    )
+    parser.add_argument(
+        "--favored-frontdesk-dept-bonus",
+        type=int,
+        default=None,
+        help="Bonus per front desk slot filled by a favored department member (default: 13).",
+    )
+    parser.add_argument(
+        "--timeset-bonus-weight",
+        type=int,
+        default=None,
+        help="Bonus weight for satisfying explicit employee/role/time assignments (default: 20000).",
+    )
+    parser.add_argument(
+        "--department-scarcity-weight",
+        type=int,
+        default=None,
+        help="Penalty weight for pulling people from smaller departments to front desk (default: 8).",
+    )
+    parser.add_argument(
+        "--large-deviation-threshold-hours",
+        type=float,
+        default=None,
+        help="Hours away from target before the solver applies large deviation penalties (default: 2).",
+    )
+    parser.add_argument(
+        "--employee-large-deviation-penalty",
+        type=int,
+        default=None,
+        help="Penalty for an employee landing beyond the large-deviation threshold (default: 5000).",
+    )
+    parser.add_argument(
+        "--department-large-deviation-penalty",
+        type=int,
+        default=None,
+        help="Penalty for a department landing beyond the large-deviation threshold (default: 4000).",
+    )
+    parser.add_argument(
+        "--year1-target-multiplier",
+        type=float,
+        default=None,
+        help="Target-adherence multiplier for first-year students (default: 1.0).",
+    )
+    parser.add_argument(
+        "--year2-target-multiplier",
+        type=float,
+        default=None,
+        help="Target-adherence multiplier for second-year students (default: 1.2).",
+    )
+    parser.add_argument(
+        "--year3-target-multiplier",
+        type=float,
+        default=None,
+        help="Target-adherence multiplier for third-year students (default: 1.5).",
+    )
+    parser.add_argument(
+        "--year4-target-multiplier",
+        type=float,
+        default=None,
+        help="Target-adherence multiplier for fourth-year students (default: 2.0).",
     )
     return parser
 
@@ -515,6 +754,44 @@ def main(argv: list[str] | None = None) -> None:
             favor_emp_dept_weight_override=args.favor_emp_dept_weight,
             dept_hour_threshold_override=args.dept_hour_threshold,
             target_hard_delta_override=args.target_hard_delta,
+            weekly_hour_cap_override=args.weekly_hour_cap,
+            office_coverage_weight_override=args.office_coverage_weight,
+            single_coverage_weight_override=args.single_coverage_weight,
+            department_spread_weight_override=args.department_spread_weight,
+            department_day_coverage_weight_override=args.department_day_coverage_weight,
+            shift_time_pref_weight_override=args.shift_time_pref_weight,
+            favored_student_daily_max_hours_override=args.favored_student_daily_max_hours,
+            favored_student_min_shift_hours_override=args.favored_student_min_shift_hours,
+            favored_student_target_priority_override=args.favored_student_target_priority,
+            favored_student_fill_bonus_override=args.favored_student_fill_bonus,
+            underclassmen_front_desk_weight_override=args.underclassmen_front_desk_weight,
+            department_total_weight_override=args.department_total_weight,
+            equality_weight_override=args.equality_weight,
+            travel_buffer_minutes_override=args.travel_buffer_minutes,
+            default_weekly_max_hours_override=args.default_weekly_max_hours,
+            default_target_hours_override=args.default_target_hours,
+            training_min_hours_override=args.training_min_hours,
+            training_overlap_target_percent_override=args.training_overlap_target_percent,
+            training_overlap_weight_override=args.training_overlap_weight,
+            training_overlap_bonus_override=args.training_overlap_bonus,
+            collaboration_min_career_education_hours_override=args.collab_min_career_education_hours,
+            collaboration_min_marketing_hours_override=args.collab_min_marketing_hours,
+            collaboration_min_employer_engagement_hours_override=args.collab_min_employer_engagement_hours,
+            collaboration_min_events_hours_override=args.collab_min_events_hours,
+            collaboration_min_data_systems_hours_override=args.collab_min_data_systems_hours,
+            favored_department_target_multiplier_override=args.favored_dept_target_multiplier,
+            favored_department_focused_bonus_override=args.favored_dept_focused_bonus,
+            favored_department_dual_penalty_override=args.favored_dept_dual_penalty,
+            favored_frontdesk_dept_bonus_override=args.favored_frontdesk_dept_bonus,
+            timeset_bonus_weight_override=args.timeset_bonus_weight,
+            department_scarcity_weight_override=args.department_scarcity_weight,
+            large_deviation_threshold_hours_override=args.large_deviation_threshold_hours,
+            employee_large_deviation_penalty_override=args.employee_large_deviation_penalty,
+            department_large_deviation_penalty_override=args.department_large_deviation_penalty,
+            year1_target_multiplier_override=args.year1_target_multiplier,
+            year2_target_multiplier_override=args.year2_target_multiplier,
+            year3_target_multiplier_override=args.year3_target_multiplier,
+            year4_target_multiplier_override=args.year4_target_multiplier,
         )
         # Exit with error code if no solution found (INFEASIBLE or other non-success status)
         from ortools.sat.python import cp_model
