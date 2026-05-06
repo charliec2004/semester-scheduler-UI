@@ -63,6 +63,8 @@
     --action-primary-hover: 141 39% 36%;
     --action-primary-border: 141 41% 46%;
     --action-primary-foreground: 0 0% 100%;
+    --success-notice-foreground: 141 46% 19%;
+    --success-notice-muted: 141 28% 27%;
     --status-shimmer-highlight: 205 88% 68%;
     --radius: 0.5rem;
     --focus-ring: 0 0 0 1px hsl(var(--ring));
@@ -127,6 +129,8 @@
     --action-primary-hover: 141 39% 36%;
     --action-primary-border: 141 41% 46%;
     --action-primary-foreground: 0 0% 100%;
+    --success-notice-foreground: 141 22% 92%;
+    --success-notice-muted: 141 18% 78%;
     --status-shimmer-highlight: 201 100% 80%;
   }
 
