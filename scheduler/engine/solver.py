@@ -67,6 +67,43 @@ from scheduler.reporting.console import print_schedule
 from scheduler.reporting.export import export_schedule_to_excel, export_formatted_schedule
 
 
+def _minimum_shift_slots(
+    *,
+    is_favored: bool,
+    enforce_favored_two_hour_minimum: bool,
+    standard_min_slots: int,
+    favored_min_slots: int,
+) -> int:
+    if is_favored and not enforce_favored_two_hour_minimum:
+        return favored_min_slots
+    return standard_min_slots
+
+
+def _minimum_department_block_slots(
+    *,
+    is_favored: bool,
+    enforce_favored_two_hour_minimum: bool,
+    standard_min_slots: int,
+    favored_min_slots: int,
+) -> int:
+    return _minimum_shift_slots(
+        is_favored=is_favored,
+        enforce_favored_two_hour_minimum=enforce_favored_two_hour_minimum,
+        standard_min_slots=standard_min_slots,
+        favored_min_slots=favored_min_slots,
+    )
+
+
+def _preferred_shift_slots(max_shift_slots: int) -> int:
+    return min(hours_to_slots(4), max_shift_slots)
+
+
+def _shift_length_day_score(day_slots: int, *, preferred_slots: int) -> int:
+    if day_slots <= 0:
+        return 0
+    return day_slots - SHIFT_LENGTH_DAILY_COST - abs(day_slots - preferred_slots)
+
+
 def solve_schedule(
     staff_csv: Path,
     requirements_csv: Path,
@@ -83,6 +120,7 @@ def solve_schedule(
     show_progress: bool = False,
     front_desk_enabled: bool = True,
     enforce_min_dept_block: bool = True,
+    enforce_favored_two_hour_minimum: bool = True,
     # Settings overrides (from UI Settings panel)
     min_slots_override: int | None = None,
     max_slots_override: int | None = None,
@@ -662,7 +700,13 @@ def solve_schedule(
     # Precompute slots where each employee can legally work a minimum-length shift
     workable_slots = {}
     for e in employees:
-        min_len = MIN_SLOTS_LOCAL if e.lower() not in favored_employees_normalized else FAVORED_MIN_SLOTS_LOCAL
+        is_favored = e.lower() in favored_employees_normalized
+        min_len = _minimum_shift_slots(
+            is_favored=is_favored,
+            enforce_favored_two_hour_minimum=enforce_favored_two_hour_minimum,
+            standard_min_slots=MIN_SLOTS_LOCAL,
+            favored_min_slots=FAVORED_MIN_SLOTS_LOCAL,
+        )
         workable_slots[e] = {}
         for d in days:
             avail_slots = [t for t in T if not (e in unavailable and d in unavailable[e] and t in unavailable[e][d])]
@@ -891,7 +935,12 @@ def solve_schedule(
             # HARD CONSTRAINT: If working (works_today=1), MUST meet min slots by favor status
             # EXCEPTION: Days with forced assignments (timesets) are exempt from minimum
             if not has_forced_assignment:
-                min_slots_today = FAVORED_MIN_SLOTS_LOCAL if is_favored else MIN_SLOTS_LOCAL
+                min_slots_today = _minimum_shift_slots(
+                    is_favored=is_favored,
+                    enforce_favored_two_hour_minimum=enforce_favored_two_hour_minimum,
+                    standard_min_slots=MIN_SLOTS_LOCAL,
+                    favored_min_slots=FAVORED_MIN_SLOTS_LOCAL,
+                )
                 model.add(total_slots_today >= min_slots_today).only_enforce_if(works_today)
 
             # HARD CONSTRAINT: If not working (works_today=0), total must be exactly 0
@@ -908,7 +957,12 @@ def solve_schedule(
             # Block tiny shifts UNLESS this day has a forced assignment.
             # Non-favored staff need 2 hours minimum; favored staff still need at least 1 hour.
             if not has_forced_assignment:
-                minimum_shift_slots = FAVORED_MIN_SLOTS_LOCAL if is_favored else MIN_SLOTS_LOCAL
+                minimum_shift_slots = _minimum_shift_slots(
+                    is_favored=is_favored,
+                    enforce_favored_two_hour_minimum=enforce_favored_two_hour_minimum,
+                    standard_min_slots=MIN_SLOTS_LOCAL,
+                    favored_min_slots=FAVORED_MIN_SLOTS_LOCAL,
+                )
                 for disallowed_slots in range(1, minimum_shift_slots):
                     model.add(total_slots_today != disallowed_slots)
     
@@ -1142,8 +1196,14 @@ def solve_schedule(
                 # EXCEPTION: Days with forced role assignments are exempt (timesets override minimums)
                 if enforce_min_dept_block:
                     is_favored = e.lower() in favored_employees_normalized
-                    if not is_favored and r != FRONT_DESK_ROLE and not has_forced_role_assignment:
-                        for disallowed_slots in range(FAVORED_MIN_SLOTS_LOCAL, MIN_SLOTS_LOCAL):
+                    if r != FRONT_DESK_ROLE and not has_forced_role_assignment:
+                        minimum_dept_block_slots = _minimum_department_block_slots(
+                            is_favored=is_favored,
+                            enforce_favored_two_hour_minimum=enforce_favored_two_hour_minimum,
+                            standard_min_slots=MIN_SLOTS_LOCAL,
+                            favored_min_slots=FAVORED_MIN_SLOTS_LOCAL,
+                        )
+                        for disallowed_slots in range(FAVORED_MIN_SLOTS_LOCAL, minimum_dept_block_slots):
                             model.add(total_role_slots != disallowed_slots)
     
     # ============================================================================
@@ -1470,11 +1530,21 @@ def solve_schedule(
             model.add(day_slots >= 1).only_enforce_if(works_this_day)
             model.add(day_slots == 0).only_enforce_if(works_this_day.Not())
             
-            # Reward the shift length (more slots per shift = better)
-            # But penalize having many shifts (fewer shifts = better)
-            # Net effect: encourages longer, fewer shifts
-            shift_length_bonus += day_slots  # Reward hours worked
-            shift_length_bonus -= SHIFT_LENGTH_DAILY_COST * works_this_day  # Penalize number of distinct shifts
+            standard_max = FAVORED_MAX_SLOTS_LOCAL if e.lower() in favored_employees_normalized else MAX_SLOTS_LOCAL
+            preferred_slots = _preferred_shift_slots(standard_max)
+            length_delta = model.new_int_var(-len(T), len(T), f"shift_length_delta[{e},{d}]")
+            length_distance = model.new_int_var(0, len(T), f"shift_length_distance[{e},{d}]")
+            active_length_distance = model.new_int_var(0, len(T), f"active_shift_length_distance[{e},{d}]")
+
+            model.add(length_delta == day_slots - preferred_slots)
+            model.add_abs_equality(length_distance, length_delta)
+            model.add(active_length_distance == length_distance).only_enforce_if(works_this_day)
+            model.add(active_length_distance == 0).only_enforce_if(works_this_day.Not())
+
+            # Reward worked slots, penalize each worked day, and softly prefer shifts near 4 hours.
+            shift_length_bonus += day_slots
+            shift_length_bonus -= SHIFT_LENGTH_DAILY_COST * works_this_day
+            shift_length_bonus -= active_length_distance
     
     # Calculate underclassmen front desk preference (SOFT preference)
     # Prefer to put freshmen and sophomores at front desk over juniors and seniors

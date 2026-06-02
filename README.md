@@ -43,6 +43,37 @@ SHA256 checksums are provided with each release for verification.
 
 Automated scheduling system that builds optimal weekly rosters for Chapman University's Career & Professional Development student employees using constraint programming (Google OR-Tools CP-SAT).
 
+## Workbook-First Usage
+
+The primary user artifact is now the macro-free workbook template:
+
+- `semester_scheduler_project.xlsx`
+
+Create a working copy:
+
+```bash
+python main.py workbook init --output my-scheduler.xlsx
+```
+
+Fill out the workbook sheets, then solve into a separate output copy:
+
+```bash
+python main.py workbook solve my-scheduler.xlsx --output my-scheduler-solved.xlsx
+```
+
+The input workbook stays unchanged. The solved workbook copy keeps the original input sheets and regenerates:
+
+- `Validation`
+- `Solver_Availability`
+- `Results_Status`
+- `Results_Formatted`
+- `Results_Weekly`
+- `Results_Mon` through `Results_Fri`
+- `Results_Employees`
+- `Results_Departments`
+
+The template now opens with a `Start_Here` onboarding sheet aimed at first-time users.
+
 ## Why This Project?
 
 **Problem**: Manually scheduling 13+ employees across 6 departments with varying availability took days of planning each semester and produced suboptimal coverage.
@@ -74,7 +105,7 @@ semester-scheduler/
 
 ## How It Works
 
-1. **Input**: CSV files with employee availability (270 time slots/week on the 10-minute grid, with legacy 30-minute CSVs still accepted) and department targets
+1. **Input**: workbook project data, or legacy CSV files with employee availability (270 time slots/week on the 10-minute grid, with legacy 30-minute CSVs still accepted) and department targets
 2. **Model**: CP-SAT solver with thousands of variables, 15+ hard constraints, and 13 weighted objectives
 3. **Optimize**: Maximizes weighted objective (front desk coverage weight: 10,000) in 60-120 sec
 4. **Output**: Excel workbook with daily/weekly schedules, employee summaries, role distribution
@@ -89,12 +120,20 @@ python -m venv venv
 source venv/bin/activate  # Windows: venv\Scripts\activate
 pip install -r requirements.txt
 
-# Run
+# Create workbook from template
+python main.py workbook init --output scheduler-project.xlsx
+
+# Solve workbook into a generated copy
+python main.py workbook solve scheduler-project.xlsx --output scheduler-solved.xlsx
+
+# Legacy CSV run
 python main.py employees.csv cpd-requirements.csv --output schedule.xlsx
 
 # Test
 pytest tests/ -v
 ```
+
+The workbook flow is the recommended path. The CSV flow remains supported for compatibility and automation.
 
 ## CLI flags
 

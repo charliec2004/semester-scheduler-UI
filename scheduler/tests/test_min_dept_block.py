@@ -5,7 +5,7 @@ department fragments within shifts.
 
 Rules tested:
 1. Non-favored employees: each non-FD department block must be >= 2 hours
-2. Favored employees: each block must still be >= 1 hour
+2. Favored employees: each block must be >= 2 hours when the favored minimum is enforced
 3. Everyone: cannot have a 2-hour shift split 1h+1h across two non-FD departments
 4. Front Desk blocks remain exempt
 5. Toggle OFF disables all these constraints
@@ -56,7 +56,8 @@ def add_basic_constraints(model, work, assign_dept_a, assign_dept_b, assign_fd, 
 
 
 def add_min_dept_block_constraints(model, work, assign_dept_a, assign_dept_b, assign_fd, T, 
-                                   is_favored=False, enforce_min_dept_block=True):
+                                   is_favored=False, enforce_min_dept_block=True,
+                                   enforce_favored_two_hour_minimum=True):
     """Add the minimum department block constraints."""
     if not enforce_min_dept_block:
         return
@@ -68,14 +69,14 @@ def add_min_dept_block_constraints(model, work, assign_dept_a, assign_dept_b, as
     total_shift = sum(work[t] for t in T)
     
     # Non-favored: each non-FD department must be 0 or >= 2 hours.
-    if not is_favored:
-        for disallowed_slots in range(1, MIN_SLOTS):
-            model.add(total_dept_a != disallowed_slots)
-            model.add(total_dept_b != disallowed_slots)
-    else:
-        for disallowed_slots in range(1, FAVORED_MIN_SLOTS):
-            model.add(total_dept_a != disallowed_slots)
-            model.add(total_dept_b != disallowed_slots)
+    minimum_dept_slots = (
+        FAVORED_MIN_SLOTS
+        if is_favored and not enforce_favored_two_hour_minimum
+        else MIN_SLOTS
+    )
+    for disallowed_slots in range(1, minimum_dept_slots):
+        model.add(total_dept_a != disallowed_slots)
+        model.add(total_dept_b != disallowed_slots)
     
     minimum_fd_slots = FAVORED_MIN_SLOTS if is_favored else MIN_SLOTS
     for disallowed_slots in range(1, minimum_fd_slots):
@@ -186,23 +187,38 @@ class TestNonFavoredEmployee:
 # ============================================================================
 
 class TestFavoredEmployee:
-    """Tests for favored employee constraints (partially exempt)."""
+    """Tests for favored employee constraints."""
     
-    def test_3h_plus_1h_allowed(self, model, solver):
-        """Favored: 3h DeptA + 1h DeptB should be allowed (exempt from min block)."""
+    def test_3h_plus_1h_forbidden_when_favored_minimum_enforced(self, model, solver):
+        """Favored: 3h DeptA + 1h DeptB should be forbidden when the new setting is on."""
         T = range(MIN_SLOTS * 2)  # 4 hours
         work, dept_a, dept_b, fd = create_shift_variables(model, T)
         add_basic_constraints(model, work, dept_a, dept_b, fd, T)
         add_min_dept_block_constraints(model, work, dept_a, dept_b, fd, T, 
-                                       is_favored=True, enforce_min_dept_block=True)
+                                       is_favored=True, enforce_min_dept_block=True,
+                                       enforce_favored_two_hour_minimum=True)
         
         # Force: 3h in dept_a (6 slots) + 1h in dept_b (2 slots) = 4h total
         model.add(sum(dept_a[t] for t in T) == hours_to_slots(3))  # 3 hours
         model.add(sum(dept_b[t] for t in T) == FAVORED_MIN_SLOTS)  # 1 hour (allowed for favored)
         model.add(sum(work[t] for t in T) == MIN_SLOTS * 2)        # 4 hours total
         
-        # Should be feasible (favored exempt from 2h min)
-        assert solve_and_check(solver, model), "3h+1h split should be allowed for favored"
+        assert not solve_and_check(solver, model), "3h+1h split should be forbidden for favored when enforced"
+
+    def test_3h_plus_1h_allowed_when_favored_minimum_disabled(self, model, solver):
+        """Favored: 3h DeptA + 1h DeptB should remain allowed when the new setting is off."""
+        T = range(MIN_SLOTS * 2)  # 4 hours
+        work, dept_a, dept_b, fd = create_shift_variables(model, T)
+        add_basic_constraints(model, work, dept_a, dept_b, fd, T)
+        add_min_dept_block_constraints(model, work, dept_a, dept_b, fd, T,
+                                       is_favored=True, enforce_min_dept_block=True,
+                                       enforce_favored_two_hour_minimum=False)
+
+        model.add(sum(dept_a[t] for t in T) == hours_to_slots(3))
+        model.add(sum(dept_b[t] for t in T) == FAVORED_MIN_SLOTS)
+        model.add(sum(work[t] for t in T) == MIN_SLOTS * 2)
+
+        assert solve_and_check(solver, model), "3h+1h split should be allowed when favored enforcement is off"
     
     def test_1h_plus_1h_forbidden(self, model, solver):
         """Favored: 1h DeptA + 1h DeptB (2h shift) should still be forbidden."""

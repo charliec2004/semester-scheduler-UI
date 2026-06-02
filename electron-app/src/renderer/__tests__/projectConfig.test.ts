@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import type { ConfigSnapshot } from '../../main/ipc-types';
+import { DEFAULT_SETTINGS, normalizeAppSettings, type ConfigSnapshot } from '../../main/ipc-types';
 import { createEmptyUnavailabilityBlocks, createFullWorkDayAvailability } from '../../shared/constants';
 import { createProjectConfigFile, parseProjectConfigFile, validateProjectConfigSnapshot } from '../utils/projectConfig';
 
@@ -43,6 +43,11 @@ function makeValidSnapshot(): ConfigSnapshot {
 }
 
 describe('project config files', () => {
+  it('defaults favored two-hour enforcement on for app settings', () => {
+    expect(DEFAULT_SETTINGS.enforceFavoredTwoHourMinimum).toBe(true);
+    expect(normalizeAppSettings({ enforceMinDeptBlock: false }).enforceFavoredTwoHourMinimum).toBe(true);
+  });
+
   it('round-trips a valid project config file', () => {
     const snapshot = makeValidSnapshot();
     const file = createProjectConfigFile(snapshot);

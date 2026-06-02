@@ -72,6 +72,7 @@ export interface AppSettings {
   
   // Scheduling rules
   enforceMinDeptBlock: boolean;
+  enforceFavoredTwoHourMinimum: boolean;
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
@@ -127,6 +128,7 @@ export const DEFAULT_SETTINGS: AppSettings = {
   fontSize: 'medium',
   theme: 'dark',
   enforceMinDeptBlock: true,
+  enforceFavoredTwoHourMinimum: true,
 };
 
 function looksLikeLegacySlotSettings(stored?: Partial<AppSettings> | null): boolean {
@@ -251,6 +253,7 @@ export interface SolverRunConfig {
   shiftTimePreferences?: ShiftTimePreference[];
   equalityConstraints?: EqualityConstraint[];
   enforceMinDeptBlock?: boolean; // Default true, disable to allow 1-hour dept blocks
+  enforceFavoredTwoHourMinimum?: boolean; // Default true, apply 2-hour minimums to favored employees
   // Settings overrides (from Settings panel)
   minSlots?: number;
   maxSlots?: number;

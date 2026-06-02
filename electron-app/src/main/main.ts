@@ -1118,6 +1118,9 @@ function buildSolverArgs(config: SolverRunConfig): string[] {
   if (config.enforceMinDeptBlock === false) {
     args.push('--no-enforce-min-dept-block');
   }
+  if (config.enforceFavoredTwoHourMinimum === false) {
+    args.push('--no-enforce-favored-two-hour-minimum');
+  }
 
   // Settings overrides
   if (config.minSlots !== undefined) {

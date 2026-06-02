@@ -29,6 +29,7 @@ venv/
 
 # Generated files
 *.xlsx
+!semester_scheduler_project.xlsx
 
 # Notes
 questions.md

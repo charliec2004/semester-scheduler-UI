@@ -487,6 +487,15 @@ export function SettingsPanel() {
               description="Keep non-Front-Desk department work from being split into awkward 1-hour fragments."
               tooltip="When enabled, non-Front-Desk department assignments usually need to be at least 2 hours long. Favoring an employee can partially relax this inside longer shifts, but it still does not let a 2-hour shift be split across two departments. Explicit timesets can still override the rule."
             />
+
+            <SettingsBooleanRow
+              id="enforceFavoredTwoHourMinimum"
+              checked={localSettings.enforceFavoredTwoHourMinimum}
+              onCheckedChange={(checked) => updateSetting('enforceFavoredTwoHourMinimum', checked)}
+              label="Apply 2-hour minimum to favored employees"
+              description="Keep favored employees from receiving sub-2-hour shifts or department fragments unless an explicit timeset requires it."
+              tooltip="When enabled, favored employees follow the same 2-hour minimum for daily shifts and non-Front-Desk department blocks. Turn this off only when a favored student should be allowed to take shorter natural shifts."
+            />
           </section>
 
           <section className="space-y-4 border-t border-surface-800 pt-6">

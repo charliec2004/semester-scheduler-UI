@@ -73,6 +73,7 @@ const mockElectronAPI = {
       fontSize: 'medium',
       theme: 'dark',
       enforceMinDeptBlock: true,
+      enforceFavoredTwoHourMinimum: true,
     }),
     save: vi.fn().mockResolvedValue({ success: true }),
     reset: vi.fn().mockResolvedValue({}),

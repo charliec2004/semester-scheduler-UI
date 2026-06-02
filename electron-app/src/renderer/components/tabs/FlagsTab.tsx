@@ -606,6 +606,7 @@ export function FlagsTab() {
           shiftTimePreferences,
           equalityConstraints,
           enforceMinDeptBlock: settings?.enforceMinDeptBlock ?? true,
+          enforceFavoredTwoHourMinimum: settings?.enforceFavoredTwoHourMinimum ?? true,
           // Pass all settings to solver
           minSlots: settings?.minSlots,
           maxSlots: settings?.maxSlots,

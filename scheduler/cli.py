@@ -5,6 +5,9 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from tempfile import TemporaryDirectory
+
+from ortools.sat.python import cp_model
 
 from scheduler.config import (
     DAY_NAMES,
@@ -24,6 +27,15 @@ from scheduler.domain.models import (
     normalize_department_name,
 )
 from scheduler.engine.solver import solve_schedule
+from scheduler.workbook import (
+    WORKBOOK_TEMPLATE_FILENAME,
+    copy_template_workbook,
+    export_solved_workbook,
+    load_workbook_project,
+    materialize_solver_inputs,
+    solver_kwargs_from_project,
+    validate_workbook_project,
+)
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -156,6 +168,19 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_false",
         dest="enforce_min_dept_block",
         help="Disable 2-hour minimum department block enforcement.",
+    )
+    parser.add_argument(
+        "--enforce-favored-two-hour-minimum",
+        action="store_true",
+        default=True,
+        dest="enforce_favored_two_hour_minimum",
+        help="Apply the 2-hour minimum shift and department block rules to favored employees (default: enabled).",
+    )
+    parser.add_argument(
+        "--no-enforce-favored-two-hour-minimum",
+        action="store_false",
+        dest="enforce_favored_two_hour_minimum",
+        help="Allow favored employees to use the shorter favored-student minimum shift length.",
     )
     # Settings-based overrides (from UI Settings panel)
     parser.add_argument(
@@ -452,6 +477,44 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def build_workbook_parser() -> argparse.ArgumentParser:
+    """Build the workbook-first CLI parser."""
+
+    parser = argparse.ArgumentParser(
+        description="Create and solve workbook-first semester scheduler projects."
+    )
+    subparsers = parser.add_subparsers(dest="workbook_command", required=True)
+
+    init_parser = subparsers.add_parser(
+        "init",
+        help="Copy the canonical workbook template into a working file.",
+    )
+    init_parser.add_argument(
+        "--output",
+        type=Path,
+        default=Path(WORKBOOK_TEMPLATE_FILENAME),
+        help=f"Destination workbook path (default: {WORKBOOK_TEMPLATE_FILENAME}).",
+    )
+
+    solve_parser = subparsers.add_parser(
+        "solve",
+        help="Solve a workbook project and produce a solved workbook copy.",
+    )
+    solve_parser.add_argument(
+        "input_workbook",
+        type=Path,
+        help="Workbook project to solve.",
+    )
+    solve_parser.add_argument(
+        "--output",
+        type=Path,
+        default=None,
+        help="Destination path for the solved workbook copy (default: <input>-solved.xlsx).",
+    )
+
+    return parser
+
+
 def _parse_favored_employees(raw: list[str]) -> dict[str, float]:
     """Parse --favor arguments into dict of employee name -> multiplier.
     
@@ -716,9 +779,71 @@ def _parse_timesets(raw_timesets: list[list[str]]) -> list[TimesetRequest]:
     return requests
 
 
+def _run_workbook_init(output_path: Path) -> None:
+    output = output_path
+    if not str(output).lower().endswith(".xlsx"):
+        output = output.with_name(output.name + ".xlsx")
+    copy_template_workbook(output)
+    print(f"Created workbook template: {output}")
+
+
+def _run_workbook_solve(input_workbook: Path, output_path: Path | None) -> None:
+    project = load_workbook_project(input_workbook)
+    validation_issues = validate_workbook_project(project)
+    errors = [issue for issue in validation_issues if issue.severity == "error"]
+    if errors:
+        formatted = "\n".join(
+            f"- [{issue.sheet}/{issue.table}] {issue.column or 'row'}: {issue.message}"
+            for issue in errors
+        )
+        raise ValueError(f"Workbook validation failed:\n{formatted}")
+
+    destination = output_path or input_workbook.with_name(f"{input_workbook.stem}-solved.xlsx")
+    if not str(destination).lower().endswith(".xlsx"):
+        destination = destination.with_name(destination.name + ".xlsx")
+
+    with TemporaryDirectory(prefix="semester-scheduler-workbook-") as temp_dir_name:
+        temp_dir = Path(temp_dir_name)
+        staff_csv, requirements_csv = materialize_solver_inputs(project, temp_dir)
+        solver_output_path = temp_dir / "solver-output.xlsx"
+        status = solve_schedule(
+            staff_csv=staff_csv,
+            requirements_csv=requirements_csv,
+            output_path=solver_output_path,
+            **solver_kwargs_from_project(project),
+        )
+        export_solved_workbook(
+            template_input_path=input_workbook,
+            output_path=destination,
+            project=project,
+            validation_issues=validation_issues,
+            status=status,
+            solver_output_path=solver_output_path if solver_output_path.exists() else None,
+        )
+        if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
+            raise SystemExit(2)
+    print(f"Created solved workbook: {destination}")
+
+
 def main(argv: list[str] | None = None) -> None:
+    raw_args = list(sys.argv[1:] if argv is None else argv)
+    if raw_args and raw_args[0] == "workbook":
+        workbook_parser = build_workbook_parser()
+        workbook_args = workbook_parser.parse_args(raw_args[1:])
+        try:
+            if workbook_args.workbook_command == "init":
+                _run_workbook_init(workbook_args.output)
+            elif workbook_args.workbook_command == "solve":
+                _run_workbook_solve(workbook_args.input_workbook, workbook_args.output)
+            else:
+                raise ValueError(f"Unsupported workbook command: {workbook_args.workbook_command}")
+        except Exception as exc:
+            print(f"ERROR: {exc}", file=sys.stderr)
+            sys.exit(1)
+        return
+
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args(raw_args)
 
     try:
         time_limit = args.max_solve_seconds if args.max_solve_seconds is not None else DEFAULT_SOLVER_MAX_TIME
@@ -749,6 +874,7 @@ def main(argv: list[str] | None = None) -> None:
             show_progress=args.progress,
             front_desk_enabled=not args.no_front_desk,
             enforce_min_dept_block=args.enforce_min_dept_block,
+            enforce_favored_two_hour_minimum=args.enforce_favored_two_hour_minimum,
             # Settings overrides
             min_slots_override=args.min_slots,
             max_slots_override=args.max_slots,
@@ -800,7 +926,6 @@ def main(argv: list[str] | None = None) -> None:
             year4_target_multiplier_override=args.year4_target_multiplier,
         )
         # Exit with error code if no solution found (INFEASIBLE or other non-success status)
-        from ortools.sat.python import cp_model
         if status not in [cp_model.OPTIMAL, cp_model.FEASIBLE]:
             sys.exit(2)  # Exit code 2 = no solution found (distinct from 1 = exception)
     except Exception as exc:
