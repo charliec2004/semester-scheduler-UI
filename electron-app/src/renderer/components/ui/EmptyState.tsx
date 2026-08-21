@@ -12,6 +12,7 @@ interface EmptyStateProps {
   action?: {
     label: string;
     onClick: () => void;
+    variant?: 'default' | 'success' | 'secondary';
   };
 }
 
@@ -24,7 +25,7 @@ export function EmptyState({ icon, title, description, action }: EmptyStateProps
       <h3 className="mb-2 text-base font-semibold text-surface-200">{title}</h3>
       <p className="mb-5 max-w-2xl text-[13px] text-surface-400 sm:whitespace-nowrap">{description}</p>
       {action && (
-        <Button onClick={action.onClick} size="sm">
+        <Button onClick={action.onClick} size="sm" variant={action.variant}>
           {action.label}
         </Button>
       )}

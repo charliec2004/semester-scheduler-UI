@@ -14,6 +14,9 @@ import { useDepartmentStore, useStaffStore, useUIStore } from '../../store';
 import { EmptyState } from '../ui/EmptyState';
 import { formatHoursLabel } from '../../utils/hours';
 import type { Department } from '../../../main/ipc-types';
+import { DAY_NAMES, SLOT_MINUTES, TIME_SLOT_STARTS } from '../../../shared/constants';
+
+const FRONT_DESK_WEEKLY_HOURS = DAY_NAMES.length * TIME_SLOT_STARTS.length * SLOT_MINUTES / 60;
 
 function Tooltip({ text }: { text: React.ReactNode }) {
   const [show, setShow] = useState(false);
@@ -109,9 +112,10 @@ export function DepartmentsTab() {
   };
 
   const getTotalHours = () => {
+    const frontDeskHours = frontDeskEnabled ? FRONT_DESK_WEEKLY_HOURS : 0;
     return {
-      target: departments.reduce((sum, d) => sum + d.targetHours, 0),
-      max: departments.reduce((sum, d) => sum + d.maxHours, 0),
+      target: departments.reduce((sum, d) => sum + d.targetHours, frontDeskHours),
+      max: departments.reduce((sum, d) => sum + d.maxHours, frontDeskHours),
     };
   };
 
@@ -202,7 +206,7 @@ export function DepartmentsTab() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button onClick={handleAddDepartment} variant="secondary" size="sm">
+          <Button onClick={handleAddDepartment} variant="success" size="sm">
             <Plus className="h-4 w-4" strokeWidth={1.8} />
             Add Department
           </Button>
@@ -239,7 +243,14 @@ export function DepartmentsTab() {
       >
         <div className="flex items-center justify-between gap-4">
           <div className="flex items-center gap-3">
-            <h3 className="text-lg font-semibold text-surface-100">Front Desk</h3>
+            <div>
+              <h3 className="text-lg font-semibold text-surface-100">Front Desk</h3>
+              <p className="mt-0.5 text-sm text-surface-400">
+                {frontDeskEnabled
+                  ? `${formatHoursLabel(FRONT_DESK_WEEKLY_HOURS)} required per week`
+                  : 'Not included in this schedule'}
+              </p>
+            </div>
             <Tooltip text="Include the built-in Front Desk role in scheduling, validation, and exports. Front Desk stays separate from the custom department table." />
           </div>
           <button
@@ -278,13 +289,13 @@ export function DepartmentsTab() {
             <div className="text-3xl font-display font-semibold text-surface-200">
               {formatHoursLabel(totals.target)}
             </div>
-            <div className="text-sm text-surface-400">Total Target Hours</div>
+            <div className="text-sm text-surface-400">Total Target Hours{frontDeskEnabled ? ' + Front Desk' : ''}</div>
           </div>
           <div>
             <div className="text-3xl font-display font-semibold text-surface-300">
               {formatHoursLabel(totals.max)}
             </div>
-            <div className="text-sm text-surface-400">Total Max Hours</div>
+            <div className="text-sm text-surface-400">Total Max Hours{frontDeskEnabled ? ' + Front Desk' : ''}</div>
           </div>
         </div>
       </div>
@@ -302,6 +313,7 @@ export function DepartmentsTab() {
           action={{
             label: 'Add First Department',
             onClick: handleAddDepartment,
+            variant: 'success',
           }}
         />
       ) : (
@@ -437,7 +449,7 @@ export function DepartmentsTab() {
               <tr>
                 <td></td>
                 <td className="py-3 px-4 font-medium text-surface-300">
-                  Total
+                  Total{frontDeskEnabled ? ' (includes Front Desk)' : ''}
                 </td>
                 <td className="py-3 px-4 text-center font-medium text-surface-200">
                   {formatHoursLabel(totals.target)}

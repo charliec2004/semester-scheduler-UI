@@ -178,11 +178,20 @@ function getPythonPath(): string {
     return platform === 'win32' ? 'python' : 'python3';
   }
   const projectRoot = getProjectRoot();
-  const venvPython = path.join(projectRoot, 'venv', 'bin', 'python3');
-  if (fs.existsSync(venvPython)) {
-    return venvPython;
+  const developmentCandidates = process.platform === 'win32'
+    ? [
+        path.join(projectRoot, 'venv', 'Scripts', 'python.exe'),
+        path.join(projectRoot, '.venv', 'Scripts', 'python.exe'),
+      ]
+    : [
+        path.join(projectRoot, 'venv', 'bin', 'python3'),
+        path.join(projectRoot, '.venv', 'bin', 'python3'),
+      ];
+  const virtualEnvironmentPython = developmentCandidates.find(candidate => fs.existsSync(candidate));
+  if (virtualEnvironmentPython) {
+    return virtualEnvironmentPython;
   }
-  return 'python3';
+  return process.platform === 'win32' ? 'python' : 'python3';
 }
 
 // Check if Python is available and has required packages

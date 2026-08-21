@@ -111,4 +111,15 @@ describe('project config files', () => {
     const errors = validateProjectConfigSnapshot(snapshot);
     expect(errors).toHaveLength(0);
   });
+
+  it('accepts Front Desk in hour-based training and equality rules', () => {
+    const snapshot = makeValidSnapshot();
+    snapshot.frontDeskEnabled = true;
+    snapshot.staff[1].roles.push('front_desk');
+    snapshot.trainingPairs = [{ department: 'Front Desk', trainee1: 'Alice', trainee2: 'Bob' }];
+    snapshot.equalityConstraints = [{ department: 'front_desk', employee1: 'Alice', employee2: 'Bob' }];
+
+    const errors = validateProjectConfigSnapshot(snapshot);
+    expect(errors).toHaveLength(0);
+  });
 });

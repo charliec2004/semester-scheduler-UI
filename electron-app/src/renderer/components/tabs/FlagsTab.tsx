@@ -507,6 +507,10 @@ export function FlagsTab() {
 
   const employeeNames = useMemo(() => staff.map(s => s.name).filter(Boolean), [staff]);
   const departmentNames = useMemo(() => departments.map(d => d.name).filter(Boolean), [departments]);
+  const schedulableRoleNames = useMemo(
+    () => frontDeskEnabled ? ['Front Desk', ...departmentNames] : departmentNames,
+    [departmentNames, frontDeskEnabled],
+  );
   const hiddenFrontDeskDepartmentPreferenceCount = !frontDeskEnabled
     ? Object.keys(favoredFrontDeskDepts).length
     : 0;
@@ -574,6 +578,12 @@ export function FlagsTab() {
       const filteredTimesets = frontDeskEnabled
         ? timesets
         : timesets.filter((timeset) => !isFrontDeskRole(timeset.department));
+      const filteredTrainingPairs = frontDeskEnabled
+        ? trainingPairs
+        : trainingPairs.filter((pair) => !isFrontDeskRole(pair.department));
+      const filteredEqualityConstraints = frontDeskEnabled
+        ? equalityConstraints
+        : equalityConstraints.filter((constraint) => !isFrontDeskRole(constraint.department));
       
       const staffResult = await window.electronAPI.files.saveCsvToTemp({ 
         content: staffCsv, 
@@ -598,13 +608,13 @@ export function FlagsTab() {
           frontDeskEnabled,
           maxSolveSeconds: maxSolveSeconds || settings?.solverMaxTime || 300,
           favoredEmployees,
-          trainingPairs,
+          trainingPairs: filteredTrainingPairs,
           favoredDepartments,
           favoredFrontDeskDepts: filteredFavoredFrontDeskDepts,
           favoredEmployeeDepts: filteredFavoredEmployeeDepts,
           timesets: filteredTimesets,
           shiftTimePreferences,
-          equalityConstraints,
+          equalityConstraints: filteredEqualityConstraints,
           enforceMinDeptBlock: settings?.enforceMinDeptBlock ?? true,
           enforceFavoredTwoHourMinimum: settings?.enforceFavoredTwoHourMinimum ?? true,
           // Pass all settings to solver
@@ -845,7 +855,7 @@ export function FlagsTab() {
               <button 
                 onClick={handleAddFavored}
                 disabled={!newFavored}
-                className="btn-secondary flex-shrink-0"
+                className="btn-primary flex-shrink-0"
               >
                 Add
               </button>
@@ -1009,7 +1019,7 @@ export function FlagsTab() {
             </p>
             
             <TrainingPairForm 
-              departments={departmentNames}
+              departments={schedulableRoleNames}
               employees={employeeNames}
               staff={staff}
               onAdd={addTrainingPair}
@@ -1046,7 +1056,7 @@ export function FlagsTab() {
             </p>
             
             <EqualityForm
-              departments={departmentNames}
+              departments={schedulableRoleNames}
               staff={staff}
               onAdd={addEqualityConstraint}
             />
@@ -1318,7 +1328,7 @@ function TrainingPairForm({
       <button 
         onClick={handleAdd} 
         disabled={!dept || !trainee1 || !trainee2}
-        className="btn-secondary flex-shrink-0 px-4 w-full sm:w-auto"
+        className="btn-primary flex-shrink-0 px-4 w-full sm:w-auto"
       >
         +
       </button>
@@ -1442,7 +1452,7 @@ function TimesetForm({
       <button 
         onClick={handleAdd}
         disabled={!employee || !day || !department || !startTime || !endTime}
-        className="btn-secondary"
+        className="btn-primary"
       >
         Add
       </button>
@@ -1500,7 +1510,7 @@ function ShiftTimePreferenceForm({
       <button 
         onClick={handleAdd}
         disabled={!employee || !day}
-        className="btn-secondary flex-shrink-0 px-4 w-full sm:w-auto"
+        className="btn-primary flex-shrink-0 px-4 w-full sm:w-auto"
       >
         Add
       </button>
@@ -1641,7 +1651,7 @@ function FavoredEmployeeDeptForm({
       <button 
         onClick={handleAdd}
         disabled={!employee || !department}
-        className="btn-secondary flex-shrink-0"
+        className="btn-primary flex-shrink-0"
       >
         Add
       </button>
@@ -1760,7 +1770,7 @@ function EqualityForm({
         <button 
           onClick={handleAdd}
           disabled={!canAdd}
-          className="btn-secondary flex-shrink-0 px-4 w-full sm:w-auto"
+          className="btn-primary flex-shrink-0 px-4 w-full sm:w-auto"
         >
           Add
         </button>

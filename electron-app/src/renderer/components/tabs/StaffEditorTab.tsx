@@ -415,6 +415,7 @@ export function StaffEditorTab() {
         action={{
           label: 'Add First Employee',
           onClick: handleAddEmployee,
+          variant: 'success',
         }}
       />
     );
@@ -431,7 +432,7 @@ export function StaffEditorTab() {
           </p>
         </div>
         <div className="flex gap-3">
-          <Button onClick={handleAddEmployee} variant="secondary" size="sm">
+          <Button onClick={handleAddEmployee} variant="success" size="sm">
             <Plus className="h-4 w-4" strokeWidth={1.8} />
             Add Employee
           </Button>
@@ -692,9 +693,10 @@ export function StaffEditorTab() {
                           <div className="flex flex-wrap gap-2">
                             <Button
                               type="button"
-                              variant={isAvailableAllDay ? 'secondary' : 'outline'}
+                              variant="outline"
                               size="sm"
-                              className={`h-7 px-2.5 text-[12px] ${isAvailableAllDay ? 'cursor-not-allowed opacity-70' : ''}`}
+                              className={`h-7 px-2.5 text-[12px] ${isAvailableAllDay ? 'border-emerald-500/70 bg-emerald-600 text-white shadow-sm hover:bg-emerald-600 hover:text-white dark:bg-emerald-500 dark:text-surface-950 dark:hover:bg-emerald-500' : 'text-surface-400'}`}
+                              aria-pressed={isAvailableAllDay}
                               aria-disabled={isAvailableAllDay}
                               title={isAvailableAllDay ? 'Already available all day' : undefined}
                               onClick={() => {
@@ -702,13 +704,15 @@ export function StaffEditorTab() {
                                 updateDayUnavailability(selectedIndex!, day, []);
                               }}
                             >
+                              {isAvailableAllDay && <Check className="h-3.5 w-3.5" strokeWidth={2.2} />}
                               Available all day
                             </Button>
                             <Button
                               type="button"
-                              variant={isUnavailableAllDay ? 'secondary' : 'outline'}
+                              variant="outline"
                               size="sm"
-                              className={`h-7 px-2.5 text-[12px] ${isUnavailableAllDay ? 'cursor-not-allowed opacity-70' : ''}`}
+                              className={`h-7 px-2.5 text-[12px] ${isUnavailableAllDay ? 'border-emerald-500/70 bg-emerald-600 text-white shadow-sm hover:bg-emerald-600 hover:text-white dark:bg-emerald-500 dark:text-surface-950 dark:hover:bg-emerald-500' : 'text-surface-400'}`}
+                              aria-pressed={isUnavailableAllDay}
                               aria-disabled={isUnavailableAllDay}
                               title={isUnavailableAllDay ? 'Already not available all day' : undefined}
                               onClick={() => {
@@ -716,11 +720,12 @@ export function StaffEditorTab() {
                                 updateDayUnavailability(selectedIndex!, day, [fullDayUnavailableBlock()]);
                               }}
                             >
+                              {isUnavailableAllDay && <Check className="h-3.5 w-3.5" strokeWidth={2.2} />}
                               Not available all day
                             </Button>
                             <Button
                               type="button"
-                              variant="ghost"
+                              variant="success"
                               size="sm"
                               className="h-7 px-2.5 text-[12px]"
                               onClick={() => {

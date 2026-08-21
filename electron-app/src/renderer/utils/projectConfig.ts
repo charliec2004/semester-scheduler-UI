@@ -94,7 +94,10 @@ export function validateProjectConfigSnapshot(config: ConfigSnapshot): Validatio
   }
 
   for (const pair of normalized.trainingPairs) {
-    if (!departmentNames.has(normalizeDepartmentName(pair.department))) {
+    if (
+      normalizeDepartmentName(pair.department) !== 'front_desk' &&
+      !departmentNames.has(normalizeDepartmentName(pair.department))
+    ) {
       pushError(errors, `Training pair references unknown department "${pair.department}".`);
     }
     if (!staffNames.has(normalizeStaffName(pair.trainee1))) {
@@ -148,7 +151,10 @@ export function validateProjectConfigSnapshot(config: ConfigSnapshot): Validatio
   }
 
   for (const constraint of normalized.equalityConstraints) {
-    if (!departmentNames.has(normalizeDepartmentName(constraint.department))) {
+    if (
+      normalizeDepartmentName(constraint.department) !== 'front_desk' &&
+      !departmentNames.has(normalizeDepartmentName(constraint.department))
+    ) {
       pushError(errors, `Equality constraint references unknown department "${constraint.department}".`);
     }
     if (!staffNames.has(normalizeStaffName(constraint.employee1))) {

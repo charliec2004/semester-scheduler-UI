@@ -66,13 +66,14 @@ jobs:
 
       - name: Run linter
         working-directory: electron-app
-        run: npm run lint || echo "::warning::Linting issues found"
-        continue-on-error: true
+        run: npm run lint
 
-      - name: Run tests
+      - name: Run renderer tests
         working-directory: electron-app
-        run: npm test || echo "::warning::Some tests failed"
-        continue-on-error: true
+        run: npm test
+
+      - name: Run Python tests
+        run: pytest -q
 
       # Bundle Python for distribution
       - name: Bundle Python (macOS/Linux)
@@ -116,6 +117,31 @@ jobs:
         run: npm run package -- --win --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Smoke test packaged Windows app
+        if: matrix.platform == 'win'
+        working-directory: electron-app
+        shell: pwsh
+        run: |
+          $Python = "release\win-unpacked\resources\python\python.exe"
+          if (-not (Test-Path $Python)) {
+            throw "Bundled Python was not found at $Python"
+          }
+          & $Python -c "import ortools; import pandas; import openpyxl; import xlsxwriter"
+          if ($LASTEXITCODE -ne 0) {
+            throw "Bundled Python dependency check failed with exit code $LASTEXITCODE"
+          }
+
+          $Executable = "release\win-unpacked\Scheduler.exe"
+          if (-not (Test-Path $Executable)) {
+            throw "Packaged app was not found at $Executable"
+          }
+          $AppProcess = Start-Process -FilePath $Executable -ArgumentList "--disable-gpu" -PassThru
+          Start-Sleep -Seconds 10
+          if ($AppProcess.HasExited) {
+            throw "Packaged app exited during startup with code $($AppProcess.ExitCode)"
+          }
+          Stop-Process -Id $AppProcess.Id -Force
 
       # NSIS ignores artifactName - rename files to match what latest.yml expects
       - name: Fix Windows installer filename

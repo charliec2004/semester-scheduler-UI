@@ -9,6 +9,7 @@
 #
 # Files updated:
 #   - electron-app/package.json
+#   - electron-app/package-lock.json
 #   - docs/script.js
 # =============================================================================
 
@@ -92,10 +93,10 @@ update_file() {
     fi
 }
 
-# 1. Update electron-app/package.json
-update_file "$PROJECT_ROOT/electron-app/package.json" \
-    "s/\"version\": \"[^\"]*\"/\"version\": \"$NEW_VERSION\"/" \
-    "version field"
+# 1. Keep both npm version files synchronized without creating a Git tag.
+npm --prefix "$PROJECT_ROOT/electron-app" version "$NEW_VERSION" --no-git-tag-version --allow-same-version >/dev/null
+echo -e "  ${GREEN}✓${NC} Updated: electron-app/package.json"
+echo -e "  ${GREEN}✓${NC} Updated: electron-app/package-lock.json"
 
 # 2. Update docs/script.js (the @version tag in JSDoc comment)
 # Pattern uses extended regex: [0-9]+ matches one or more digits
@@ -125,6 +126,14 @@ else
     echo -e "  ${RED}✗${NC} electron-app/package.json: $PACKAGE_VERSION (expected $NEW_VERSION)"
 fi
 
+# Check electron-app/package-lock.json
+LOCKFILE_VERSION=$(grep -m 1 -o '"version": "[^"]*"' "$PROJECT_ROOT/electron-app/package-lock.json" | cut -d'"' -f4)
+if [ "$LOCKFILE_VERSION" == "$NEW_VERSION" ]; then
+    echo -e "  ${GREEN}✓${NC} electron-app/package-lock.json: $LOCKFILE_VERSION"
+else
+    echo -e "  ${RED}✗${NC} electron-app/package-lock.json: $LOCKFILE_VERSION (expected $NEW_VERSION)"
+fi
+
 # Check docs/script.js
 SCRIPT_VERSION=$(grep -o '@version [0-9.]*' "$PROJECT_ROOT/docs/script.js" | cut -d' ' -f2)
 if [ "$SCRIPT_VERSION" == "$NEW_VERSION" ]; then
@@ -136,7 +145,7 @@ fi
 echo ""
 echo -e "${BLUE}Next steps:${NC}"
 echo "  1. Review the changes: git diff"
-echo "  2. Commit: git add -A && git commit -m \"Bump version to $NEW_VERSION\""
+echo "  2. Stage the reviewed release files and commit \"Release $NEW_VERSION\""
 echo "  3. Tag the release: git tag v$NEW_VERSION"
 echo "  4. Push: git push && git push origin v$NEW_VERSION"
 echo ""

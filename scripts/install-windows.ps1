@@ -35,9 +35,11 @@ npm run build
 Write-Host "📦 Packaging for Windows..." -ForegroundColor Yellow
 npm run package:win
 
-# Find the installer
-$Installer = Get-ChildItem -Path "release" -Filter "Scheduler Setup*.exe" | Select-Object -First 1
-$Portable = Get-ChildItem -Path "release" -Filter "Scheduler*.exe" | Where-Object { $_.Name -notlike "*Setup*" } | Select-Object -First 1
+# Resolve both electron-builder's local name (Scheduler.Setup.X.Y.Z.exe) and
+# the normalized release name (Scheduler-Setup-X.Y.Z.exe).
+$WindowsExecutables = Get-ChildItem -Path "release" -Filter "Scheduler*.exe"
+$Installer = $WindowsExecutables | Where-Object { $_.Name -match '^Scheduler(?:\.|-)Setup(?:\.|-).+\.exe$' } | Select-Object -First 1
+$Portable = $WindowsExecutables | Where-Object { $_.Name -notmatch '(?:\.|-)Setup(?:\.|-)' } | Select-Object -First 1
 
 if ($null -eq $Installer) {
     Write-Host "❌ Build failed: Installer not found in release/" -ForegroundColor Red
